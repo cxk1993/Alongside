@@ -67,7 +67,7 @@ def read_binary(lib: Lib, posix_rel: str) -> tuple[bytes, str]:
     """★ 读一个**二进制附件**（图片等），返回 (bytes, mime)。
 
     用途（astrbot 下场 · 主人⑤「ob 笔记的附件、图片插入的这个 md 文件展示功能也要加上」）：
-      Life-OS 的 md 渲染层遇到 `![[xxx.png]]` / `![](attachments/xxx.png)` 时，
+      Alongside 的 md 渲染层遇到 `![[xxx.png]]` / `![](attachments/xxx.png)` 时，
       经本端点取回原始字节，由后端透传、前端渲染。
 
     安全：与 read_note 同款 —— 先过 `safe_resolve`（路径穿越 + 越界双守卫）。

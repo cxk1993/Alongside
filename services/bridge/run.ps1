@@ -1,4 +1,4 @@
-# Life-OS Note Bridge launcher (Windows, runs as nssm service)
+# Alongside Note Bridge launcher (Windows, runs as nssm service)
 # Listens on 127.0.0.1 only; frpc exposes it to the cloud server.
 # Pure ASCII + CRLF. Edit paths below to match this machine.
 $ErrorActionPreference = "Stop"

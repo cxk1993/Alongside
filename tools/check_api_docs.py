@@ -109,7 +109,7 @@ def scan(base: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", default="https://life.example.com:8443", help="life-os 基址")
+    ap.add_argument("--base", default="https://life.example.com:8443", help="alongside 基址")
     ap.add_argument("--fail-under", type=float, default=None, help="参数解释覆盖率下限（%%）")
     ap.add_argument("--show-missing", action="store_true", help="逐条列出缺解释的参数")
     ap.add_argument("--allow-unreachable", action="store_true",

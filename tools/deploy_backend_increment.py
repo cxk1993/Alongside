@@ -85,7 +85,7 @@ def main() -> int:
             print("FAIL scp", rel)
             return 1
     print("=== 上传完成 ===")
-    print("请分两会话重启 Life-OS API（kill / setsid），然后 --verify 或手工探活。")
+    print("请分两会话重启 Alongside API（kill / setsid），然后 --verify 或手工探活。")
     if args.verify:
         base = os.environ.get("LIFEOS_BASE") or "http://192.0.2.10:18080"
         try:

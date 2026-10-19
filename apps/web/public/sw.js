@@ -1,4 +1,4 @@
-/* Life-OS service worker
+/* Alongside service worker
  * 职责一：离线壳（ADR-0003 §2.5 的 PWA 落地，红线：/api/ 绝不缓存——单用户系统数据必须实时）：
  *  - /api/*、/healthz        → 直连网络（bypass）
  *  - /assets/*（hash 文件名） → cache-first（hash 变即新资源，天然安全）
@@ -102,7 +102,7 @@ self.addEventListener("push", (event) => {
     data = { body: event.data ? event.data.text() : "" };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || "Life-OS", {
+    self.registration.showNotification(data.title || "Alongside", {
       body: data.body || "",
       tag: data.tag || "lifeos",
       icon: "/icons/icon-192.png",

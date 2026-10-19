@@ -62,7 +62,7 @@ describe("★ T30 AuthGate：无 token 只见登录页 / 有 token 直入桌面"
         <div data-testid="desktop">桌面</div>
       </AuthGate>,
     );
-    expect(screen.getByLabelText("登录 Life-OS")).toBeTruthy();
+    expect(screen.getByLabelText("登录 Alongside")).toBeTruthy();
     expect(screen.queryByTestId("desktop")).toBeNull();
   });
 
@@ -74,7 +74,7 @@ describe("★ T30 AuthGate：无 token 只见登录页 / 有 token 直入桌面"
       </AuthGate>,
     );
     expect(screen.getByTestId("desktop")).toBeTruthy();
-    expect(screen.queryByLabelText("登录 Life-OS")).toBeNull();
+    expect(screen.queryByLabelText("登录 Alongside")).toBeNull();
   });
 });
 
@@ -131,7 +131,7 @@ describe("★ T30 登录页：成功进桌面 / 失败人话报错", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByRole("alert").textContent).toContain("密码错误");
     // 仍在登录页
-    expect(screen.getByLabelText("登录 Life-OS")).toBeTruthy();
+    expect(screen.getByLabelText("登录 Alongside")).toBeTruthy();
   });
 });
 
@@ -196,7 +196,7 @@ describe("★ T30 401 拦截：refresh 单飞重放 / 失败回登录页", () =>
       rejected = true; // 401 最终仍抛给调用方
     });
     await waitFor(() => expect(rejected).toBe(true));
-    await waitFor(() => expect(screen.getByLabelText("登录 Life-OS")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText("登录 Alongside")).toBeTruthy());
     expect(hasToken()).toBe(false); // token 已清
   });
 });
@@ -219,7 +219,7 @@ describe("★ T30 登出：清 token + 回登录页", () => {
       await logout();
     });
 
-    await waitFor(() => expect(screen.getByLabelText("登录 Life-OS")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText("登录 Alongside")).toBeTruthy());
     expect(hasToken()).toBe(false);
     expect(calls).toEqual([{ url: "/api/v1/auth/logout", method: "POST" }]);
   });
@@ -240,7 +240,7 @@ describe("★ T30 登出：清 token + 回登录页", () => {
       await logout();
     });
 
-    await waitFor(() => expect(screen.getByLabelText("登录 Life-OS")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText("登录 Alongside")).toBeTruthy());
     expect(hasToken()).toBe(false);
   });
 });

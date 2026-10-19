@@ -1,4 +1,4 @@
-# Life-OS Web：构建产物由本机 vite 产出后拷入
+# Alongside Web：构建产物由本机 vite 产出后拷入
 FROM nginx:1.27-alpine
 COPY apps/web/dist /usr/share/nginx/html
 COPY deploy/nginx/lifos.conf /etc/nginx/conf.d/default.conf

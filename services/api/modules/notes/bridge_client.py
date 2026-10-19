@@ -161,7 +161,7 @@ class BridgeClient:
         title: str,
         body: str,
         *,
-        app_id: str = "Life-OS",
+        app_id: str = "Alongside",
         channel: str = "auto",
     ) -> dict[str, Any]:
         """T24/T25：经本机桥弹 Windows 桌面通知。
@@ -203,7 +203,7 @@ def dispatch_due_notifies(
     items: Iterable[dict[str, Any]],
     client: BridgeClient,
     *,
-    title_prefix: str = "Life-OS 提醒",
+    title_prefix: str = "Alongside 提醒",
     channel: str = "auto",
     on_error: Callable[[dict[str, Any], Exception], None] | None = None,
 ) -> list[dict[str, Any]]:

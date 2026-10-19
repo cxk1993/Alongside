@@ -2,7 +2,7 @@
 
 分层：
   - **离线测试**（默认跑）：协议解析 / 事件语义 / 降级层级 / 熔断退避 —— 不需要真 pi。
-  - **真机测试**（`-m live`，需 pi + life-os 路由）：真起子进程跑一轮对话。
+  - **真机测试**（`-m live`，需 pi + alongside 路由）：真起子进程跑一轮对话。
 
 跑法：
     cd services/api && pytest ../../plugins/pi-agent/tests -q            # 只跑离线
@@ -173,7 +173,7 @@ def test_singleton_and_shutdown(tmp_path):
 
 
 def test_default_cwd_is_plugin_runtime():
-    """★ 默认工作目录在插件 runtime/ 内 —— 避免 pi 读到 Life-OS 之外的 AGENTS.md。"""
+    """★ 默认工作目录在插件 runtime/ 内 —— 避免 pi 读到 Alongside 之外的 AGENTS.md。"""
     proc = _load("process")
     proc.shutdown_manager()
     m = proc.get_manager()
@@ -185,7 +185,7 @@ def test_default_cwd_is_plugin_runtime():
 
 @pytest.mark.live
 def test_live_prompt_roundtrip(tmp_path):
-    """真起 pi 子进程跑一轮对话（需已装 pi + life-os 路由可达）。"""
+    """真起 pi 子进程跑一轮对话（需已装 pi + alongside 路由可达）。"""
     rpc = _load("rpc")
     binary = rpc.find_pi_binary()
     if not binary:

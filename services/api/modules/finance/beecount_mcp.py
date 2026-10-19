@@ -55,7 +55,7 @@ UPSTREAM_MCP = "mcp"
 # MCP 端点相对路径（档案 §1.0.2：来自 BeeCount /app/src/main.py:175）
 MCP_PATH = "/api/v1/mcp"
 
-# ★ 白名单：本轮 Life-OS 侧唯一允许调用的 BeeCount 工具（档案 §1.0.2 读工具 10 个）
+# ★ 白名单：本轮 Alongside 侧唯一允许调用的 BeeCount 工具（档案 §1.0.2 读工具 10 个）
 READ_TOOLS: frozenset[str] = frozenset(
     {
         "list_ledgers",

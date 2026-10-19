@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 在服务器生成 Life-OS .env（不打印明文密钥到已提交文件）
+# 在服务器生成 Alongside .env（不打印明文密钥到已提交文件）
 # 用法：bash deploy/scripts/gen-env.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

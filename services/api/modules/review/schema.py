@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 
 class HealthOut(BaseModel):
-    """Life-OS 侧探活：是否连通上游 + 版本。失败也返回结构化信息，不甩 500。"""
+    """Alongside 侧探活：是否连通上游 + 版本。失败也返回结构化信息，不甩 500。"""
 
     ok: bool
     upstream_mode: str = "mock"  # mock | api

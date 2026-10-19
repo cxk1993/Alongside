@@ -6,7 +6,7 @@
   3. 原始摘要写入 meta_json（可截断）
   4. 按 **日历日** upsert：同日再 sync 覆盖同一行，**不翻倍**
 
-幂等归属：Life-OS 侧 `finance_snapshot.date` 唯一约束是权威去重，
+幂等归属：Alongside 侧 `finance_snapshot.date` 唯一约束是权威去重，
 不依赖 BeeCount 的 sync 协议（我们刻意不走 /api/v1/sync/*）。
 
 凭据与通道规则见 beecount_mcp.py 模块 docstring。

@@ -1,9 +1,9 @@
-# Life-OS · 人生管理系统
+# Alongside · 人生管理系统
 
 > 单用户、可插拔、能陪你用四年的个人系统。
 > **内核只提供框架，能力全部由插件长出来** —— 详见 [`docs/adr/0002-插件协议.md`](docs/adr/0002-插件协议.md)。
 
-Life-OS 是一个**单人自托管**的个人工作台：窗口化的前端宿主 + 后端内核 + MCP 服务。
+Alongside 是一个**单人自托管**的个人工作台：窗口化的前端宿主 + 后端内核 + MCP 服务。
 内核只管七件事——窗口 / 路由 / 鉴权 / 事件 / 数据 / 设置 / 扩展点；
 日程、待办、习惯、理财、笔记、日记、健康、复盘……每一项能力都以**插件**形式长在内核之上。
 
@@ -133,16 +133,16 @@ life/
 
 ## 外部集成：我喜欢它，所以为它做了插件
 
-Life-OS 不重复造轮子。有些事别人已经做得很好 —— 那就为它们写一个插件，把它们接进来。
+Alongside 不重复造轮子。有些事别人已经做得很好 —— 那就为它们写一个插件，把它们接进来。
 
 | 项目 | 它是什么 | 怎么接 | 它的许可 |
 |:--|:--|:--|:--|
 | [BeeCount](https://github.com/TNT-Likely/BeeCount) · [BeeCount-Cloud](https://github.com/TNT-Likely/BeeCount-Cloud) | 本地优先的跨端记账（自建云 / 多端同步 / MCP） | `services/api/modules/finance/` 走 MCP + REST 对接，Web 端由 `deploy/` 同源反代内嵌 | 自定义许可（个人免费，商用需授权） |
-| [pi-web-ui](https://github.com/xing-shuyin/pi-web-ui) | 浏览器里的 AI 编码座舱（chat / code / files / terminal / git） | **独立部署**（`npm i -g pi-web-ui`，默认 8787）：由 nginx 反代到 `/pi/` 直接访问；也可用网页插件把它接进 Life-OS —— 插件窗口内嵌其 URL，凭据经 `auth_ref` 注入、不明文入库 | MIT |
+| [pi-web-ui](https://github.com/xing-shuyin/pi-web-ui) | 浏览器里的 AI 编码座舱（chat / code / files / terminal / git） | **独立部署**（`npm i -g pi-web-ui`，默认 8787）：由 nginx 反代到 `/pi/` 直接访问；也可用网页插件把它接进 Alongside —— 插件窗口内嵌其 URL，凭据经 `auth_ref` 注入、不明文入库 | MIT |
 | [pi](https://github.com/earendil-works/pi)（`@earendil-works/pi-coding-agent`） | 带 read / bash / edit / write 工具的编码 agent CLI | `plugins/pi-agent/` —— 一个 **agent 适配器插件**（RPC 子进程 + 会话池）。★ 它只是**第一个**；opencode、deepseek harness 等可用同一结构各写一个 | MIT |
 
 > **本仓库不包含以上任何项目的源码 —— 它们都是独立部署的。** 由你自己安装（Docker / npm），
-> Life-OS 只是通过公开接口接上话 —— 这既是干净的集成方式，也正是它们的许可所允许的。
+> Alongside 只是通过公开接口接上话 —— 这既是干净的集成方式，也正是它们的许可所允许的。
 > 版权与许可声明见 [`NOTICE`](NOTICE)。
 
 > **这就是「一切皆插件」的样子。**
@@ -157,7 +157,7 @@ Life-OS 不重复造轮子。有些事别人已经做得很好 —— 那就为�
 
 ## 服务器端部署：本体之外的附属服务
 
-> **Life-OS 本体很轻** —— 一个 FastAPI 后端 + 一个静态前端，Python + Node 就能跑起来。
+> **Alongside 本体很轻** —— 一个 FastAPI 后端 + 一个静态前端，Python + Node 就能跑起来。
 > 但**它有几个插件是接别人的**：一旦你要在服务器上把「理财」「智能体」真正用起来，
 > 就得额外跑下面这些服务。
 >
@@ -182,7 +182,7 @@ Life-OS 不重复造轮子。有些事别人已经做得很好 —— 那就为�
 
 ## 设计边界（给使用者）
 
-Life-OS 是**单人、自托管**的个人系统，有些事是刻意不做的：
+Alongside 是**单人、自托管**的个人系统，有些事是刻意不做的：
 
 - **不做多用户**：没有注册、没有权限组、没有邀请码 ——
   这是设计选择，不是还没做完。这里只有你和你自己的数据。

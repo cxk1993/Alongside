@@ -1,4 +1,4 @@
-# Life-OS · nssm 安装/修复本机常驻服务
+# Alongside · nssm 安装/修复本机常驻服务
 # ★ 管理员 PowerShell 执行
 #   cd "E:\ai work\work\life"
 #   Set-ExecutionPolicy -Scope Process Bypass -Force

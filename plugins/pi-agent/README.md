@@ -1,7 +1,7 @@
 # Pi 智能体（插件 id：`pi-agent`）
 
-> **把 CLI 编码 agent 接进 Life-OS 的「适配器插件」。**
-> 它通过 **RPC 子进程**桥接一个外部 agent，把「对话 + 会话管理」变成 Life-OS 的一个插件，
+> **把 CLI 编码 agent 接进 Alongside 的「适配器插件」。**
+> 它通过 **RPC 子进程**桥接一个外部 agent，把「对话 + 会话管理」变成 Alongside 的一个插件，
 > 并经 MCP 桥把能力暴露成工具、供外部 agent 调用。
 
 > ★ **本仓库不含 pi 的源码。** pi（[`@earendil-works/pi-coding-agent`](https://github.com/earendil-works/pi)，MIT）
@@ -89,7 +89,7 @@ export PI_CODING_AGENT_DIR=<插件目录>/runtime
 ```
 
 **模型提供商走插件设置**（`provider` / `model` / `thinking`），改设置即生效、**不用改代码**。
-设置项定义在 `api/settings.schema.json`，可在 Life-OS 的「设置」页填入。
+设置项定义在 `api/settings.schema.json`，可在 Alongside 的「设置」页填入。
 
 > ⚠️ **provider / model 必须与 `runtime/models.json` 里的一致**，且 **model id 要填上游网关认的名字**
 > —— 写错会得到网关的「无可用模型」错误（历史上这里踩过：设置声明了却完全不生效，因为代码没读它）。

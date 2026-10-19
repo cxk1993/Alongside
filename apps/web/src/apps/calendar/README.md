@@ -1,6 +1,6 @@
 # 日程表（T05）前端
 
-Life-OS 的日程/日历模块前端，作为内核插件加载（manifestId=`calendar`）。
+Alongside 的日程/日历模块前端，作为内核插件加载（manifestId=`calendar`）。
 
 ## 边界
 

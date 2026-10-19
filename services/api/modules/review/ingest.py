@@ -1,4 +1,4 @@
-"""从 Work-Review 拉取某日并落库（Life-OS 自己的库，幂等 upsert）。
+"""从 Work-Review 拉取某日并落库（Alongside 自己的库，幂等 upsert）。
 
 ★ 只读上游：先 GET /v1/reports/{date}，再 POST export-markdown，可选 hourly。
 ★ raw_path = `work-review:<date>`（来源标识，不是文件路径）。

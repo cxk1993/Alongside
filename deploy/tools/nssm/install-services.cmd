@@ -1,5 +1,5 @@
 @echo off
-REM Life-OS nssm install - run as Administrator
+REM Alongside nssm install - run as Administrator
 REM ASCII only. No spaces in nssm env values except PSK token.
 setlocal
 set ROOT=E:\ai work\work\life

@@ -25,7 +25,7 @@ _OUT = _ROOT.parent.parent / "contracts" / "openapi.json"
 def main() -> int:
     app = create_app()
     spec = app.openapi()
-    spec.setdefault("info", {}).setdefault("title", "Life-OS API")
+    spec.setdefault("info", {}).setdefault("title", "Alongside API")
     _OUT.parent.mkdir(parents=True, exist_ok=True)
     _OUT.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
     paths = list(spec.get("paths", {}).keys())

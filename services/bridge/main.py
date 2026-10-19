@@ -151,7 +151,7 @@ def create_bridge_app(
     cfg = config or load_config(config_path or (Path(__file__).resolve().parent / "config.yaml"))
     state = BridgeState(cfg)
 
-    app = FastAPI(title="Life-OS Note Bridge", version=BRIDGE_VERSION)
+    app = FastAPI(title="Alongside Note Bridge", version=BRIDGE_VERSION)
     app.state.bridge = state
 
     @app.middleware("http")
@@ -382,11 +382,11 @@ def create_bridge_app(
             raise BadRequest("notify body 必须是 JSON") from exc
         if not isinstance(payload, dict):
             raise BadRequest("notify body 必须是 JSON 对象")
-        title = str(payload.get("title") or "Life-OS").strip()[:120]
+        title = str(payload.get("title") or "Alongside").strip()[:120]
         body = str(payload.get("body") or "").strip()[:2000]
         if not body:
             raise BadRequest("notify 需要非空 body")
-        app_id = str(payload.get("app_id") or "Life-OS").strip()[:80]
+        app_id = str(payload.get("app_id") or "Alongside").strip()[:80]
         channel = str(payload.get("channel") or "auto").strip()[:20]
         result = send_windows_notification(title, body, app_id=app_id, channel=channel)
         row = state.push_notification(

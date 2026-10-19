@@ -124,7 +124,7 @@ def _rows_exist(session: Session, table: str) -> bool:
 
 
 def _seed_app_setting(session: Session) -> str:
-    defaults = {"app.name": '"Life-OS"', "app.tz": '"Asia/Shanghai"'}
+    defaults = {"app.name": '"Alongside"', "app.tz": '"Asia/Shanghai"'}
     n = 0
     for key, value_json in defaults.items():
         row = session.execute(

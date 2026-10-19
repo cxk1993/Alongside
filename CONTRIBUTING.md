@@ -1,9 +1,9 @@
 # 贡献指南（CONTRIBUTING）
 
-> 谢谢你愿意一起做 Life-OS。
+> 谢谢你愿意一起做 Alongside。
 > **先看这一句：如果你不写代码，这篇指南同样是写给你的。**
 
-Life-OS 是一个**单人自托管**的个人系统：**内核只提供框架，能力全部由插件长出来**。
+Alongside 是一个**单人自托管**的个人系统：**内核只提供框架，能力全部由插件长出来**。
 它的目标是回答一个比"管理人生"更硬的问题——**AI 和人，到底该是什么关系。**
 
 ---
@@ -16,7 +16,7 @@ Life-OS 是一个**单人自托管**的个人系统：**内核只提供框架，
 
 > "我觉得应该有 XX 功能""这个地方用起来别扭"
 
-- **走 [Issues](https://github.com/cxk1993/life-os/issues)**。
+- **走 [Issues](https://github.com/cxk1993/alongside/issues)**。
 - 说清三件事：**你想干什么、现在为什么干不了、你期待它变成什么样。**
 - 不需要方案。**把问题说清楚，就是贡献。**
 
@@ -37,7 +37,7 @@ Life-OS 是一个**单人自托管**的个人系统：**内核只提供框架，
 
 ### 通道 C：报问题（Bug）
 
-- **走 [Issues](https://github.com/cxk1993/life-os/issues)**，照 `docs/issues/TEMPLATE.md` 填。
+- **走 [Issues](https://github.com/cxk1993/alongside/issues)**，照 `docs/issues/TEMPLATE.md` 填。
 - **做不完就报 partial，说清卡在哪**——**拿 mock 冒充真实数据，直接判不通过。**
 
 ---

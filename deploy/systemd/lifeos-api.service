@@ -1,5 +1,5 @@
 [Unit]
-Description=Life-OS API (production, 127.0.0.1:18000)
+Description=Alongside API (production, 127.0.0.1:18000)
 Documentation=https://life.example.com:8443
 After=network-online.target
 Wants=network-online.target

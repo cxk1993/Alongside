@@ -34,7 +34,7 @@ export function TopBar({ onOpenSearch, onOpenQuery, onTidy, onLogout, onMinimize
 
   return (
     <div className="topbar">
-      <span className="topbar__brand">Life-OS</span>
+      <span className="topbar__brand">Alongside</span>
       {/* ★ 2026-09-27（主人「正式版 1.0.0」）：版本号 + 构建时刻。
           悬停可看构建时间 —— 一眼分清「跑的是新版还是 PWA 缓存的旧版」。 */}
       <span

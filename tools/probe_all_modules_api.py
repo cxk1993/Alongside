@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Life-OS 全模块 API 巡检（13 模块 REST 探针，配合 hermes 初验 / Qoder 深验）。
+"""Alongside 全模块 API 巡检（13 模块 REST 探针，配合 hermes 初验 / Qoder 深验）。
 
 不替代真机浏览器验收；用于「登录后各模块 API 是否可达」的机器侧清单。
 

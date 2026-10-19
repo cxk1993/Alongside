@@ -4,7 +4,7 @@ HTTP 契约：成功直接返回资源 JSON；失败由内核转 RFC7807。
 ★ 前缀由内核按 manifest.api.base 自动加，这里不要写 prefix=。
 ★ 路径参数用 Annotated[str, FPath(...)]；本文件不要加 future import。
 ★ 204 端点写 `-> None`。
-★ 对 Work-Review 只读：本文件的 POST 只写 Life-OS 自己的库。
+★ 对 Work-Review 只读：本文件的 POST 只写 Alongside 自己的库。
 """
 import json
 from typing import Any
@@ -199,7 +199,7 @@ def ingest(
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
 ) -> IngestOut:
-    """从 Work-Review 拉取某日并写入 Life-OS 库（幂等）。对上游只读。"""
+    """从 Work-Review 拉取某日并写入 Alongside 库（幂等）。对上游只读。"""
     return ReviewService(db).ingest(date)
 
 
@@ -209,5 +209,5 @@ def create_note(
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
 ) -> ReviewNoteOut:
-    """写 Life-OS 自己的批注，不写回 Work-Review / 不污染 raw。"""
+    """写 Alongside 自己的批注，不写回 Work-Review / 不污染 raw。"""
     return ReviewService(db).add_note(body.date, body.content_md)

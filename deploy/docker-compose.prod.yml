@@ -1,4 +1,4 @@
-# Life-OS · 生产编排（T13）
+# Alongside · 生产编排（T13）
 # 宿主机端口避开已占用：API 18000（机上 8000=model-gateway），Web 18080
 # BeeCount 同机：127.0.0.1:8870（容器内经 host.docker.internal 不一定可用 → 用宿主网络名或 extra_hosts）
 

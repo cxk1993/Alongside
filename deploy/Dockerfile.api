@@ -1,4 +1,4 @@
-# Life-OS API image
+# Alongside API image
 FROM python:3.11-slim-bookworm
 
 WORKDIR /app

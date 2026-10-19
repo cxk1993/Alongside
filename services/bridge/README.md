@@ -23,9 +23,9 @@
 
 | 字段 | 说明 |
 |:--|:--|
-| `title` | 标题，默认 `Life-OS`，最长 120 |
+| `title` | 标题，默认 `Alongside`，最长 120 |
 | `body` | 正文，**必填非空**，最长 2000 |
-| `app_id` | Toast 应用名，默认 `Life-OS` |
+| `app_id` | Toast 应用名，默认 `Alongside` |
 | `channel` | `auto`（默认）\| `winotify` \| `powershell` \| `log`（测试用，不弹窗） |
 
 通知通道优先级：`winotify`（若安装）→ `PowerShell Toast` → 日志降级。

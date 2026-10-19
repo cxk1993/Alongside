@@ -4,7 +4,7 @@
 把 pi 作为一个**长驻子进程**托管，用 **JSONL over stdin/stdout** 与它对话。
 
 依据（一手实测 2026-09-25 20:2x）：
-  - `pi --mode rpc --no-session --provider life-os --model life-os`
+  - `pi --mode rpc --no-session --provider alongside --model alongside`
   - 协议：stdin 发 Command，stdout 收 response / session event
   - 事件流：message_update → assistantMessageEvent.text_delta（逐字）
              agent_settled = 「pi 不会再自动继续」（★ 可靠终结信号）
@@ -16,7 +16,7 @@
   2. **`--no-session` vs 持久会话**：前者无状态（不落盘）；**会话共享
      （与 pi-web-ui / 外部工具）必须用持久会话**（`persist=True`）。
   3. **pi 的 cwd 决定它读哪个 AGENTS.md** —— 生产必须显式指定工作目录
-     （否则会读到 Life-OS 之外的工程指令）。
+     （否则会读到 Alongside 之外的工程指令）。
 
 ★ 进程托管口径（采纳 workbuddy 拍砖）：
   - 指数退避重启（1/2/4…≤60s）+ 熔断（10 分钟内 ≥5 次 → 停止自动重启）
@@ -46,8 +46,8 @@ log = logging.getLogger("plugin.pi-agent.rpc")
 
 # ── 常量（可被 settings 覆盖）──────────────────────────────────────
 DEFAULT_PI_BINARY = "pi"
-DEFAULT_PROVIDER = "life-os"
-DEFAULT_MODEL = "life-os"
+DEFAULT_PROVIDER = "alongside"
+DEFAULT_MODEL = "alongside"
 # ★ 思考强度（主人要求 high）。pi 的 `--model` 支持 `:<thinking>` 后缀；
 #   实测不加后缀时默认是 medium，故显式带上。
 DEFAULT_THINKING = "high"
@@ -98,9 +98,9 @@ class PiEvent:
 
 
 def mcp_pat_path() -> str:
-    """★ 本插件自持的 MCP PAT 文件路径（pi 用它调 Life-OS 自己的 MCP 桥）。
+    """★ 本插件自持的 MCP PAT 文件路径（pi 用它调 Alongside 自己的 MCP 桥）。
 
-    为什么放在插件 runtime/ 下：PAT 是"pi 调 Life-OS"的凭据，
+    为什么放在插件 runtime/ 下：PAT 是"pi 调 Alongside"的凭据，
       与插件同生命周期；runtime/ 已在 permissions 收口范围内（fs:plugin），
       且**不进 git**（见 .gitignore）。
     """
@@ -110,7 +110,7 @@ def mcp_pat_path() -> str:
 def load_mcp_env() -> dict[str, str]:
     """构造给 pi 子进程的额外环境（目前只有 MCP PAT）。
 
-    ★ 2026-09-25 实测踩到：pi 通过 `pi-mcp-adapter` 调 Life-OS 的 MCP 桥时
+    ★ 2026-09-25 实测踩到：pi 通过 `pi-mcp-adapter` 调 Alongside 的 MCP 桥时
       报 401「缺少 Authorization: Bearer <PAT>」—— 因为 PAT 只在**我的** shell 里，
       **没传给 pi 子进程**。此处把它显式注入子进程环境。
 
@@ -201,12 +201,12 @@ class PiRpcClient:
         if self.sandbox:
             # ★ 容器模式（Plain Docker）。
             #   - `-i` 保 stdin（RPC 的协议通道就是它，缺了 pi 会立刻退出）；
-            #   - `--network host` 让容器内 127.0.0.1 指向宿主（访问 Life-OS MCP 桥）；
+            #   - `--network host` 让容器内 127.0.0.1 指向宿主（访问 Alongside MCP 桥）；
             #   - `-v <cwd>:/workspace` **只暴露这一个目录**（最小暴露面）；
             #   - `-e LIFEOS_MCP_PAT`（**不带值**）从宿主环境透传，**不落镜像/不落盘**。
             if not shutil.which("docker"):
                 raise PiRpcError("沙箱模式需要 docker（未找到可执行文件）")
-            # ★ 容器里必须能拿到 pi 的模型配置（否则报 Unknown provider "life-os"）。
+            # ★ 容器里必须能拿到 pi 的模型配置（否则报 Unknown provider "alongside"）。
             #   做法：把宿主的 models.json 复制进 **可写** 的 agent dir（插件 runtime 内，
             #   已 gitignore），再把它挂成容器内的 PI_CODING_AGENT_DIR。
             #   ★ key 不 bake 进镜像、也不出现在命令行（只经文件挂载）。

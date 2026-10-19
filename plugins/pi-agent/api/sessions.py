@@ -2,7 +2,7 @@
 
 ════════════════════════════════════════════════════════════════════
 主人原话：
-  「我们的 life-os 里面，能不能有一个类似于 mcp 或者 api 的口子，让我们**外部的
+  「我们的 alongside 里面，能不能有一个类似于 mcp 或者 api 的口子，让我们**外部的
     任何 ai agent** 都可以与我们的**内嵌的 pi 进行通话**？并且可以**锁定与切换会话
     session**？」
 
@@ -83,8 +83,8 @@ class PiSessionPool:
         *,
         cwd: str,
         binary: str | None = None,
-        provider: str = "life-os",
-        model: str = "life-os:high",
+        provider: str = "alongside",
+        model: str = "alongside:high",
         max_sessions: int = DEFAULT_MAX_SESSIONS,
         # ★ 沙箱模式（pi 跑在 Docker 容器里）
         sandbox: bool = False,
@@ -302,7 +302,7 @@ _POOL_LOCK = threading.Lock()
 
 def get_pool(
     *, cwd: str | None = None, binary: str | None = None,
-    provider: str = "life-os", model: str = "life-os:high",
+    provider: str = "alongside", model: str = "alongside:high",
     max_sessions: int = DEFAULT_MAX_SESSIONS,
     sandbox: bool | None = None,
     sandbox_image: str | None = None,

@@ -98,13 +98,13 @@ def _runtime_options() -> dict[str, Any]:
     """把插件设置翻译成运行时参数（缺省值与 settingsSchema 的 default 保持一致）。
 
     ★ 为什么要有这层（2026-10-10 修复）：此前 provider/model 硬编码在
-      process.py / sessions.py（`DEFAULT_PROVIDER = "life-os"`），
+      process.py / sessions.py（`DEFAULT_PROVIDER = "alongside"`），
       settingsSchema 里的 provider / model / pi_binary / max_parallel_sessions
       全是"摆设"——配了不生效，换网关必须改代码。这是实打实的风险点。
     """
     s = _plugin_settings()
     thinking = (str(s.get("thinking_level") or "high").strip()) or "high"
-    model = (str(s.get("model") or "life-os").strip()) or "life-os"
+    model = (str(s.get("model") or "alongside").strip()) or "alongside"
     binary = str(s.get("pi_binary") or "").strip() or None
     try:
         max_sessions = int(s.get("max_parallel_sessions") or 4)
@@ -113,7 +113,7 @@ def _runtime_options() -> dict[str, Any]:
     # sandbox: None = 未设置（交给 get_pool 读环境变量）；bool = 显式开关
     sandbox = s.get("sandbox") if isinstance(s.get("sandbox"), bool) else None
     return {
-        "provider": (str(s.get("provider") or "life-os").strip()) or "life-os",
+        "provider": (str(s.get("provider") or "alongside").strip()) or "alongside",
         # pi 的 --model 支持 ":<thinking>" 后缀（见 rpc.py 注）
         "model": model if ":" in model else f"{model}:{thinking}",
         "binary": binary,

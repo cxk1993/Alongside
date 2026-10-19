@@ -102,7 +102,7 @@ def test_manifest_declares_snapshot_and_net_permission(client):
     assert m["id"] == "finance"
     assert "finance.snapshot.read" in m["provides"]
     assert "finance.snapshot.updated" in m["emits"]
-    # ★ 主机恒为 127.0.0.1（BeeCount 与 Life-OS 同机部署）
+    # ★ 主机恒为 127.0.0.1（BeeCount 与 Alongside 同机部署）
     assert "net:out:127.0.0.1" in m["permissions"]
     assert "db:own" in m["permissions"]
 
@@ -405,7 +405,7 @@ def test_sync_snapshot_accepts_injected_client():
 
 # ───────────────────────── 红线：源码扫描 ─────────────────────────
 def test_redline_no_sync_protocol_calls_in_finance_module():
-    """Life-OS 财务模块不得出现 BeeCount /api/v1/sync/* 协议调用。"""
+    """Alongside 财务模块不得出现 BeeCount /api/v1/sync/* 协议调用。"""
     root = Path(__file__).resolve().parents[1] / "modules" / "finance"
     offenders: list[str] = []
     for p in root.rglob("*.py"):

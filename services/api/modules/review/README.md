@@ -1,6 +1,6 @@
 # 复盘（插件 id：`review`）
 
-Work-Review **只读**接入：把本机工作日报接进 Life-OS，形成可回看、可趋势对比的复盘视图。
+Work-Review **只读**接入：把本机工作日报接进 Alongside，形成可回看、可趋势对比的复盘视图。
 
 | 项 | 值 |
 |:--|:--|
@@ -34,14 +34,14 @@ Work-Review **只读**接入：把本机工作日报接进 Life-OS，形成可�
 | GET | `/weekly?date=` | 周报（代理上游，短时缓存；不落库） |
 | GET | `/raw?date=` | 原始日报 Markdown |
 | GET | `/notes?date=` | 批注列表 |
-| POST | `/ingest?date=` | 拉取某日写入 Life-OS 库（幂等；对上游只读） |
+| POST | `/ingest?date=` | 拉取某日写入 Alongside 库（幂等；对上游只读） |
 | POST | `/notes` | 写自己的批注 |
 
 事件：`review.day.ingested`
 
 ## 铁律
 
-1. **不向 Work-Review 做任何写 HTTP**；POST 只写 Life-OS 自己的库。
+1. **不向 Work-Review 做任何写 HTTP**；POST 只写 Alongside 自己的库。
 2. token 不进代码/前端/报告/git。
 3. 本卡不实现桥/frp 传输；`WORK_REVIEW_BRIDGE=true` 仅影响错误语义。
 4. `raw_path` 是来源标识 `work-review:<date>`，**不是文件路径**。

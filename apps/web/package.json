@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Life-OS 前端宿主（壳）—— 只提供框架，不含任何业务",
+  "description": "Alongside 前端宿主（壳）—— 只提供框架，不含任何业务",
   "engines": {
     "node": ">=20"
   },

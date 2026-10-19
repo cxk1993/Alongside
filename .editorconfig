@@ -1,4 +1,4 @@
-# Life-OS · 编辑器统一约定
+# Alongside · 编辑器统一约定
 # 目的：让不同 agent / 不同编辑器产出的文件格式一致，避免"中文乱码"和"CRLF 差异"。
 
 root = true

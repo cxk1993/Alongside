@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════
-# Life-OS 后端（服务端内核）
+# Alongside 后端（服务端内核）
 #
 #   版本锁定在总纲 §1.1「技术栈」：
 #     Python 3.11 + FastAPI + SQLModel + SQLite(WAL)
@@ -13,7 +13,7 @@
 [project]
 name = "lifeos-api"
 version = "1.0.0"
-description = "Life-OS 后端宿主（内核）"
+description = "Alongside 后端宿主（内核）"
 requires-python = ">=3.11,<3.13"
 
 dependencies = [

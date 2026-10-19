@@ -1,6 +1,6 @@
 # 能力目录（插件 id：`catalog`）· T20 · 「接口说明页」
 
-★ 主人愿景落地：让任何 agent 只凭一枚 token + `GET /api/v1/catalog` 就能自助接入 Life-OS。
+★ 主人愿景落地：让任何 agent 只凭一枚 token + `GET /api/v1/catalog` 就能自助接入 Alongside。
 
 | 项 | 值 |
 |:--|:--|

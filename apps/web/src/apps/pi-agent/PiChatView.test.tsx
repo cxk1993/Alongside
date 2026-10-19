@@ -38,7 +38,7 @@ function sseResponse(events: Array<{ event: string; data: unknown }>): Response 
   });
 }
 
-const STATUS_L1 = { level: "L1", level_text: "AI 工具能力可用", model: "life-os:high", pool: {} };
+const STATUS_L1 = { level: "L1", level_text: "AI 工具能力可用", model: "alongside:high", pool: {} };
 const STATUS_L3 = { level: "L3", level_text: "AI 工具能力暂不可用（pi 熔断）", pool: {} };
 
 describe("★ PiAgentApp", () => {

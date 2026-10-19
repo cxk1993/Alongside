@@ -69,7 +69,7 @@ def bridge_notify(title: str, body: str, *, channel: str = "auto", timeout: floa
     psk = read_setting("BRIDGE_PSK", "") or ""
     if not base or not psk:
         raise RuntimeError("未配置 BRIDGE_URL / BRIDGE_PSK")
-    payload = {"title": title, "body": body, "app_id": "Life-OS", "channel": channel}
+    payload = {"title": title, "body": body, "app_id": "Alongside", "channel": channel}
     raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     path = "/bridge/notify"
     ts = int(time.time())

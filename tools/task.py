@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Life-OS 跨平台任务入口（项目唯一入口的真实实现）。
+"""Alongside 跨平台任务入口（项目唯一入口的真实实现）。
 
 为什么不是纯 Makefile？
     总纲 §4 雷区 #1/#2 说得清楚：不许假设目标机器有 make / grep / find / wmic。
@@ -516,7 +516,7 @@ def cmd_new_plugin(args: argparse.Namespace) -> None:
 def cmd_help(_: argparse.Namespace) -> None:
     print(
         """
-Life-OS 任务入口（与 Makefile 等价）
+Alongside 任务入口（与 Makefile 等价）
 
   setup        首次准备：建 venv + 装前后端依赖
   dev          同起前端 5173 与后端 8000（Ctrl+C 一起停）
@@ -533,7 +533,7 @@ Life-OS 任务入口（与 Makefile 等价）
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="task", description="Life-OS 跨平台任务入口")
+    parser = argparse.ArgumentParser(prog="task", description="Alongside 跨平台任务入口")
     sub = parser.add_subparsers(dest="command")
 
     for name, fn, help_text in [

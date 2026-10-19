@@ -1,5 +1,5 @@
 #!/bin/bash
-# MiMo ISSUE-006 kill Life-OS 18000 then restart
+# MiMo ISSUE-006 kill Alongside 18000 then restart
 set -u
 API=/home/ubuntu/lifeos/services/api
 LOG=/home/ubuntu/lifeos/api.log

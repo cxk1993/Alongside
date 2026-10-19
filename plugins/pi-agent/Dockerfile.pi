@@ -5,7 +5,7 @@
 #
 # ★ 与宿主的关系：
 #   - 工作目录经 `-v <runtime>:/workspace` 挂进来（只暴露这一个目录）；
-#   - Life-OS 的 MCP 桥用 `--network host` 访问（容器内 127.0.0.1 = 宿主）；
+#   - Alongside 的 MCP 桥用 `--network host` 访问（容器内 127.0.0.1 = 宿主）；
 #   - 凭证（LIFEOS_MCP_PAT）走环境变量注入，**不落镜像**；
 #   - 版本 pin 死（总监红线①）。
 #

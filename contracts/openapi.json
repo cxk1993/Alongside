@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Life-OS API",
+    "title": "Alongside API",
     "description": "人生管理系统后端宿主（内核）。自动发现并挂载 modules/ 下的插件路由。",
     "version": "0.1.0"
   },

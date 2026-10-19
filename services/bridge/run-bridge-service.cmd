@@ -1,5 +1,5 @@
 @echo off
-REM Life-OS note bridge (nssm Application points here)
+REM Alongside note bridge (nssm Application points here)
 REM BRIDGE_PSK comes from nssm AppEnvironmentExtra
 setlocal
 cd /d "E:\ai work\work\life\services\bridge"

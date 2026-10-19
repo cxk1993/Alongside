@@ -26,7 +26,7 @@ GET /api/v1/read/ledgers  with Bearer bcmcp_...
 ```
 
 BeeCount 的 PAT（`bcmcp_*`）**只能访问 MCP 端点**。若改走 REST，则必须在
-Life-OS 内存放主人主密码换 JWT —— 风险显著更高，已否决。
+Alongside 内存放主人主密码换 JWT —— 风险显著更高，已否决。
 
 唯一合法机器通道：
 
@@ -38,7 +38,7 @@ Accept: application/json, text/event-stream   ← Streamable HTTP
 
 ### 为何本轮只读
 
-- BeeCount 是账本**权威源**（主人手机也在用）；Life-OS 以读快照为主。
+- BeeCount 是账本**权威源**（主人手机也在用）；Alongside 以读快照为主。
 - 写操作本应白名单 + `Idempotency-Key` + `audit_log`；**T08B 不实现写路径**。
 - `create_transaction` 仅留接口桩并**默认禁用**（调用即 403 语义拒绝）。
 - **禁止**暴露任何删除类工具（`delete_transaction` 等）。
@@ -46,7 +46,7 @@ Accept: application/json, text/event-stream   ← Streamable HTTP
 ### 为何禁 `/api/v1/sync/*`
 
 `sync/full|pull|push` 是官方 App 的多端实时同步协议（LWW / change_id 单调性）。
-Life-OS 介入会与主人手机端打架。全代码库不得出现该路径调用。
+Alongside 介入会与主人手机端打架。全代码库不得出现该路径调用。
 
 ### 凭据与模式
 

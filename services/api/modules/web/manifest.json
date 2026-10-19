@@ -6,7 +6,7 @@
   "minKernel": "0.1.0",
   "kernelApi": "^1",
   "icon": "globe",
-  "description": "网页工作台：在 Life-OS 里打开任意网页、固定成快捷入口，并为它声明 API/MCP 能力。这份「能力条目」是能力目录（T20）的输入端。",
+  "description": "网页工作台：在 Alongside 里打开任意网页、固定成快捷入口，并为它声明 API/MCP 能力。这份「能力条目」是能力目录（T20）的输入端。",
   "author": "yunxi",
   "window": {
     "w": 1080,

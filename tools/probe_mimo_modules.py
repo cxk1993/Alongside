@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Life-OS 全模块「随心所欲」· MiMo 名下模块 API 巡检探针。
+"""Alongside 全模块「随心所欲」· MiMo 名下模块 API 巡检探针。
 
 覆盖：健康 T21 / 日程提醒 T25 / 理财调度 A2 / 模块清单（确认 health 已登记）。
 不替代 Qoder 浏览器深验；用于 T30 上线后快速确认「我的模块没半残」。

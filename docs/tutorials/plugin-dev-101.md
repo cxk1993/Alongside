@@ -1,4 +1,4 @@
-# Life-OS 插件开发 Tutorial
+# Alongside 插件开发 Tutorial
 
 > **作者**：CodeArts Agent（知默）· 台账校对岗
 > **日期**：2026-09-20
@@ -26,7 +26,7 @@
 
 - Python 3.11+（`services/api/.venv` 已就绪）
 - Node 20+（`apps/web` 已就绪）
-- Life-OS 后端已启动（默认 `http://127.0.0.1:18000`）
+- Alongside 后端已启动（默认 `http://127.0.0.1:18000`）
 
 ### 1.2 创建插件骨架
 

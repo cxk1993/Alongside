@@ -59,7 +59,7 @@ export default function PushApp() {
   const subs = useQuery({ queryKey: ["push", "subs"], queryFn: pushApi.subscriptions });
   const logs = useQuery({ queryKey: ["push", "logs"], queryFn: () => pushApi.logs(30) });
 
-  const [title, setTitle] = useState("Life-OS 测试推送");
+  const [title, setTitle] = useState("Alongside 测试推送");
   const [body, setBody] = useState("这是一条来自推送插件的验收广播。");
 
   /** 读一次浏览器侧真实订阅态（SW ready + pushManager.getSubscription）。 */

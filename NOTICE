@@ -1,8 +1,8 @@
-Life-OS
+Alongside
 Copyright 2026 cxk1993
 
-This product includes software developed as part of the Life-OS project
-(https://github.com/cxk1993/life-os).
+This product includes software developed as part of the Alongside project
+(https://github.com/cxk1993/alongside).
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@ You may obtain a copy of the License at
 第三方集成（Third-Party Integrations）
 ================================================================================
 
-Life-OS 可与其他项目集成，但**不包含、不再分发**以下项目的源码。
-它们由使用者自行安装（Docker / npm），Life-OS 仅通过公开接口与之通讯
+Alongside 可与其他项目集成，但**不包含、不再分发**以下项目的源码。
+它们由使用者自行安装（Docker / npm），Alongside 仅通过公开接口与之通讯
 （HTTP / MCP / RPC）。以下版权与许可声明出于尊重与致谢而保留。
 
 BeeCount / BeeCount-Cloud — 本地优先的跨端记账

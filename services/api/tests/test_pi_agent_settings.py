@@ -2,7 +2,7 @@
 
 背景（实打实的风险点，主人点名要修）：
     此前 `provider` / `model` **硬编码**在 process.py / sessions.py
-    （`DEFAULT_PROVIDER = "life-os"` / `model = "life-os:high"`），
+    （`DEFAULT_PROVIDER = "alongside"` / `model = "alongside:high"`），
     而 settings.schema.json 里明明声明了 provider / model / pi_binary /
     max_parallel_sessions —— **配了完全不生效**。
     后果：换一个网关（模型 id 不同）就必须改代码；网关返回
@@ -163,8 +163,8 @@ def test_router_source_has_no_hardcoded_provider_call():
     这条最直白地锁住本次修复的意图 —— 只要有人把硬编码写回来就红。
     """
     src = _ROUTER.read_text(encoding="utf-8")
-    for bad in ('provider="life-os"', "provider='life-os'",
-                'model="life-os:high"', "model='life-os:high'"):
+    for bad in ('provider="alongside"', "provider='alongside'",
+                'model="alongside:high"', "model='alongside:high'"):
         assert bad not in src, (
             f"router.py 又出现硬编码 {bad} —— provider/model 必须走 _runtime_options()"
         )

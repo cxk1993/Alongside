@@ -32,7 +32,7 @@ class FakeNotifyClient(BridgeClient):
 
 def test_cloud_notify_sign_matches_bridge_protocol() -> None:
     psk = "unit-test-psk"
-    body = b'{"title":"t","body":"b","app_id":"Life-OS","channel":"log"}'
+    body = b'{"title":"t","body":"b","app_id":"Alongside","channel":"log"}'
     sig = _sign(psk, "POST", "/bridge/notify", 1720000000, "nonce-xyz", body)
     assert verify_sig(psk, "POST", "/bridge/notify", 1720000000, "nonce-xyz", sig, body)
     assert not verify_sig(

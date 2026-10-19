@@ -53,7 +53,7 @@ class FinanceEntry(PkMixin, TimestampMixin, table=True):
 class FinanceSnapshot(PkMixin, TimestampMixin, table=True):
     """每日资产/收支快照（BeeCount MCP 只读同步的落点）。
 
-    ★ date 唯一：同日重复 sync 覆盖同一行，不翻倍（Life-OS 侧权威去重）。
+    ★ date 唯一：同日重复 sync 覆盖同一行，不翻倍（Alongside 侧权威去重）。
     ★ 金额整数分；无法从 BeeCount 拆出的分项保持 0，原始摘要在 meta_json。
     """
 

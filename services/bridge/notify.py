@@ -1,6 +1,6 @@
 """本机通知投递（T24）。
 
-★ 用途：Life-OS 云侧或本机调度经桥请求 → Windows 桌面通知。
+★ 用途：Alongside 云侧或本机调度经桥请求 → Windows 桌面通知。
 ★ 通道优先级：
    1. winotify（若已安装，体验最好）
    2. PowerShell + Windows.UI.Notifications Toast（系统自带，零新依赖）
@@ -17,7 +17,7 @@ from typing import Any
 
 log = logging.getLogger("bridge.notify")
 
-DEFAULT_APP_NAME = "Life-OS"
+DEFAULT_APP_NAME = "Alongside"
 
 
 @dataclass
@@ -107,7 +107,7 @@ def send_windows_notification(
 ) -> NotifyResult:
     """发送一条桌面通知。channel: auto | winotify | powershell | log。"""
     app = app_id or DEFAULT_APP_NAME
-    title = (title or "").strip() or "Life-OS"
+    title = (title or "").strip() or "Alongside"
     body = (body or "").strip()
     if not body:
         return NotifyResult(ok=False, channel="log", detail="body 为空")

@@ -10,7 +10,7 @@ pi 把会话记录写在 `runtime/sessions/{ISO时间戳}_{uuid}.jsonl`，**每�
 
 ```json
 {"type":"session","version":3,"id":"<uuid>","timestamp":"...","cwd":"..."}       ← 会话头
-{"type":"model_change","provider":"life-os","modelId":"life-os"}                ← 模型切换
+{"type":"model_change","provider":"alongside","modelId":"alongside"}                ← 模型切换
 {"type":"thinking_level_change"}                                                ← 思考级别
 {"type":"message","message":{"role":"system","content":"..."}}
 {"type":"message","message":{"role":"user","content":[{"type":"text","text":"..."}]}}

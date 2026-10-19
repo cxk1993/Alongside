@@ -46,7 +46,7 @@ export default function PiChatView() {
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
-      text: "你好，我是 Pi 智能体。我能直接查 Life-OS 的日程、待办、健康、理财等数据，也能做多步任务。",
+      text: "你好，我是 Pi 智能体。我能直接查 Alongside 的日程、待办、健康、理财等数据，也能做多步任务。",
     },
   ]);
   const [input, setInput] = useState("");

@@ -123,7 +123,7 @@ def create_app(
     activator_listener = activator.on_event
 
     app = FastAPI(
-        title="Life-OS API",
+        title="Alongside API",
         version="0.1.0",
         description="人生管理系统后端宿主（内核）。自动发现并挂载 modules/ 下的插件路由。",
         docs_url="/docs",

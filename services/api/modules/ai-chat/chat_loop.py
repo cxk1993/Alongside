@@ -44,7 +44,7 @@ def build_system(today: date | None = None) -> str:
 
     d = (today or datetime.now(timezone(timedelta(hours=8))).date()).isoformat()
     return (
-        f"你是 Life-OS 助手。今天是 {d}（CST）。"
+        f"你是 Alongside 助手。今天是 {d}（CST）。"
         "回答涉及日程/待办/健康/今日概况时，必须先调用对应工具取真实数据，"
         "严禁凭记忆或想象编造；工具返回为空就如实说没有。"
     )

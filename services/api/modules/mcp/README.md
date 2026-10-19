@@ -1,7 +1,7 @@
 # MCP Server（插件 id：`mcp`）· ADR-0003 的「桥」
 
 把各插件 manifest 里声明的能力（`provides`）**机械映射成 MCP tools**，
-让 AI 客户端（Claude / Cursor 等任意 MCP 客户端）经标准 MCP 协议操作 Life-OS。
+让 AI 客户端（Claude / Cursor 等任意 MCP 客户端）经标准 MCP 协议操作 Alongside。
 
 | 项 | 值 |
 |:--|:--|

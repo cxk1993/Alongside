@@ -69,8 +69,8 @@ class PiProcessManager:
         *,
         cwd: str,
         binary: str | None = None,
-        provider: str = "life-os",
-        model: str = "life-os",
+        provider: str = "alongside",
+        model: str = "alongside",
     ) -> None:
         self._cwd = cwd
         self._binary = binary
@@ -249,14 +249,14 @@ _MANAGER_LOCK = threading.Lock()
 
 def get_manager(
     *, cwd: str | None = None, binary: str | None = None,
-    provider: str = "life-os", model: str = "life-os:high",
+    provider: str = "alongside", model: str = "alongside:high",
 ) -> PiProcessManager:
     """取全局单例（首次调用时按参数创建）。"""
     global _MANAGER
     with _MANAGER_LOCK:
         if _MANAGER is None:
             if cwd is None:
-                # 默认工作目录：插件的 runtime 目录（★ 避免读到 Life-OS 之外的 AGENTS.md）
+                # 默认工作目录：插件的 runtime 目录（★ 避免读到 Alongside 之外的 AGENTS.md）
                 cwd = str(Path(__file__).resolve().parent.parent / "runtime")
             _MANAGER = PiProcessManager(cwd=cwd, binary=binary, provider=provider, model=model)
         return _MANAGER

@@ -1,7 +1,7 @@
 """概览聚合器（T11 技术要点）。
 
 硬规则：
-  1. 插件之间不许 import —— dashboard 只通过 HTTP 调同机 Life-OS API。
+  1. 插件之间不许 import —— dashboard 只通过 HTTP 调同机 Alongside API。
   2. 每个子调用超时 800ms；失败/超时返回 {"status": "timeout"|"error"}。
   3. 任何一个模块挂掉都不能让 overview 500 —— 对应卡片降级，其余照常。
 
@@ -55,7 +55,7 @@ _fetch_override: FetchFn | None = None
 
 
 def get_self_base() -> str:
-    """同机 Life-OS API 根地址（可被 env/.env 覆盖）。默认指向生产后端端口 18000。"""
+    """同机 Alongside API 根地址（可被 env/.env 覆盖）。默认指向生产后端端口 18000。"""
     return read_setting("DASHBOARD_SELF_BASE", "http://127.0.0.1:18000").rstrip("/")
 
 

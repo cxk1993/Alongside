@@ -37,8 +37,8 @@ export function LoginPage({ onSuccess }: Props) {
 
   return (
     <div className="login">
-      <form className="login__card" onSubmit={submit} aria-label="登录 Life-OS">
-        <div className="login__brand">Life-OS</div>
+      <form className="login__card" onSubmit={submit} aria-label="登录 Alongside">
+        <div className="login__brand">Alongside</div>
         <div className="login__hint">人生管理系统 · 单用户私人实例</div>
 
         <label className="login__label" htmlFor="login-password">

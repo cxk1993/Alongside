@@ -59,7 +59,7 @@ def package_preview(profile: str, db_summary: dict[str, Any]) -> dict[str, Any]:
     if profile not in PROFILES:
         raise KeyError(profile)
     files: dict[str, str] = {
-        "README.txt": "Life-OS export\nsecret_policy=omit+redact\n",
+        "README.txt": "Alongside export\nsecret_policy=omit+redact\n",
         "manifest.json": json.dumps(
             build_manifest(profile, sorted(db_summary), {k: 0 for k in db_summary}),
             ensure_ascii=False,

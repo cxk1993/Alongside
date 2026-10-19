@@ -1,4 +1,4 @@
-# Life-OS 数据字典
+# Alongside 数据字典
 
 > **契约文件**：字段与 `services/api/db/models/` 逐字段对应，由
 > `python -m db.check_dictionary` 自动比对。**改模型必须同步改本文件**，反之亦然。

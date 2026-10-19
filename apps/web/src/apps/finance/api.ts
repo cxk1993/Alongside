@@ -131,7 +131,7 @@ export const financeApi = {
     const qs = q.toString();
     return api.get<FinanceSummary>(`${BASE}/summary${qs ? `?${qs}` : ""}`);
   },
-  /** T08B：快照列表（date 倒序）。只走 Life-OS 后端，前端不直连 BeeCount。 */
+  /** T08B：快照列表（date 倒序）。只走 Alongside 后端，前端不直连 BeeCount。 */
   snapshots: (params: { limit?: number; offset?: number } = {}) => {
     const q = new URLSearchParams();
     if (params.limit != null) q.set("limit", String(params.limit));
@@ -139,7 +139,7 @@ export const financeApi = {
     const qs = q.toString();
     return api.get<FinanceSnapshotList>(`${BASE}/snapshots${qs ? `?${qs}` : ""}`);
   },
-  /** T08B：手动触发只读同步（调 Life-OS 后端，由后端走 BeeCount MCP）。 */
+  /** T08B：手动触发只读同步（调 Alongside 后端，由后端走 BeeCount MCP）。 */
   syncSnapshots: () => api.post<SnapshotSyncResult>(`${BASE}/snapshots/sync`, {}),
   /** T08B：上游状态（mock|mcp / configured / last_sync）。 */
   beeCountSource: () => api.get<BeeCountSource>(`${BASE}/beecount/source`),

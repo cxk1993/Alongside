@@ -42,7 +42,7 @@ uvicorn main:app --reload --port 8000
 
 ```python
 # -*- coding: utf-8 -*-
-"""Life-OS 后端入口。"""
+"""Alongside 后端入口。"""
 from __future__ import annotations
 
 from core.app import create_app

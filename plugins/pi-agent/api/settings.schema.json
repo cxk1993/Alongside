@@ -5,12 +5,12 @@
   "properties": {
     "provider": {
       "type": "string",
-      "default": "life-os",
+      "default": "alongside",
       "description": "模型提供商名（对应 models.json 里 providers 的 key）。★ 必须与 models.json 一致，否则报 Unknown provider"
     },
     "model": {
       "type": "string",
-      "default": "life-os",
+      "default": "alongside",
       "description": "模型 id（对应 models.json 里该 provider 的 models[].id）。★ 网关按此名路由，写错会 503「无可用的模型」"
     },
     "thinking_level": {

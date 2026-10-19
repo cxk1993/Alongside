@@ -1,6 +1,6 @@
 """复盘业务逻辑：落库查询、趋势/对比、周报代理、批注、source 状态。
 
-★ 对 Work-Review 只读；本层只写 Life-OS 自己的 review_daily / review_note。
+★ 对 Work-Review 只读；本层只写 Alongside 自己的 review_daily / review_note。
 ★ 事件 review.day.ingested 在 ingest 成功后 publish。
 ★ 趋势是复盘的灵魂：后端算好自然语言结论，前端少猜。
 ★ 桥离线：已落库日期仍可看；上游请求快速失败，不无限重试。
@@ -504,7 +504,7 @@ class ReviewService:
         )
         return out
 
-    # ───────────────────────── 写（只写 Life-OS） ─────────────────────────
+    # ───────────────────────── 写（只写 Alongside） ─────────────────────────
     def ingest_all(self) -> dict[str, Any]:
         """★ 全量同步历史日报（astrbot 下场 · 主人「同步理应同步历史所有日报」）。
 
@@ -584,7 +584,7 @@ class ReviewService:
     def delete_note(self, note_id: str) -> None:
         """删除一条主人批注（主人⑤「增减笔记」的"减"半边）。
 
-        ★ 只删 Life-OS 自己的 review_note 表记录，**不写回 review_daily，更不写回 Work-Review**。
+        ★ 只删 Alongside 自己的 review_note 表记录，**不写回 review_daily，更不写回 Work-Review**。
         """
         note = self.db.get(ReviewNote, note_id)
         if note is None:

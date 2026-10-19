@@ -1,7 +1,7 @@
 /**
  * BeeCount 同步面板（T08B）。
  *
- * ★ 只调 Life-OS 后端 `/api/v1/finance/*`，**前端绝不直连 BeeCount**，
+ * ★ 只调 Alongside 后端 `/api/v1/finance/*`，**前端绝不直连 BeeCount**，
  *   也不接触 PAT / BEECOUNT_* 凭据（那些只在后端 .env）。
  * ★ 本轮只读：按钮触发 `POST /snapshots/sync`（MCP 读工具 → finance_snapshot）。
  */

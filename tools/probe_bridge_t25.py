@@ -75,7 +75,7 @@ def main() -> int:
 
     if args.notify:
         body = json.dumps(
-            {"title": "Life-OS 探测", "body": "T25 channel=log 测试", "channel": "log"},
+            {"title": "Alongside 探测", "body": "T25 channel=log 测试", "channel": "log"},
             ensure_ascii=False,
         ).encode("utf-8")
         npath = "/bridge/notify"

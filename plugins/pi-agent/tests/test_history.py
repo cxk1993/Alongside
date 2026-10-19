@@ -39,7 +39,7 @@ def test_normalizes_and_skips_noise(sessions_dir: Path) -> None:
         "2026-09-26T00-00-00-000Z_aaaa-bbbb.jsonl",
         [
             {"type": "session", "version": 3, "id": "aaaa-bbbb"},  # 头：跳过
-            {"type": "model_change", "provider": "life-os"},  # 非 message：跳过
+            {"type": "model_change", "provider": "alongside"},  # 非 message：跳过
             {"type": "message", "message": {"role": "user", "content": [{"type": "text", "text": "你好"}]}},
             {
                 "type": "message",

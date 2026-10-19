@@ -16,7 +16,7 @@
   → 该端点无 props → 降级成通用 payload。
   **实证**：15 个「写」工具**全部**退化（`todo_item_write` / `calendar_event_write`
   / `push_send_write` …），读工具正常（它们用查询参数）—— 等于"所有 AI 写
-  Life-OS 时都在盲猜字段名"，正是当初要治的那个病，只治了一半。
+  Alongside 时都在盲猜字段名"，正是当初要治的那个病，只治了一半。
   本版新增 `_deref()`：解析本地 `$ref`（含 `allOf` 合并、`anyOf`/`oneOf` 取非空分支、
   环形引用防护），并把 `enum` / `default` / 数组 `items` 一并带出，让 AI 看得懂合法取值。
 

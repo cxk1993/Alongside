@@ -44,7 +44,7 @@ T11 **最小首屏**：打开系统能看到「今天」。概览是**聚合器�
 
 | 变量 | 默认 | 说明 |
 |:--|:--|:--|
-| `DASHBOARD_SELF_BASE` | `http://127.0.0.1:8000` | 同机 Life-OS API 根地址 |
+| `DASHBOARD_SELF_BASE` | `http://127.0.0.1:8000` | 同机 Alongside API 根地址 |
 | `DASHBOARD_SELF_TOKEN` | （空） | 内网自调 token；空则复用 core 签发的 admin JWT |
 
 ## 测试

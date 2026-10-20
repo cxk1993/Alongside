@@ -9,7 +9,7 @@
 
 用法（在有生产访问权的机器上）：
     python tools/probe_d_pool_leak.py                 # 只跑 ①②（无需 token）
-    LIFEOS_TOKEN=<jwt> python tools/probe_d_pool_leak.py   # 全跑 ①②③
+    ALONGSIDE_TOKEN=<jwt> python tools/probe_d_pool_leak.py   # 全跑 ①②③
 
 设计原则：**只读探针**（不写库、不改状态）· 失败即如实报（不吞异常）。
 """
@@ -22,7 +22,7 @@ import time
 import urllib.error
 import urllib.request
 
-BASE = os.environ.get("LIFEOS_BASE", "https://life.example.com:8443")
+BASE = ((os.environ.get("ALONGSIDE_BASE") or os.environ.get("LIFEOS_BASE")) or os.environ.get("LIFEOS_BASE") or "https://life.example.com:8443")
 N = int(os.environ.get("PROBE_N", "50"))
 CTX = ssl.create_default_context()
 CTX.check_hostname = False
@@ -43,7 +43,7 @@ def hit(path: str, token: str | None = None) -> tuple[int, str]:
 
 
 def main() -> int:
-    token = os.environ.get("LIFEOS_TOKEN")
+    token = (os.environ.get("ALONGSIDE_TOKEN") or os.environ.get("LIFEOS_TOKEN"))
     print(f"# 根因验收探针 · {BASE} · {N} 连打")
     codes: dict[int, int] = {}
     t0 = time.time()
@@ -69,7 +69,7 @@ def main() -> int:
             return 1
         print("  ✅ 判据③ 通过：带 token 200")
     else:
-        print("  ⏭ 判据③ 跳过（未提供 LIFEOS_TOKEN）")
+        print("  ⏭ 判据③ 跳过（未提供 ALONGSIDE_TOKEN）")
 
     print("\n判据②（QueuePool 计数）需在服务器侧执行：")
     print("  grep -c 'QueuePool' /path/to/api.log  → 与基线 236 对比，**新增应为 0**")

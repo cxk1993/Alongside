@@ -2,7 +2,7 @@
  * 杂物库 · V1-EXT2 二期 MVP（主人③：「链接其他文件夹里图片或文件」· 纯浏览器本机形态）。
  *
  * 能力：个性化面板内「挂载本地文件夹」→ showDirectoryPicker → handle 持久化
- * IndexedDB（lifeos-misc/handles/current）→ 列顶层条目 → 图片文件一键「设为壁纸」/
+ * IndexedDB（alongside-misc/handles/current）→ 列顶层条目 → 图片文件一键「设为壁纸」/
  * 点击预览。Chromium 渐进增强（无 API 环境 isMiscSupported()=false，面板隐藏入口）。
  *
  * 安全边界：只读（query/requestPermission 均 'read'）；handle 只进本机 IndexedDB；
@@ -10,8 +10,12 @@
  */
 import { createElement, useEffect, useState } from "react";
 
+import { resolveDbName } from "@/shared/legacyStorage";
+
 const HANDLE_KEY = "current";
-const DB_NAME = "lifeos-misc";
+const DB_NAME = "alongside-misc";
+//: ★ 改名兼容：旧品牌期的库名（IndexedDB 没有改名 API，探测后再决定用哪个）。
+const LEGACY_DB_NAME = "lifeos-misc";
 const STORE = "handles";
 
 export function isMiscSupported(): boolean {
@@ -23,9 +27,10 @@ interface DirHandleExt extends FileSystemDirectoryHandle {
   requestPermission?: (d: { mode: string }) => Promise<PermissionState>;
 }
 
-function openDb(): Promise<IDBDatabase> {
+async function openDb(): Promise<IDBDatabase> {
+  const dbName = await resolveDbName(DB_NAME, LEGACY_DB_NAME);
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(dbName, 1);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
     };

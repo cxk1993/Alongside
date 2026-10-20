@@ -6,7 +6,7 @@
 
 用法：
   python tools/probe_all_modules_api.py --base http://192.0.2.10:18080 --token <jwt>
-  LIFEOS_TOKEN=xxx python tools/probe_all_modules_api.py
+  ALONGSIDE_TOKEN=xxx python tools/probe_all_modules_api.py
 """
 from __future__ import annotations
 
@@ -44,12 +44,12 @@ CHECKS: list[tuple[str, str, str]] = [
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", default=os.environ.get("LIFEOS_BASE") or "http://192.0.2.10:18080")
-    ap.add_argument("--token", default=os.environ.get("LIFEOS_TOKEN") or "")
+    ap.add_argument("--base", default=(os.environ.get("ALONGSIDE_BASE") or os.environ.get("LIFEOS_BASE")) or "http://192.0.2.10:18080")
+    ap.add_argument("--token", default=(os.environ.get("ALONGSIDE_TOKEN") or os.environ.get("LIFEOS_TOKEN")) or "")
     args = ap.parse_args()
     token = args.token
     if not token:
-        print("FAIL: 需要 --token 或 LIFEOS_TOKEN")
+        print("FAIL: 需要 --token 或 ALONGSIDE_TOKEN")
         return 2
     base = args.base.rstrip("/")
     h = {"Authorization": f"Bearer {token}"}

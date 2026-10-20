@@ -9,7 +9,7 @@ curl -sS -m 8 http://127.0.0.1:18000/api/v1/modules | python3 -c "import sys,jso
 echo "--- ledger ---"
 python3 - <<'PY'
 import sqlite3
-c=sqlite3.connect('/home/ubuntu/lifeos/data/lifos.db')
+c=sqlite3.connect('/home/ubuntu/alongside/data/alongside.db')
 n=c.execute("SELECT COUNT(*) FROM app_setting WHERE key LIKE 'migration.%'").fetchone()[0]
 print('migration_ledger', n)
 rows=c.execute("SELECT key FROM app_setting WHERE key LIKE 'migration.%' ORDER BY key").fetchall()

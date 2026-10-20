@@ -10,7 +10,7 @@ import { create } from "zustand";
 
 export type Theme = "dark" | "light";
 
-const THEME_KEY = "lifeos.theme";
+const THEME_KEY = "alongside.theme";
 
 function systemPrefersLight(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;

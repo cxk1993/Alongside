@@ -298,7 +298,7 @@
     "gate": {
       "enabled": true,
       "login_status": 200,
-      "cookie_name": "lifos_refresh",
+      "cookie_name": "alongside_refresh",
       "cookie_secure_count": 0,
       "refresh_status": 200,
       "me_status": 200,

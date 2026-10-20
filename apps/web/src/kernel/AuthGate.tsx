@@ -23,7 +23,7 @@ export function AuthGate({ children }: Props) {
     setUnauthorizedHandler(() => setAuthed(false));
     // 多标签页同步：别的页登出/登录，本页跟随
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "lifeos.token") setAuthed(hasToken());
+      if (e.key === "alongside.token") setAuthed(hasToken());
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);

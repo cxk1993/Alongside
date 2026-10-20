@@ -1,9 +1,9 @@
 #!/bin/bash
 # MiMo ISSUE-006 rollback + evidence
 set -u
-API=/home/ubuntu/lifeos/services/api
-LOG=/home/ubuntu/lifeos/api.log
-PY=/home/ubuntu/lifeos/.venv/bin/python
+API=/home/ubuntu/alongside/services/api
+LOG=/home/ubuntu/alongside/api.log
+PY=/home/ubuntu/alongside/.venv/bin/python
 TS=20260920-105200
 echo "=== ROLLBACK $(date -Is) ==="
 cp "$API/core/plugins/migrations.py.bak-${TS}" "$API/core/plugins/migrations.py"
@@ -29,7 +29,7 @@ curl -sS -m 5 -w "\nhttp=%{http_code}\n" http://127.0.0.1:18000/healthz || true
 echo "--- ledger after failed attempt ---"
 python3 - <<'PY'
 import sqlite3
-c=sqlite3.connect('/home/ubuntu/lifeos/data/lifos.db')
+c=sqlite3.connect('/home/ubuntu/alongside/data/alongside.db')
 print('migration_ledger', c.execute("SELECT COUNT(*) FROM app_setting WHERE key LIKE 'migration.%'").fetchone()[0])
 print('agents_task_exists', c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agents_task'").fetchone()[0])
 PY

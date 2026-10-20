@@ -355,7 +355,7 @@ describe("CatalogApp", () => {
     await waitFor(() => expect(screen.getByText("日程表")).toBeTruthy());
     switchTab(/^手动导入/);
     await screen.findByText("我的 API");
-    expect(window.localStorage.getItem("lifeos.catalog.activeTab")).toBe("manual");
+    expect(window.localStorage.getItem("alongside.catalog.activeTab")).toBe("manual");
     unmount();
     renderApp();
     // 默认页已是手动页 → 手动条目可见、插件条目不在当前页
@@ -366,7 +366,7 @@ describe("CatalogApp", () => {
   });
 
   it("增量①：localStorage 无记录或值非法时回落插件能力页", async () => {
-    window.localStorage.setItem("lifeos.catalog.activeTab", "bogus-tab");
+    window.localStorage.setItem("alongside.catalog.activeTab", "bogus-tab");
     renderApp();
     await waitFor(() => expect(screen.getByText("日程表")).toBeTruthy());
     expect(screen.getByRole("tab", { name: /^插件能力/ }).getAttribute("aria-selected")).toBe(

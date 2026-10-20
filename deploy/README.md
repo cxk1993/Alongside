@@ -10,7 +10,7 @@
 deploy/
 ├─ Dockerfile.api          # 后端镜像
 ├─ Dockerfile.web          # 前端镜像（多阶段：build → nginx 静态）
-├─ nginx/lifos.conf        # 反向代理 + SSE 三行 + 安全头
+├─ nginx/alongside.conf        # 反向代理 + SSE 三行 + 安全头
 ├─ scripts/backup.sh       # SQLite 热备（sqlite3 .backup + 完整性校验）
 └─ certs/                  # acme.sh / Cloudflare DNS 签发的证书（不进 git）
 ```

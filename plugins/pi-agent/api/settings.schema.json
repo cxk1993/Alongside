@@ -45,7 +45,7 @@
     },
     "sandbox_image": {
       "type": "string",
-      "default": "lifeos-pi-sandbox:0.87.1",
+      "default": "alongside-pi-sandbox:0.87.1",
       "description": "沙箱镜像（版本 pin 死）"
     }
   },

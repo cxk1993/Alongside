@@ -31,7 +31,7 @@ from .external import call_external, external_tools, find_external
 from .forward import forward
 from .registry_adapter import build_tool_map, find_tool, is_write_tool
 
-SERVER_NAME = "lifeos-mcp"
+SERVER_NAME = "alongside-mcp"
 SERVER_VERSION = "0.1.0"
 # 我们支持的协议版本（核心三原语在各版本间一致；握手时回客户端所请求的版本）。
 _SUPPORTED_PROTOCOL_VERSIONS = ("2024-11-05", "2025-03-26", "2025-06-18")

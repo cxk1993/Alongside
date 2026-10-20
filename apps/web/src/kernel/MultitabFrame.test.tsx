@@ -85,15 +85,15 @@ describe("MultitabFrame 升级件（回验增补）", () => {
   });
 
   it("persistKey：记住最后访问页签，重挂载后落在原页；无效持久化值安全退回", () => {
-    localStorage.setItem("lifeos.plugin.mtab.probe", "push");
+    localStorage.setItem("alongside.plugin.mtab.probe", "push");
     const { unmount } = render(<MultitabFrame pages={pages()} persistKey="probe" />);
     expect(screen.getByTestId("mtab-tab-push").getAttribute("aria-selected")).toBe("true");
     unmount();
     // 指向不存在页的脏值 → 安全退回第一页
-    localStorage.setItem("lifeos.plugin.mtab.probe", "ghost");
+    localStorage.setItem("alongside.plugin.mtab.probe", "ghost");
     render(<MultitabFrame pages={pages()} persistKey="probe" />);
     expect(screen.getByTestId("mtab-tab-catalog").getAttribute("aria-selected")).toBe("true");
-    localStorage.removeItem("lifeos.plugin.mtab.probe");
+    localStorage.removeItem("alongside.plugin.mtab.probe");
   });
 
   it("roving tabIndex：非活动页签不可 Tab 聚焦（focus 落在活动页签）", () => {

@@ -89,8 +89,8 @@ def main() -> int:
         #   一律归一 basename 再打 /assets/<basename>，杜绝 /assets/assets/ 与漏抓。
         chunk_hits = {
             "katex": False,
-            "lifeos.plugin.habits.prefs": False,
-            "lifeos.plugin.sidebar.prefs": False,
+            "alongside.plugin.habits.prefs": False,
+            "alongside.plugin.sidebar.prefs": False,
         }
         names: set[str] = set()
         for raw in re.findall(r"([A-Za-z0-9_-]+\.js)", js):
@@ -105,7 +105,7 @@ def main() -> int:
                         chunk_hits[k] = True
             except Exception:
                 pass
-        pref_ok = chunk_hits["lifeos.plugin.habits.prefs"] or chunk_hits["lifeos.plugin.sidebar.prefs"]
+        pref_ok = chunk_hits["alongside.plugin.habits.prefs"] or chunk_hits["alongside.plugin.sidebar.prefs"]
         rec("⑤KaTeX", "chunk has katex", chunk_hits["katex"], "yes" if chunk_hits["katex"] else "no")
         rec("⑧自定义", "chunk has prefs", pref_ok, "yes" if pref_ok else "no")
 

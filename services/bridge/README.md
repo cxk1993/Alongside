@@ -44,7 +44,7 @@
     include: ["**/*.md"]
 ```
 
-改完 `config.yaml` 后重启 nssm 服务 `lifeos-bridge` 生效。`enabled: false` 可先关着。
+改完 `config.yaml` 后重启 nssm 服务 `alongside-bridge` 生效。`enabled: false` 可先关着。
 路径穿越被 `reader.py` 拒绝；响应只回 lib + POSIX 相对路径。
 
 ## 鉴权（所有 /bridge/* 必须带）
@@ -64,11 +64,11 @@
 用 **nssm**（不要用 schtasks，已踩坑 3 小时）：
 
 ```powershell
-nssm install lifeos-bridge "E:\ai work\work\life\services\api\.venv\Scripts\python.exe"
-nssm set lifeos-bridge AppParameters "-c import sys; sys.path.insert(0, r'E:\ai work\work\life\services'); from bridge.main import create_bridge_app; import uvicorn; uvicorn.run(create_bridge_app(), host='127.0.0.1', port=8790)"
-nssm set lifeos-bridge AppDirectory "E:\ai work\work\life\services\bridge"
-nssm set lifeos-bridge AppEnvironmentExtra BRIDGE_PORT=8790 BRIDGE_PSK=**** BRIDGE_CONFIG=E:\ai work\work\life\services\bridge\config.yaml
-nssm start lifeos-bridge
+nssm install alongside-bridge "<repo-root>\services\api\.venv\Scripts\python.exe"
+nssm set alongside-bridge AppParameters "-c import sys; sys.path.insert(0, r'<repo-root>\services'); from bridge.main import create_bridge_app; import uvicorn; uvicorn.run(create_bridge_app(), host='127.0.0.1', port=8790)"
+nssm set alongside-bridge AppDirectory "<repo-root>\services\bridge"
+nssm set alongside-bridge AppEnvironmentExtra BRIDGE_PORT=8790 BRIDGE_PSK=**** BRIDGE_CONFIG=<repo-root>\services\bridge\config.yaml
+nssm start alongside-bridge
 ```
 
 或直接双击 `run.ps1`（同样只监听 127.0.0.1）。

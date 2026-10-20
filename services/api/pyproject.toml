@@ -11,7 +11,7 @@
 # ════════════════════════════════════════════════════════════════
 
 [project]
-name = "lifeos-api"
+name = "alongside-api"
 version = "1.0.0"
 description = "Alongside 后端宿主（内核）"
 requires-python = ">=3.11,<3.13"

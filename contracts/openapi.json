@@ -208,7 +208,7 @@
         "operationId": "refresh_api_v1_auth_refresh_post",
         "parameters": [
           {
-            "name": "lifos_refresh",
+            "name": "alongside_refresh",
             "in": "cookie",
             "required": false,
             "schema": {
@@ -220,7 +220,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Lifos Refresh"
+              "title": "Alongside Refresh"
             }
           }
         ],

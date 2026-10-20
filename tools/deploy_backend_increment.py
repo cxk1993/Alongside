@@ -24,8 +24,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "services" / "api"
-HOST = os.environ.get("LIFEOS_SSH_HOST") or "ubuntu@192.0.2.10"
-REMOTE_API = "/home/ubuntu/lifeos/services/api"
+HOST = (os.environ.get("ALONGSIDE_SSH_HOST") or os.environ.get("LIFEOS_SSH_HOST")) or "ubuntu@192.0.2.10"
+REMOTE_API = "/home/ubuntu/alongside/services/api"
 KEY_ENV = "SSH_KEY"
 
 
@@ -87,7 +87,7 @@ def main() -> int:
     print("=== 上传完成 ===")
     print("请分两会话重启 Alongside API（kill / setsid），然后 --verify 或手工探活。")
     if args.verify:
-        base = os.environ.get("LIFEOS_BASE") or "http://192.0.2.10:18080"
+        base = (os.environ.get("ALONGSIDE_BASE") or os.environ.get("LIFEOS_BASE")) or "http://192.0.2.10:18080"
         try:
             import httpx
 

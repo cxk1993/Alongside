@@ -39,7 +39,7 @@ const BASE = "/api/v1/calendar";
 
 function getToken(): string | null {
   try {
-    return localStorage.getItem("lifeos.token");
+    return localStorage.getItem("alongside.token");
   } catch {
     return null;
   }
@@ -66,7 +66,7 @@ async function idem<T>(method: string, path: string, body?: unknown): Promise<T>
     res = await fetch(path, { method, headers, body: payload });
   } catch (e) {
     throw new ApiError({
-      type: "https://lifeos/network-error",
+      type: "https://alongside/network-error",
       title: "网络不可用",
       status: 0,
       detail: e instanceof Error ? e.message : String(e),

@@ -36,13 +36,13 @@ describe("iframeAuthBridge · handleMessage 协议与安全", () => {
     const source = makeSource();
     const ev = makeEvent({
       origin: "http://localhost:18091",
-      data: { type: "lifeos:request-token" },
+      data: { type: "alongside:request-token" },
       source,
     });
     const handled = handleMessage(ev, ["http://localhost:18091"], TOKEN_READ);
     expect(handled).toBe(true);
     expect(source.postMessage).toHaveBeenCalledWith(
-      { type: "lifeos:token", token: "jwt-token-abc" },
+      { type: "alongside:token", token: "jwt-token-abc" },
       { targetOrigin: "http://localhost:18091" },
     );
   });
@@ -51,7 +51,7 @@ describe("iframeAuthBridge · handleMessage 协议与安全", () => {
     const source = makeSource();
     const ev = makeEvent({
       origin: "http://localhost:18091",
-      data: { type: "lifeos:request-token" },
+      data: { type: "alongside:request-token" },
       source,
     });
     expect(handleMessage(ev, [], TOKEN_READ)).toBe(false);
@@ -62,7 +62,7 @@ describe("iframeAuthBridge · handleMessage 协议与安全", () => {
     const source = makeSource();
     const ev = makeEvent({
       origin: "http://evil.example.com",
-      data: { type: "lifeos:request-token" },
+      data: { type: "alongside:request-token" },
       source,
     });
     expect(handleMessage(ev, ["http://localhost:18091"], TOKEN_READ)).toBe(false);
@@ -86,7 +86,7 @@ describe("iframeAuthBridge · handleMessage 协议与安全", () => {
     const source = makeSource();
     const ev = makeEvent({
       origin: "http://localhost:18091",
-      data: { type: "lifeos:request-token" },
+      data: { type: "alongside:request-token" },
       source,
     });
     expect(handleMessage(ev, ["http://localhost:18091"], () => null)).toBe(false);
@@ -96,7 +96,7 @@ describe("iframeAuthBridge · handleMessage 协议与安全", () => {
   it("无 source（同窗 message）→ 忽略", () => {
     const ev = makeEvent({
       origin: "http://localhost:18091",
-      data: { type: "lifeos:request-token" },
+      data: { type: "alongside:request-token" },
     });
     expect(handleMessage(ev, ["http://localhost:18091"], TOKEN_READ)).toBe(false);
   });
@@ -125,7 +125,7 @@ describe("iframeAuthBridge · installIframeAuthBridge 挂载/卸载", () => {
     const source = makeSource();
     const ev = makeEvent({
       origin: "http://localhost:18091",
-      data: { type: "lifeos:request-token" },
+      data: { type: "alongside:request-token" },
       source,
     });
     listeners[0](ev);

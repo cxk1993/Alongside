@@ -8,7 +8,7 @@
     python tools/accept_probe/probe.py --target production --suite docsprobe
     python tools/accept_probe/probe.py --target production --suite deploycheck
 
-口令：运行时经环境变量 LIFEOS_ADMIN_PASSWORD 传入（或 --password，仅当次进程内存使用）。
+口令：运行时经环境变量 ALONGSIDE_ADMIN_PASSWORD 传入（或 --password，仅当次进程内存使用）。
     绝不写入任何文件/回帖/日志；token 与 cookie 全程内存，不落盘。
 
 退出码：0=全绿；1=有判据未过；2=用法/输入错误。
@@ -88,7 +88,7 @@ def emit_verdict(target: str, suite: str) -> dict[str, Any]:
     rows = Row.collected
     passed = sum(1 for r in rows if r["ok"])
     verdict = {
-        "schema": "lifeos.probe.verdict/1",
+        "schema": "alongside.probe.verdict/1",
         "ts": datetime.now().astimezone().isoformat(timespec="seconds"),
         "target": target,
         "suite": suite,
@@ -388,9 +388,9 @@ def main() -> int:
     ap.add_argument("--target", default="production", choices=["production", "local"])
     ap.add_argument("--suite", default="all",
                     choices=["gate", "hash", "modules", "docsprobe", "o1status", "bffsummary", "readyz", "deploycheck", "all"])
-    ap.add_argument("--password", default=None, help="不推荐；优先用环境变量 LIFEOS_ADMIN_PASSWORD")
+    ap.add_argument("--password", default=None, help="不推荐；优先用环境变量 ALONGSIDE_ADMIN_PASSWORD")
     ap.add_argument("--emit-verdict", action="store_true",
-                    help="RFC-001：在人读表格之外追加一行机读 verdict JSON（schema=lifeos.probe.verdict/1）")
+                    help="RFC-001：在人读表格之外追加一行机读 verdict JSON（schema=alongside.probe.verdict/1）")
     args = ap.parse_args()
 
     exp = load_expected()
@@ -400,11 +400,11 @@ def main() -> int:
         return 2
 
     import os
-    pwd = args.password or os.environ.get("LIFEOS_ADMIN_PASSWORD") or ""
+    pwd = args.password or (os.environ.get("ALONGSIDE_ADMIN_PASSWORD") or os.environ.get("LIFEOS_ADMIN_PASSWORD")) or ""
     user = tgt.get("username", "admin")
     need_auth = args.suite in ("gate", "modules", "docsprobe", "o1status", "bffsummary", "deploycheck", "all")
     if need_auth and not pwd:
-        print("需要口令：export LIFEOS_ADMIN_PASSWORD=…（绝不写入文件）")
+        print("需要口令：export ALONGSIDE_ADMIN_PASSWORD=…（绝不写入文件）")
         return 2
 
     client = Client(tgt["base_url"])

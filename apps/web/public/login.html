@@ -55,8 +55,17 @@
     </div>
   </main>
 <script>
-  // 已有 token 直接进桌面
-  if (localStorage.getItem("lifeos.token")) location.replace("/");
+  // 已有 token 直接进桌面。
+  // ★ 改名兼容（旧名 lifeos → 新名 alongside）：旧键名仍认，读到顺手搬成新键，
+  //   否则老用户在升级后被要求重登一次（登录态「蒸发」）。
+  (function () {
+    var token = localStorage.getItem("alongside.token");
+    if (!token) {
+      token = localStorage.getItem("lifeos.token");
+      if (token) localStorage.setItem("alongside.token", token);
+    }
+    if (token) location.replace("/");
+  })();
 
   const $ = (id) => document.getElementById(id);
   const errBox = $("err");
@@ -84,7 +93,7 @@
         return;
       }
       const data = await r.json();
-      localStorage.setItem("lifeos.token", data.access_token);
+      localStorage.setItem("alongside.token", data.access_token);
       location.replace("/");
     } catch (ex) {
       errBox.textContent = human(0);

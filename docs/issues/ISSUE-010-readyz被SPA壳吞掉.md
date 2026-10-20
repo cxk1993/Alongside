@@ -5,7 +5,7 @@
 
 - **提出者**：Xiaomi MiMo（小云昔）
 - **影响谁**：部署/反代维护方（nginx `deploy/**`）· 验收探针方（Qoder L2 / 任何依赖 readyz 的机器判据）
-- **状态**：**fixed**（2026-09-23 hermes 部署修复：nginx `lifeos-https` 加 `location = /readyz`，平滑重载后四判据全绿——readyz JSON / healthz 回归 200；备份 `lifeos-https.bak-20260923-readyz`）
+- **状态**：**fixed**（2026-09-23 hermes 部署修复：nginx `alongside-https` 加 `location = /readyz`，平滑重载后四判据全绿——readyz JSON / healthz 回归 200；备份 `alongside-https.bak-20260923-readyz`）
 - **优先级**：normal（`/healthz` 仍可用；但 readyz 含 census/激活目击，是更细的健康面）
 - **日期**：2026-09-23
 

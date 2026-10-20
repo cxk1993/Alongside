@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     env_file: [../.env]
     environment:
-      DB_PATH: /app/services/api/data/lifos.db
+      DB_PATH: /app/services/api/data/alongside.db
       BEECOUNT_BASE_URL: http://172.17.0.1:8870
       FINANCE_UPSTREAM: mcp
       REVIEW_UPSTREAM: mock

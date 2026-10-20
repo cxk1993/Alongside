@@ -8,22 +8,22 @@
  *   - 情形 C：内嵌外部任意站点**明确排除**（WebFrame 现状正确，永不共享凭据）。
  *
  * 协议（被嵌页面侧配合一段握手代码，归该页面所属卡）：
- *   子页启动时 → `parent.postMessage({ type: "lifeos:request-token" }, "<父页源>")`
+ *   子页启动时 → `parent.postMessage({ type: "alongside:request-token" }, "<父页源>")`
  *   父页（本桥）校验通过 → `event.source.postMessage(
- *       { type: "lifeos:token", token }, { targetOrigin: event.origin })`
+ *       { type: "alongside:token", token }, { targetOrigin: event.origin })`
  *
  * 安全设计（采纳方案 1 的落地口径）：
  *   1. **origin 白名单，空列表起步**：白名单为空 = 拒绝一切跨源请求（fail closed）；
  *      情形 B 的自家页面接入时，把其完整源（协议+域+端口）登记进 ALLOWED_IFRAME_ORIGINS。
- *   2. 只认 `lifeos:request-token` 协议消息，其余 message 一律忽略；
+ *   2. 只认 `alongside:request-token` 协议消息，其余 message 一律忽略；
  *   3. 回信 targetOrigin **锁定为请求来源**，凭据绝不广播；
  *   4. token 只进 postMessage（内存通道），不进 URL、不进日志（T30 契约）。
  */
-/** 读 token 的口径与 shared/api/client.ts:41 同 key（T30 契约：lifeos.token）。 */
-const TOKEN_KEY = "lifeos.token";
+/** 读 token 的口径与 shared/api/client.ts:41 同 key（T30 契约：alongside.token）。 */
+const TOKEN_KEY = "alongside.token";
 
-const REQUEST_TYPE = "lifeos:request-token";
-const RESPONSE_TYPE = "lifeos:token";
+const REQUEST_TYPE = "alongside:request-token";
+const RESPONSE_TYPE = "alongside:token";
 
 /**
  * ★ 跨源内嵌白名单（origin = 协议 + 域 + 端口，完全匹配才放行）。

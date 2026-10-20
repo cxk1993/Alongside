@@ -3,7 +3,7 @@ export interface ExportPrefs {
   lastProfile: string | null;
 }
 
-const KEY = "lifeos.plugin.export.prefs";
+const KEY = "alongside.plugin.export.prefs";
 
 export function loadPrefs(): ExportPrefs {
   try {

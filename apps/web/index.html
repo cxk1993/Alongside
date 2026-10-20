@@ -9,6 +9,33 @@
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <meta name="description" content="Alongside · 在你身边 —— AI 人生协助系统。人与 AI 是同行者，在同一段人生内前行。" />
     <title>Alongside</title>
+    <script>
+      // ★ 品牌改名兼容（旧名 lifeos → 新名 alongside）：把旧前缀的 localStorage
+      //   复制到新前缀。必须早于下面那个 module bundle 执行 —— 否则读到的都是
+      //   空值，用户的登录态/窗口布局会在升级瞬间「蒸发」。
+      //   只复制、不删除旧键（回滚旧版本时数据还在）。过渡期结束后可整段删除。
+      (function () {
+        try {
+          var s = window.localStorage;
+          var oldPrefix = "lifeos.";
+          var newPrefix = "alongside.";
+          var keys = [];
+          for (var i = 0; i < s.length; i++) {
+            var k = s.key(i);
+            if (k && k.indexOf(oldPrefix) === 0) keys.push(k);
+          }
+          for (var j = 0; j < keys.length; j++) {
+            var nk = newPrefix + keys[j].slice(oldPrefix.length);
+            if (s.getItem(nk) === null) {
+              var v = s.getItem(keys[j]);
+              if (v !== null) s.setItem(nk, v);
+            }
+          }
+        } catch (e) {
+          /* 隐私模式/配额满 → 跳过，迁移失败不该阻断启动 */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

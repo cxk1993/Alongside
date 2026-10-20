@@ -90,7 +90,7 @@ FORBIDDEN_TOOLS: frozenset[str] = frozenset(
 TOOL_LEDGER_STATS = "get_ledger_stats"
 TOOL_ANALYTICS = "get_analytics_summary"
 
-_CLIENT_INFO = {"name": "lifeos-finance", "version": "0.2.0"}
+_CLIENT_INFO = {"name": "alongside-finance", "version": "0.2.0"}
 _PROTOCOL_VERSION = "2024-11-05"
 _DEFAULT_TIMEOUT = 10.0
 # meta / SSE 解析时防止异常大响应拖垮进程

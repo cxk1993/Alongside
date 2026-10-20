@@ -1,9 +1,9 @@
 #!/bin/bash
 # MiMo ISSUE-006 restart API (two-step; call AFTER kill)
 set -euo pipefail
-API=/home/ubuntu/lifeos/services/api
-LOG=/home/ubuntu/lifeos/api.log
-PY=/home/ubuntu/lifeos/.venv/bin/python
+API=/home/ubuntu/alongside/services/api
+LOG=/home/ubuntu/alongside/api.log
+PY=/home/ubuntu/alongside/.venv/bin/python
 cd "$API"
 echo "=== RESTART $(date -Is) ==="
 echo "pre_port_check:"

@@ -2,10 +2,10 @@
 # ISSUE-006 Route A · preseed 15 applied markers + restart + postcheck
 set -u
 TS="${1:?ts required}"
-API=/home/ubuntu/lifeos/services/api
-LOG=/home/ubuntu/lifeos/api.log
-PY=/home/ubuntu/lifeos/.venv/bin/python
-DB=/home/ubuntu/lifeos/data/lifos.db
+API=/home/ubuntu/alongside/services/api
+LOG=/home/ubuntu/alongside/api.log
+PY=/home/ubuntu/alongside/.venv/bin/python
+DB=/home/ubuntu/alongside/data/alongside.db
 echo "=== ROUTE_A_APPLY $(date -Is) TS=$TS ==="
 
 echo "--- remote md5 after scp ---"
@@ -28,7 +28,7 @@ md5sum \
   modules/todo/migrations/0001_init.py \
   modules/web/migrations/0001_init.py
 
-echo "--- stop lifeos ---"
+echo "--- stop alongside ---"
 pids=$(pgrep -f 'uvicorn main:app --host 127.0.0.1 --port 18000' || true)
 echo "pids=${pids:-none}"
 for p in $pids; do kill -TERM "$p" 2>/dev/null || true; done
@@ -38,7 +38,7 @@ if [ -n "${left:-}" ]; then
   for p in $left; do kill -9 "$p" 2>/dev/null || true; done
   sleep 1
 fi
-pgrep -af 'uvicorn main:app --host 127.0.0.1 --port 18000' || echo "lifeos_down"
+pgrep -af 'uvicorn main:app --host 127.0.0.1 --port 18000' || echo "alongside_down"
 
 echo "--- preseed ledger Route A ---"
 python3 - <<'PY'
@@ -61,7 +61,7 @@ keys = [
     "migration.todo.0001_init",
     "migration.web.0001_init",
 ]
-db = "/home/ubuntu/lifeos/data/lifos.db"
+db = "/home/ubuntu/alongside/data/alongside.db"
 conn = sqlite3.connect(db)
 cur = conn.cursor()
 # ensure app_setting exists
@@ -105,7 +105,7 @@ curl -sS -m 8 http://127.0.0.1:18000/api/v1/modules | python3 -c "import sys,jso
 echo "--- ledger + fts after restart ---"
 python3 - <<'PY'
 import sqlite3
-c=sqlite3.connect('/home/ubuntu/lifeos/data/lifos.db')
+c=sqlite3.connect('/home/ubuntu/alongside/data/alongside.db')
 print('migration_ledger', c.execute("SELECT COUNT(*) FROM app_setting WHERE key LIKE 'migration.%'").fetchone()[0])
 try:
     print('docs_fts', c.execute("SELECT COUNT(*) FROM docs_fts").fetchone()[0])

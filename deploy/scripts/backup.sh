@@ -11,12 +11,16 @@ OUT="$ROOT/data/backups"
 RETENTION="${BACKUP_RETENTION_DAYS:-30}"
 OFFSITE="${BACKUP_OFFSITE_DIR:-}"
 mkdir -p "$OUT"
-SRC="$ROOT/data/lifos.db"
+SRC="$ROOT/data/alongside.db"
+# ★ 改名兼容：新名库不存在时回退旧名库（老部署的库文件还叫 lifos.db）。
+if [[ ! -f "$SRC" && -f "$ROOT/data/alongside.db" ]]; then
+  SRC="$ROOT/data/alongside.db"
+fi
 if [[ ! -f "$SRC" ]]; then
   echo "FAIL: no db at $SRC"
   exit 1
 fi
-DEST="$OUT/lifos-$STAMP.db"
+DEST="$OUT/alongside-$STAMP.db"
 if command -v sqlite3 >/dev/null 2>&1; then
   sqlite3 "$SRC" ".backup '$DEST'"
 else
@@ -33,8 +37,8 @@ if command -v sqlite3 >/dev/null 2>&1; then
   fi
   echo "integrity_check: ok"
 fi
-# 保留
-find "$OUT" -name 'lifos-*.db' -mtime "+$RETENTION" -delete 2>/dev/null || true
+# 保留（★ 改名兼容：旧名 lifos-*.db 的备份也一并按保留期清理，别让它们越积越多）
+find "$OUT" \( -name 'alongside-*.db' -o -name 'lifos-*.db' \) -mtime "+$RETENTION" -delete 2>/dev/null || true
 # 异地副本
 if [[ -n "$OFFSITE" ]]; then
   mkdir -p "$OFFSITE"

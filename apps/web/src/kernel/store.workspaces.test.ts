@@ -22,7 +22,7 @@ import {
   type WindowState,
 } from "./store";
 
-const STORE_KEY = "lifeos.windows.v1";
+const STORE_KEY = "alongside.windows.v1";
 
 const MANIFEST: ModuleManifest = {
   id: "m1",

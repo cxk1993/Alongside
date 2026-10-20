@@ -1,11 +1,13 @@
 # Alongside · nssm 安装/修复本机常驻服务
 # ★ 管理员 PowerShell 执行
-#   cd "E:\ai work\work\life"
+#   cd "<repo root>"
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
 #   .\deploy\tools\nssm\install-services.ps1
 
 $ErrorActionPreference = "Stop"
-$root = "E:\ai work\work\life"
+# Repo root = three levels up from this script (deploy\tools\nssm -> repo root),
+# so the script works on any machine without editing paths.
+$root = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 $nssm = Join-Path $root "deploy\tools\nssm\nssm.exe"
 $bridgeCmd = Join-Path $root "services\bridge\run-bridge-service.cmd"
 $frpcCmd = Join-Path $root "deploy\tools\frp\run-frpc-service.cmd"
@@ -44,18 +46,18 @@ function Install-Service([string]$Name, [string]$App, [string]$Args) {
   & $nssm set $Name AppStopMethodConsole 5000 | Out-Null
 }
 
-Install-Service "lifeos-bridge" "C:\Windows\System32\cmd.exe" "/c `"$bridgeCmd`""
-& $nssm set lifeos-bridge AppDirectory (Join-Path $root "services\bridge") | Out-Null
-& $nssm set lifeos-bridge AppEnvironmentExtra "BRIDGE_PSK=$psk" "BRIDGE_PORT=8790" "BRIDGE_CONFIG=E:\ai work\work\life\services\bridge\config.yaml" | Out-Null
-& $nssm set lifeos-bridge AppStdout (Join-Path $root "services\bridge\nssm-out.log") | Out-Null
-& $nssm set lifeos-bridge AppStderr (Join-Path $root "services\bridge\nssm-err.log") | Out-Null
+Install-Service "alongside-bridge" "C:\Windows\System32\cmd.exe" "/c `"$bridgeCmd`""
+& $nssm set alongside-bridge AppDirectory (Join-Path $root "services\bridge") | Out-Null
+& $nssm set alongside-bridge AppEnvironmentExtra "BRIDGE_PSK=$psk" "BRIDGE_PORT=8790" "BRIDGE_CONFIG=$root\services\bridge\config.yaml" | Out-Null
+& $nssm set alongside-bridge AppStdout (Join-Path $root "services\bridge\nssm-out.log") | Out-Null
+& $nssm set alongside-bridge AppStderr (Join-Path $root "services\bridge\nssm-err.log") | Out-Null
 
-Install-Service "lifeos-frpc" "C:\Windows\System32\cmd.exe" "/c `"$frpcCmd`""
-& $nssm set lifeos-frpc AppDirectory (Join-Path $root "deploy\tools\frp") | Out-Null
-& $nssm set lifeos-frpc AppStdout (Join-Path $root "deploy\tools\frp\nssm-out.log") | Out-Null
-& $nssm set lifeos-frpc AppStderr (Join-Path $root "deploy\tools\frp\nssm-err.log") | Out-Null
+Install-Service "alongside-frpc" "C:\Windows\System32\cmd.exe" "/c `"$frpcCmd`""
+& $nssm set alongside-frpc AppDirectory (Join-Path $root "deploy\tools\frp") | Out-Null
+& $nssm set alongside-frpc AppStdout (Join-Path $root "deploy\tools\frp\nssm-out.log") | Out-Null
+& $nssm set alongside-frpc AppStderr (Join-Path $root "deploy\tools\frp\nssm-err.log") | Out-Null
 
-foreach ($Name in @("lifeos-bridge","lifeos-frpc")) {
+foreach ($Name in @("alongside-bridge","alongside-frpc")) {
   Write-Host "Restart $Name"
   & $nssm restart $Name 2>&1 | Out-Null
   $st = & $nssm status $Name 2>&1
@@ -68,15 +70,15 @@ foreach ($Name in @("lifeos-bridge","lifeos-frpc")) {
 Start-Sleep -Seconds 4
 Write-Host ""
 Write-Host "===== STATUS ====="
-Get-Service lifeos-bridge, lifeos-frpc | Format-Table Name,Status,StartType -AutoSize
-& $nssm status lifeos-bridge
-& $nssm status lifeos-frpc
+Get-Service alongside-bridge, alongside-frpc | Format-Table Name,Status,StartType -AutoSize
+& $nssm status alongside-bridge
+& $nssm status alongside-frpc
 $bp = Test-NetConnection 127.0.0.1 -Port 8790 -WarningAction SilentlyContinue
 Write-Host "port 8790: $($bp.TcpTestSucceeded)"
 
 # 清理登录启动项（服务接管后避免双开）
-$startup = "C:\Users\lcyovo\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"
-foreach ($f in @("lifeos-bridge.cmd","lifeos-frpc.cmd")) {
+$startup = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
+foreach ($f in @("alongside-bridge.cmd","alongside-frpc.cmd")) {
   $p = Join-Path $startup $f
   if (Test-Path $p) {
     Remove-Item $p -Force

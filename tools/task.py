@@ -21,7 +21,7 @@
     python tools/task.py new-plugin --id calendar --name "日程表"
 
 环境变量：
-    LIFEOS_PYTHON    指定用于建 venv 的 Python 3.11 可执行文件
+    ALONGSIDE_PYTHON    指定用于建 venv 的 Python 3.11 可执行文件
     PIP_INDEX_URL    pip 源（国内建议 https://pypi.tuna.tsinghua.edu.cn/simple）
 """
 from __future__ import annotations
@@ -83,7 +83,7 @@ def run(
 def find_python311() -> list[str]:
     """找一个 Python 3.11。总纲 §1.1 把后端锁在 3.11，所以这里严格校验。"""
     cands: list[list[str]] = []
-    forced = os.environ.get("LIFEOS_PYTHON")
+    forced = (os.environ.get("ALONGSIDE_PYTHON") or os.environ.get("LIFEOS_PYTHON"))
     if forced:
         cands.append([forced])
     cands += [["py", "-3.11"], ["python3.11"], ["python3"], ["python"], [sys.executable]]
@@ -107,7 +107,7 @@ def find_python311() -> list[str]:
     die(
         "找不到 Python 3.11（总纲 §1.1 锁定 3.11）。已尝试：\n    "
         + "\n    ".join(tried)
-        + "\n  解决：设环境变量 LIFEOS_PYTHON 指向 3.11 的可执行文件。"
+        + "\n  解决：设环境变量 ALONGSIDE_PYTHON 指向 3.11 的可执行文件。"
     )
     return []  # 不会走到
 

@@ -65,7 +65,7 @@ function cycleWindow(): void {
 /** ★ 罗盘用：读侧栏折叠初值（键与 DesktopSidebar 的 COLLAPSE_KEY 同族）。 */
 function readSideCollapsed(side: "left" | "right"): boolean {
   try {
-    return localStorage.getItem(`lifeos.dock-${side}.collapsed`) === "1";
+    return localStorage.getItem(`alongside.dock-${side}.collapsed`) === "1";
   } catch {
     return false;
   }
@@ -135,18 +135,18 @@ export function Desktop() {
 
   // ═══ ★ 收放罗盘（主人三板拍板）═══
   // 顶/底栏状态走 store（U1 既有）；左右栏状态在 DesktopSidebar 内部 localStorage
-  //（键 `lifeos.dock-{left,right}.collapsed`）→ 罗盘经 CustomEvent 通知其同步。
+  //（键 `alongside.dock-{left,right}.collapsed`）→ 罗盘经 CustomEvent 通知其同步。
   const [compassOpen, setCompassOpen] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(() => readSideCollapsed("left"));
   const [rightCollapsed, setRightCollapsed] = useState(() => readSideCollapsed("right"));
   const setSideCollapsed = (side: "left" | "right", collapsed: boolean) => {
     try {
-      localStorage.setItem(`lifeos.dock-${side}.collapsed`, collapsed ? "1" : "0");
+      localStorage.setItem(`alongside.dock-${side}.collapsed`, collapsed ? "1" : "0");
     } catch {
       /* 存储不可用忽略 */
     }
     window.dispatchEvent(
-      new CustomEvent("lifeos:sidebar-collapse", { detail: { side, collapsed } }),
+      new CustomEvent("alongside:sidebar-collapse", { detail: { side, collapsed } }),
     );
     if (side === "left") setLeftCollapsed(collapsed);
     else setRightCollapsed(collapsed);
@@ -162,11 +162,11 @@ export function Desktop() {
   };
 
   // ★（主人现场令，2026-09-25）：**罗盘按钮可随意拖动** ——
-  //   位置入 localStorage（`lifeos.compass.pos`），刷新保持；null = 默认右上角。
+  //   位置入 localStorage（`alongside.compass.pos`），刷新保持；null = 默认右上角。
   //   拖拽与点击区分：位移超 4px 视为拖动（不触发开关）。
   const [compassPos, setCompassPos] = useState<{ x: number; y: number } | null>(() => {
     try {
-      const raw = localStorage.getItem("lifeos.compass.pos");
+      const raw = localStorage.getItem("alongside.compass.pos");
       return raw ? (JSON.parse(raw) as { x: number; y: number }) : null;
     } catch {
       return null;
@@ -193,7 +193,7 @@ export function Desktop() {
       setCompassPos((p) => {
         if (p) {
           try {
-            localStorage.setItem("lifeos.compass.pos", JSON.stringify(p));
+            localStorage.setItem("alongside.compass.pos", JSON.stringify(p));
           } catch {
             /* 存储不可用忽略 */
           }

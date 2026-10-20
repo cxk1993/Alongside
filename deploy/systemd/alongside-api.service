@@ -8,11 +8,11 @@ Wants=network-online.target
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/lifeos/services/api
+WorkingDirectory=/home/ubuntu/alongside/services/api
 # ★ 不设 DB_PATH —— 让应用读项目 .env（与手工启动时同路径）。
 #   照抄本地 unit 的教训：Environment=DB_PATH=... 在路径含空格时会被 systemd 截断，
 #   报 "unable to open database file"。云端路径虽无空格，但保持同一纪律，别开这个口子。
-ExecStart=/home/ubuntu/lifeos/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 18000
+ExecStart=/home/ubuntu/alongside/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 18000
 Restart=always
 RestartSec=5
 

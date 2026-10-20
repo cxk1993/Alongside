@@ -2,9 +2,9 @@
 # MiMo ISSUE-006 backup + stamp
 set -euo pipefail
 TS="${1:?usage: remote_issue006_backup.sh YYYYMMDD-HHMMSS}"
-DB=/home/ubuntu/lifeos/data/lifos.db
-BAK=/home/ubuntu/lifeos/data/lifos.db.bak-issue006-${TS}
-API=/home/ubuntu/lifeos/services/api
+DB=/home/ubuntu/alongside/data/alongside.db
+BAK=/home/ubuntu/alongside/data/alongside.db.bak-issue006-${TS}
+API=/home/ubuntu/alongside/services/api
 echo "=== BACKUP TS=${TS} $(date -Is) ==="
 if [ ! -f "$DB" ]; then
   echo "FAIL: missing $DB"

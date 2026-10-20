@@ -9,7 +9,7 @@ if [[ -f "$ENVF" ]]; then
   exit 0
 fi
 PY="${PYTHON:-python3}"
-ADMIN_PW="${LIFEOS_ADMIN_PASSWORD:-}"
+ADMIN_PW="${ALONGSIDE_ADMIN_PASSWORD:-${LIFEOS_ADMIN_PASSWORD:-}}"
 if [[ -z "$ADMIN_PW" ]]; then
   ADMIN_PW="$($PY -c 'import secrets;print(secrets.token_urlsafe(16))')"
   echo "[gen-env] 生成临时管理员密码（请立即保存并改掉）：$ADMIN_PW"
@@ -37,7 +37,7 @@ JWT_ACCESS_MINUTES=30
 JWT_REFRESH_DAYS=14
 ADMIN_PASSWORD_HASH=$HASH
 TOTP_SECRET=$TOTP_SECRET
-DB_PATH=./data/lifos.db
+DB_PATH=./data/alongside.db
 BACKUP_DIR=./data/backups
 CORS_ALLOW_ORIGINS=*
 FINANCE_UPSTREAM=mcp

@@ -38,7 +38,7 @@ export class ApiError extends Error {
 
 let tokenGetter: () => string | null = () => {
   try {
-    return localStorage.getItem("lifeos.token");
+    return localStorage.getItem("alongside.token");
   } catch {
     return null;
   }
@@ -51,8 +51,8 @@ export function setTokenGetter(fn: () => string | null): void {
 
 export function setToken(token: string | null): void {
   try {
-    if (token) localStorage.setItem("lifeos.token", token);
-    else localStorage.removeItem("lifeos.token");
+    if (token) localStorage.setItem("alongside.token", token);
+    else localStorage.removeItem("alongside.token");
   } catch {
     /* 忽略存储异常 */
   }
@@ -133,7 +133,7 @@ async function request<T>(
     res = await fetch(path, { method, headers, body: payload });
   } catch (e) {
     throw new ApiError({
-      type: "https://lifeos/network-error",
+      type: "https://alongside/network-error",
       title: "网络不可用",
       status: 0,
       detail: e instanceof Error ? e.message : String(e),

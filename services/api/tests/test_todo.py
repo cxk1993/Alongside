@@ -1,6 +1,6 @@
 """T06 待办与周期清单后端测试（只跑这一个文件，不影响别的卡）。
 
-数据库隔离：用临时库 ./data/tmp_t06.db，绝不碰主库 lifos.db。
+数据库隔离：用临时库 ./data/tmp_t06.db，绝不碰主库 alongside.db。
 表只在当前进程内由模型直接建（create_app 不自动跑迁移，避免跨插件迁移碰撞）。
 """
 from __future__ import annotations
@@ -494,10 +494,10 @@ def test_tag_summary_requires_auth(client):
 # ═══════ ★ 2026-10-02（主人）：MCP 来路创建待办必须带标签 ═══════
 # 背景：主人要求「在 mcp 这里，创建待办的时候强制加标签，防止 AI 忘加」。
 # ★ 关键约束：**只约束 AI 来路** —— 人从网页手输（有语料的既有测试）
-#   必须一个字都不受影响（本文件其它测试全部不带 X-LifeOS-Client 头，即为护栏）。
+#   必须一个字都不受影响（本文件其它测试全部不带 X-Alongside-Client 头，即为护栏）。
 
 # MCP 转发层 core/mcp_writes.py 打出的来源标记（与 forward.py 同源）。
-_MCP_HEADERS = {"X-LifeOS-Client": "mcp"}
+_MCP_HEADERS = {"X-Alongside-Client": "mcp"}
 
 
 def _mcp_headers(auth):
@@ -578,7 +578,7 @@ def test_unknown_client_header_is_not_treated_as_mcp(client, auth):
     r = client.post(
         "/api/v1/todo/items",
         json={"text": "买牛奶"},
-        headers={**auth, "X-LifeOS-Client": "web"},
+        headers={**auth, "X-Alongside-Client": "web"},
     )
     assert r.status_code == 201, r.text
 
@@ -686,7 +686,7 @@ def test_archive_threshold_is_seven_days():
 # ═══════ ★ 2026-10-10（主人「待办来源标记」）：人建 / AI 建分得清 ═══════
 # 动机（答云昔 10-10 帖四·1）：日历事件有 source（她建的标 yunxi），
 #   待办却没有「谁建的」标记 —— AI 建的与人建的分不清，回滚时不好定位。
-# 设计：复用 10-02 立的那枚来路标记（X-LifeOS-Client: mcp），不新造机制。
+# 设计：复用 10-02 立的那枚来路标记（X-Alongside-Client: mcp），不新造机制。
 #   同一请求判定一次，既管「AI 必带标签」，也管 origin=ai。
 
 
@@ -725,11 +725,11 @@ def test_origin_in_list_and_get(client, auth):
 
 
 def test_unknown_client_header_still_marks_human(client, auth):
-    """伪造成别家来路（X-LifeOS-Client: web）→ 仍算 human，不得误标成 ai。"""
+    """伪造成别家来路（X-Alongside-Client: web）→ 仍算 human，不得误标成 ai。"""
     r = client.post(
         "/api/v1/todo/items",
         json={"text": "买牛奶"},
-        headers={**auth, "X-LifeOS-Client": "web"},
+        headers={**auth, "X-Alongside-Client": "web"},
     )
     assert r.status_code == 201, r.text
     assert r.json()["origin"] == "human"

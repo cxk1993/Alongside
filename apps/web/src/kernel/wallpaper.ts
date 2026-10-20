@@ -4,17 +4,19 @@
  * color（自定义纯色）/ off（纯底无网格）。
  *
  * 设计约束（领地零侵入）：
- * - 状态走 localStorage（`lifeos.desktop.wallpaper`），图片 Blob 走 IndexedDB
- *（lifeos-wallpaper.images/current）——不碰 workbuddy 的 store.ts/Deskop.tsx；
+ * - 状态走 localStorage（`alongside.desktop.wallpaper`），图片 Blob 走 IndexedDB
+ *（alongside-wallpaper.images/current）——不碰 workbuddy 的 store.ts/Deskop.tsx；
  * - 挂载入口 = App.tsx 一行 useEffect 调 initWallpaper()；
  * - 桌面空白右键弹「个性化」菜单（window 级监听，仅 .desktop 本体命中时接管）；
  * - 图片文件只进 IndexedDB，**不进 git**（红线）。
  */
+import { resolveDbName } from "@/shared/legacyStorage";
+
 import { applyWallpaper, openWallpaperSettings, type WallpaperConfig } from "./wallpaperApply";
 
 export type { WallpaperConfig };
 
-const CFG_KEY = "lifeos.desktop.wallpaper";
+const CFG_KEY = "alongside.desktop.wallpaper";
 export const DEFAULT_CFG: WallpaperConfig = { mode: "grid", color: "" };
 
 export function readWallpaperConfig(): WallpaperConfig {
@@ -37,13 +39,16 @@ export function saveWallpaperConfig(cfg: WallpaperConfig): void {
 
 /* ───────── IndexedDB（图片 Blob，库外不入 git） ───────── */
 
-const DB_NAME = "lifeos-wallpaper";
+const DB_NAME = "alongside-wallpaper";
+//: ★ 改名兼容：旧品牌期的库名（IndexedDB 没有改名 API，探测后再决定用哪个）。
+const LEGACY_DB_NAME = "lifeos-wallpaper";
 const STORE = "images";
 const KEY = "current";
 
-function openDb(): Promise<IDBDatabase> {
+async function openDb(): Promise<IDBDatabase> {
+  const dbName = await resolveDbName(DB_NAME, LEGACY_DB_NAME);
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(dbName, 1);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
     };

@@ -32,12 +32,12 @@ interface Props {
   pages: MultitabPage[];
   /** 初始选中的页 key（默认取第一页；persistKey 存在时被持久化值覆盖）。 */
   initialKey?: string;
-  /** 传入则在 localStorage 记住最后访问页签（键：`lifeos.plugin.mtab.<persistKey>`）。 */
+  /** 传入则在 localStorage 记住最后访问页签（键：`alongside.plugin.mtab.<persistKey>`）。 */
   persistKey?: string;
   ariaLabel?: string;
 }
 
-const PERSIST_PREFIX = "lifeos.plugin.mtab.";
+const PERSIST_PREFIX = "alongside.plugin.mtab.";
 
 function readPersisted(persistKey?: string, pages?: MultitabPage[]): string | null {
   if (!persistKey) return null;

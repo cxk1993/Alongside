@@ -135,7 +135,7 @@ def create_item(
     - 结构化字段：显式给 `text` / `due_at` / `priority` / `recur_rule` / `tags`
 
     ★ 2026-10-02（主人「mcp 里创建待办的时候强制加上标签，防止忘加」）：
-      **MCP / AI 来路**（内部请求头 `X-LifeOS-Client: mcp`）创建时，
+      **MCP / AI 来路**（内部请求头 `X-Alongside-Client: mcp`）创建时，
       `tags` **必填且不得为空** —— AI 忘了带标签会收到一条写明怎么补的 422，
       而不是静默建出一条无分类的待办。
       **人从网页/客户端来的请求不受此限**（`raw` 语法糖 / 手输文本照旧，

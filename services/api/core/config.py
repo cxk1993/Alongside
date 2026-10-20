@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     totp_required: bool = Field(default=True, description="登录是否强制校验 TOTP；false = 仅密码登录")
 
     # ── 数据 ──
-    db_path: str = Field(default="./data/lifos.db")
+    db_path: str = Field(default="./data/alongside.db")
     backup_dir: str = Field(default="./data/backups")
     backup_keep_days: int = Field(default=30)
 

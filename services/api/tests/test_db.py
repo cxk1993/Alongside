@@ -147,7 +147,7 @@ def test_migration_full_cycle(tmp_path, monkeypatch) -> None:
     import db.engine as dbe
     from db import migrate as M
 
-    # ★ 关键隔离：test_health 导入 main 时已把全局引擎指向 dev 库（data/lifos.db），
+    # ★ 关键隔离：test_health 导入 main 时已把全局引擎指向 dev 库（data/alongside.db），
     # init_engine 的幂等会让这里拿到全局引擎、把迁移跑在 dev 库上！
     # 先清掉全局状态（monkeypatch 结束后自动还原），本测试完全走 tmp 库。
     monkeypatch.setattr(dbe, "_engine", None)

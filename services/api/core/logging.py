@@ -71,7 +71,7 @@ def redact_obj(obj: Any) -> Any:
 
 
 class JsonFormatter(logging.Formatter):
-    def __init__(self, app_name: str = "lifeos") -> None:
+    def __init__(self, app_name: str = "alongside") -> None:
         super().__init__()
         self.app_name = app_name
 
@@ -131,7 +131,7 @@ def configure_logging(
     *,
     level: str = "INFO",
     log_dir: str = "./data/logs",
-    app_name: str = "lifeos",
+    app_name: str = "alongside",
 ) -> None:
     """配置根日志：文件（按天轮转，保留 14 天）+ 标准错误。
 
@@ -159,7 +159,7 @@ def configure_logging(
     try:
         Path(log_dir).mkdir(parents=True, exist_ok=True)
         file_handler = TimedRotatingFileHandler(
-            filename=str(Path(log_dir) / "lifeos.log"),
+            filename=str(Path(log_dir) / "alongside.log"),
             when="midnight",
             interval=1,
             backupCount=14,

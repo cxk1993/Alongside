@@ -58,7 +58,7 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
         .querySelector("[data-testid='desktop-sidebar-left']")
         ?.getAttribute("aria-expanded"),
     ).toBe("false");
-    expect(localStorage.getItem("lifeos.dock-left.collapsed")).toBe("1");
+    expect(localStorage.getItem("alongside.dock-left.collapsed")).toBe("1");
     // 重渲染（模拟刷新）→ 保持折叠
     rerender(<DesktopSidebar side="left" />);
     expect(

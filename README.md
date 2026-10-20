@@ -201,8 +201,8 @@ Alongside 不重复造轮子。有些事别人已经做得很好 —— 那就�
 **一项都不装，系统照样能跑。** 插件可以单独启用 / 禁用 / 卸载，内核不会因为你没装 pi 就启动失败 ——
 你只想用日程 / 待办 / 习惯 / 笔记，那 `python tools/task.py dev` 就够了。
 
-> 现成的片段就在 [`deploy/`](deploy/) 下：`nginx/lifos.conf`（含 `location /api/` 三行与 BeeCount 同源反代）、
-> `systemd/lifeos-api.service`、`Dockerfile.api` / `Dockerfile.web`；逐步说明见 [`deploy/README.md`](deploy/README.md)。
+> 现成的片段就在 [`deploy/`](deploy/) 下：`nginx/alongside.conf`（含 `location /api/` 三行与 BeeCount 同源反代）、
+> `systemd/alongside-api.service`、`Dockerfile.api` / `Dockerfile.web`；逐步说明见 [`deploy/README.md`](deploy/README.md)。
 
 ---
 
@@ -252,7 +252,7 @@ Alongside 是**单人、自托管**的个人系统，有些事是刻意不做的
 
 全部在 **`data/`** 一个目录里（SQLite + WAL）。
 
-- **备份**：`sqlite3 data/lifos.db ".backup data/backups/lifos-<时间>.db"`（**不要直接 `cp`**）
+- **备份**：`sqlite3 data/alongside.db ".backup data/backups/alongside-<时间>.db"`（**不要直接 `cp`**）
 - **迁移**：复制整个 `data/` 目录即可
 - `data/` 已在 `.gitignore` 里，不会被提交
 

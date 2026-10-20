@@ -101,9 +101,9 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     reset_engine()
     # ★ 2026-09-20 workbuddy（验证中发现并修复）：
     # 原来只设 DB_PATH 环境变量再无参 init_engine()。但 services/api/.env
-    # 里显式写了 DB_PATH=./data/lifos.db，pydantic-settings 在组合跑现场
+    # 里显式写了 DB_PATH=./data/alongside.db，pydantic-settings 在组合跑现场
     # 实测取 .env 值而非 environ 值（取证：make_engine 调用瞬间 environ
-    # 已是 tmp_iso_*.db，Settings() 却仍返回 lifos.db），引擎静默指向
+    # 已是 tmp_iso_*.db，Settings() 却仍返回 alongside.db），引擎静默指向
     # 主库 → test_issue006 的 lifespan 对账把探针表建进主库，跨文件
     # 组合跑时该测试前置断言被历史污染击穿（单跑因时序差异幸免）。
     # 改为显式传绝对 sqlite URL（同一库文件），不再依赖环境变量优先级。

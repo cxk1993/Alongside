@@ -24,7 +24,7 @@ const TAB_DEFS: { id: TabId; label: string }[] = [
 
 // ★ 增量①：←/→ 方向键循环切页签 + 记住上次页签（localStorage）共用页签顺序
 const TAB_IDS: TabId[] = TAB_DEFS.map((t) => t.id);
-const TAB_STORAGE_KEY = "lifeos.catalog.activeTab";
+const TAB_STORAGE_KEY = "alongside.catalog.activeTab";
 
 // 记住上次页签：localStorage 优先（隐私模式/存储异常时静默回落「插件能力」）
 function initialTab(): TabId {

@@ -3,7 +3,7 @@ export interface QueryPrefs {
   lastPreset: string | null;
 }
 
-const KEY = "lifeos.plugin.query.prefs";
+const KEY = "alongside.plugin.query.prefs";
 
 export function loadPrefs(): QueryPrefs {
   try {

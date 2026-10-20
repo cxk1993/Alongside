@@ -81,9 +81,9 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 
 /** H1：底部「新版本已就绪」提示条（原生 DOM，不引 React 复杂度）。 */
 function showUpdateBar(onRefresh: () => void): void {
-  if (document.getElementById("lifeos-update-bar")) return; // 幂等：只挂一条
+  if (document.getElementById("alongside-update-bar")) return; // 幂等：只挂一条
   const bar = document.createElement("div");
-  bar.id = "lifeos-update-bar";
+  bar.id = "alongside-update-bar";
   bar.setAttribute("role", "status");
   bar.style.cssText = [
     "position:fixed",

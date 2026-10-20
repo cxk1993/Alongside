@@ -1,8 +1,9 @@
 """Bridge service entry for nssm (avoids fragile `python -c` command lines)."""
 import os
 import sys
+from pathlib import Path
 
-sys.path.insert(0, r"E:\ai work\work\life\services")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bridge.main import create_bridge_app  # noqa: E402
 import uvicorn  # noqa: E402

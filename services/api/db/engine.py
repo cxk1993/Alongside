@@ -48,11 +48,30 @@ def _apply_sqlite_pragmas(target: Engine) -> None:
             cursor.close()
 
 
+#: 改名前的库文件名（旧品牌期）。仅用于**兼容回退**，不参与新建。
+LEGACY_DB_NAME = "lifos.db"
+
+
 def _resolve_db_path(raw: str) -> Path:
-    """相对路径相对 services/api 解析（uvicorn / pytest 都在这里跑）。"""
+    """相对路径相对 services/api 解析（uvicorn / pytest 都在这里跑）。
+
+    ★ 库文件改名兼容（旧名 lifos.db → 新名 alongside.db）：
+      默认路径换成新名后，已有实例的库还叫旧名 —— 若**新名文件不存在**而
+      同目录旧名文件存在，则直接沿用旧库，保证改名不会让任何既有数据「凭空消失」。
+      什么时候失效：一旦新名库被建出来（迁移/重装），回退自然不再触发。
+      显式把 DB_PATH 指到旧名也照常工作（p.name == LEGACY_DB_NAME 时不做任何改写）。
+    """
     p = Path(raw)
     if not p.is_absolute():
         p = Path(__file__).resolve().parent.parent / p  # services/api/<raw>
+    legacy = p.with_name(LEGACY_DB_NAME)
+    if p.name != LEGACY_DB_NAME and not p.exists() and legacy.exists():
+        logger.warning(
+            "库文件 %s 尚不存在，沿用旧名库 %s（改名兼容回退；迁移后此日志自动消失）",
+            p.name,
+            legacy,
+        )
+        p = legacy
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 

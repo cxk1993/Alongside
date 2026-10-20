@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://lifeos/contracts/plugin.schema.json",
+  "$id": "https://alongside/contracts/plugin.schema.json",
   "title": "Alongside 插件清单（manifest）契约",
   "description": "总纲 §1.3.1 插件清单全部字段。任何插件（core / builtin / third-party）都必须满足本契约。内核用本文件强校验，错误精确到字段。",
   "type": "object",

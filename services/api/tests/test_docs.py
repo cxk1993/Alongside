@@ -1,7 +1,7 @@
 """T15 文档树内核后端测试（只跑这一个文件，不影响别的卡）。
 
 数据库隔离：用临时库 ./data/tmp_t15_<随机>.db（★ 2026-09-20 Qoder 建议：
-固定名 tmp_t15.db 会被并发 pytest 进程互踩，改唯一名），绝不碰主库 lifos.db。
+固定名 tmp_t15.db 会被并发 pytest 进程互踩，改唯一名），绝不碰主库 alongside.db。
 表只在当前进程内由模型直接建（create_app 不自动跑迁移）。
 """
 from __future__ import annotations

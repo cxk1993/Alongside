@@ -371,7 +371,7 @@ def test_initialize(client, pat):
     body = r.json()
     assert body["result"]["protocolVersion"] == "2025-03-26"
     assert "tools" in body["result"]["capabilities"]
-    assert body["result"]["serverInfo"]["name"] == "lifeos-mcp"
+    assert body["result"]["serverInfo"]["name"] == "alongside-mcp"
 
 
 def test_notifications_return_202(client, pat):
@@ -485,7 +485,7 @@ def test_forward_mock_transport(monkeypatch):
 def test_forward_marks_mcp_origin(monkeypatch):
     """★ 2026-10-02（主人「mcp 创建待办强制加标签」）：转发必须打来路标记。
 
-    这是那条硬约束的**另一半** —— 插件侧（todo router）靠 `X-LifeOS-Client: mcp`
+    这是那条硬约束的**另一半** —— 插件侧（todo router）靠 `X-Alongside-Client: mcp`
     区分「AI 来路」与「人的来路」。少打这个头，插件的强制校验永远不会触发，
     AI 又能静默建出无标签条目（护栏形同虚设，且**悄无声息**）。
     故在此把「头确实发出去了」钉死。

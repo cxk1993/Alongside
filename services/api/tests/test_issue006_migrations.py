@@ -8,7 +8,7 @@
 4. lifespan 集成：真实 modules/ 下造临时插件，with TestClient 进 lifespan →
    插件表自动出现（生产同路径；测试文件互不进 lifespan，零交叉污染）。
 
-数据库隔离：临时库 ./data/tmp_issue006_<随机>.db，绝不碰主库 lifos.db。
+数据库隔离：临时库 ./data/tmp_issue006_<随机>.db，绝不碰主库 alongside.db。
 临时插件 modules/i006probe/ 测试结束强制删除（test_kernel 同款纪律）。
 """
 

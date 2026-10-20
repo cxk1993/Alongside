@@ -58,11 +58,11 @@ describe("wallpaper 四态（V1-EXT2）", () => {
 
   it("配置持久化：save 后 read 回读一致；脏 JSON 安全退默认", () => {
     localStorage.setItem(
-      "lifeos.desktop.wallpaper",
+      "alongside.desktop.wallpaper",
       JSON.stringify({ mode: "color", color: "#abc" } satisfies WallpaperConfig),
     );
     expect(readWallpaperConfig()).toEqual({ mode: "color", color: "#abc" });
-    localStorage.setItem("lifeos.desktop.wallpaper", "{broken");
+    localStorage.setItem("alongside.desktop.wallpaper", "{broken");
     expect(readWallpaperConfig()).toEqual(DEFAULT_CFG);
     expect(readWallpaperConfig().mode).toBe("grid");
   });

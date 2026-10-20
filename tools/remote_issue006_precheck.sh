@@ -7,14 +7,14 @@ echo "USER=$(whoami)"
 echo "--- uvicorn ---"
 pgrep -af 'uvicorn' || echo "NO_UVICORN"
 echo "--- files ---"
-ls -la /home/ubuntu/lifeos/data/lifos.db 2>&1
-ls -la /home/ubuntu/lifeos/services/api/core/plugins/migrations.py 2>&1
-ls -la /home/ubuntu/lifeos/services/api/core/app.py 2>&1
-ls -la /home/ubuntu/lifeos/.venv/bin/python 2>&1
+ls -la /home/ubuntu/alongside/data/alongside.db 2>&1
+ls -la /home/ubuntu/alongside/services/api/core/plugins/migrations.py 2>&1
+ls -la /home/ubuntu/alongside/services/api/core/app.py 2>&1
+ls -la /home/ubuntu/alongside/.venv/bin/python 2>&1
 echo "--- db ledger ---"
 python3 - <<'PY'
 import sqlite3
-p='/home/ubuntu/lifeos/data/lifos.db'
+p='/home/ubuntu/alongside/data/alongside.db'
 c=sqlite3.connect(p)
 print('integrity', c.execute('PRAGMA integrity_check').fetchone()[0])
 print('tables', c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0])
@@ -28,5 +28,5 @@ for r in rows[:20]:
     print(' ', r[0])
 PY
 echo "--- api.log tail ---"
-tail -n 40 /home/ubuntu/lifeos/api.log 2>&1 || true
+tail -n 40 /home/ubuntu/alongside/api.log 2>&1 || true
 echo "=== PRECHECK END ==="

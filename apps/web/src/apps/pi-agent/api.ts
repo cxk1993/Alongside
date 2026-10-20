@@ -104,7 +104,7 @@ export async function chatStream(
   signal?: AbortSignal,
 ): Promise<void> {
   const token =
-    typeof localStorage !== "undefined" ? localStorage.getItem("lifeos.token") : null;
+    typeof localStorage !== "undefined" ? localStorage.getItem("alongside.token") : null;
   const res = await fetch(`${BASE}/chat/stream`, {
     method: "POST",
     headers: {

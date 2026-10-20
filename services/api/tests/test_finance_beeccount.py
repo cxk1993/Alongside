@@ -1,6 +1,6 @@
 """T08B · BeeCount MCP 只读联动测试。
 
-数据库隔离：./data/tmp_t08b.db，绝不碰主库 lifos.db。
+数据库隔离：./data/tmp_t08b.db，绝不碰主库 alongside.db。
 表只建 finance 相关（finance_entry + finance_snapshot）。
 FINANCE_UPSTREAM 默认 mock：离线全绿，不访问真实外网 / 不写真实 token。
 

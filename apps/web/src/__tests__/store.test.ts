@@ -21,7 +21,7 @@ const delta: ModuleManifest = {
   window: { w: 600, h: 400, minW: 360, minH: 240, singleton: true },
 };
 
-const STORE_KEY = "lifeos.windows.v1";
+const STORE_KEY = "alongside.windows.v1";
 
 function reset(): void {
   localStorage.clear();

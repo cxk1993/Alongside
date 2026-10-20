@@ -72,7 +72,7 @@ export interface ModuleReg {
 const TOPBAR = 48;
 const DOCK = 64;
 const SNAP = 8;
-const STORE_KEY = "lifeos.windows.v1";
+const STORE_KEY = "alongside.windows.v1";
 
 /**
  * ★ T22：置顶层的 zIndex 偏移基数。

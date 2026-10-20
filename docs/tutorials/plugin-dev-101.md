@@ -258,7 +258,7 @@ node node_modules/vite/bin/vite.js build                        # 构建
 ```
 
 **生产判据基线**（`expected.json`，enabled=true）：
-- gate: login_status 200, cookie_name `lifos_refresh`, me_sub `admin`
+- gate: login_status 200, cookie_name `alongside_refresh`, me_sub `admin`
 - hash: entry_hash `B3M7wy91`（T17+轻UI 批次上线基线）
 - modules: count 17（agents/auth/calendar/catalog/dashboard/diary/docs/finance/habits/health/mcp/notes/persona/plugins/review/todo/web）
 - docsprobe: persona_roots 1, diary_roots 1（BUG-T16-1 销账 + T17 幂等）

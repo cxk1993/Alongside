@@ -24,8 +24,8 @@ import { useDesktopStore } from "../store";
  */
 
 const COLLAPSE_KEY: Record<"left" | "right", string> = {
-  left: "lifeos.dock-left.collapsed",
-  right: "lifeos.dock-right.collapsed",
+  left: "alongside.dock-left.collapsed",
+  right: "alongside.dock-right.collapsed",
 };
 
 function usePersistedCollapse(side: "left" | "right"): [boolean, () => void] {
@@ -42,8 +42,8 @@ function usePersistedCollapse(side: "left" | "right"): [boolean, () => void] {
       const d = (e as CustomEvent<{ side: "left" | "right"; collapsed: boolean }>).detail;
       if (d && d.side === side) setCollapsed(d.collapsed);
     };
-    window.addEventListener("lifeos:sidebar-collapse", onCompass);
-    return () => window.removeEventListener("lifeos:sidebar-collapse", onCompass);
+    window.addEventListener("alongside:sidebar-collapse", onCompass);
+    return () => window.removeEventListener("alongside:sidebar-collapse", onCompass);
   }, [side]);
   const toggle = () => {
     setCollapsed((v) => {

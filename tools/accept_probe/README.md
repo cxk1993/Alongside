@@ -6,7 +6,7 @@
 
 ```bash
 # 口令只走环境变量（绝不写入文件/回帖/日志）
-export LIFEOS_ADMIN_PASSWORD=…
+export ALONGSIDE_ADMIN_PASSWORD=…
 python tools/accept_probe/probe.py --target production --suite all      # 全套件
 python tools/accept_probe/probe.py --target production --suite gate     # A6 三快腿
 python tools/accept_probe/probe.py --target production --suite hash     # 入口基线
@@ -25,7 +25,7 @@ python tools/accept_probe/probe.py --target production --suite all --emit-verdic
 ```
 
 - 人读表格与退出码语义**完全不变**，`--emit-verdict` 仅追加一行 JSON：
-  `{"schema":"lifeos.probe.verdict/1","ts":…,"target":…,"suite":…,"verdict":"PASS|FAIL","summary":{total,passed,failed},"contract_sha256":…,"rows":[…]}`
+  `{"schema":"alongside.probe.verdict/1","ts":…,"target":…,"suite":…,"verdict":"PASS|FAIL","summary":{total,passed,failed},"contract_sha256":…,"rows":[…]}`
 - **零凭证**：rows 只含判据名/期望/实测/判定，绝无 token/cookie/口令；
 - **契约不动**：schema 版本号只进事件 `schema` 字段；`contract_sha256` = expected.json 全文 sha256（运行时计算）——期望值被静默修改会在此留下指纹；
 - **并单**：本事件为 O 项（O1/O2）判据留痕标准件，O 项完工时按此格式附机读行；
@@ -65,7 +65,7 @@ python tools/accept_probe/mcp_path_audit.py --base <repo>    # 指定仓库根�
 
 - **🖥 腿边界**：本套件只做 **API 级 census + hash 对表**；浏览器 DOM 级断言（开窗/渲染/console 零错）归真机腿，**不 jsdom 化**（防 flake）；
 - **只读**：零生产写入、零三方依赖（stdlib）；
-- **凭证纪律**：口令只经 `LIFEOS_ADMIN_PASSWORD` 环境变量/`--password` 进程内存传入；token/cookie 全程内存不落盘；
+- **凭证纪律**：口令只经 `ALONGSIDE_ADMIN_PASSWORD` 环境变量/`--password` 进程内存传入；token/cookie 全程内存不落盘；
 - **领地**：仅本目录三个文件；`tools/deploy_package_preflight.py` 与其它 `tools/*` 不碰。
 
 ## 已知边界（v1）

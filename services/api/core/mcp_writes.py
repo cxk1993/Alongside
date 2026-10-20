@@ -28,7 +28,11 @@ from __future__ import annotations
 from typing import Any
 
 #: 转发层在内部 HTTP 请求上打的来源标记头。
-HEADER = "X-LifeOS-Client"
+HEADER = "X-Alongside-Client"
+
+#: ★ 改名兼容：旧品牌期的来源标记头，仍然认（否则升级瞬间 AI 来路会被误判成人类，
+#: 待办的「必须带标签」护栏静默失效）。判定顺序：新头优先，旧头兜底。
+LEGACY_HEADERS = ("X-LifeOS-Client",)
 
 #: 标记取值：来自 MCP / AI 转发层。
 CLIENT_MCP = "mcp"
@@ -44,6 +48,9 @@ def is_mcp_call(request: Any) -> bool:
     if headers is None:
         return False
     try:
-        return (headers.get(HEADER) or "").strip().lower() == CLIENT_MCP
+        for name in (HEADER, *LEGACY_HEADERS):
+            if (headers.get(name) or "").strip().lower() == CLIENT_MCP:
+                return True
+        return False
     except Exception:  # noqa: BLE001 —— 任何取头异常都按「不是 MCP」处理
         return False

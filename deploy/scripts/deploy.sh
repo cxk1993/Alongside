@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Alongside 一键部署（幂等，可重复执行）
-# 用法：在服务器上 /home/ubuntu/lifeos 目录执行
+# 用法：在服务器上 /home/ubuntu/alongside 目录执行
 #   sudo bash deploy/scripts/deploy.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

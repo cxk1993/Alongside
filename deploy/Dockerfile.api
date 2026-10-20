@@ -28,7 +28,7 @@ RUN mkdir -p /app/services/api/data /app/data
 
 WORKDIR /app/services/api
 ENV PYTHONPATH=/app/services/api \
-    DB_PATH=/app/services/api/data/lifos.db \
+    DB_PATH=/app/services/api/data/alongside.db \
     BACKUP_DIR=/app/services/api/data/backups \
     APP_ENV=production \
     TZ=Asia/Shanghai

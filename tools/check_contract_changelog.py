@@ -40,7 +40,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = Path(__file__).resolve().parents[1] / "tools" / "accept_probe" / "expected.json"
-GIT_CANDIDATES = ("git", r"C:\Users\lcyovo\.workbuddy\binaries\PortableGit\versions\1.2.0\cmd\git.exe")
+# PortableGit bundled with the local toolchain (path derived, not hard-coded to a user name).
+_PORTABLE_GIT = str(
+    Path.home() / ".workbuddy" / "binaries" / "PortableGit" / "versions" / "1.2.0" / "cmd" / "git.exe"
+)
+GIT_CANDIDATES = ("git", _PORTABLE_GIT)
 
 
 def _git_exe() -> str | None:

@@ -68,7 +68,7 @@ def main() -> int:
         if r2.status_code == 200 and caps and "notify" in caps:
             print("OK: 桥 0.2.x 已具备 notify 能力")
         elif r2.status_code == 200:
-            print("WARN: 桥在跑但 capabilities 无 notify —— 可能仍是旧版，需重启 lifeos-bridge")
+            print("WARN: 桥在跑但 capabilities 无 notify —— 可能仍是旧版，需重启 alongside-bridge")
     except Exception as exc:
         print(f"FAIL: 鉴权探测 {exc}")
         return 1

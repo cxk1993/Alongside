@@ -1,7 +1,7 @@
 """SQLite 在线备份 + 保留 30 天 + --verify 恢复演练（T04 · 步骤 12）。
 
 用法：
-    python scripts/backup.py                # 做一次备份 → data/backups/lifos-YYYYMMDD-HHMM.db
+    python scripts/backup.py                # 做一次备份 → data/backups/alongside-YYYYMMDD-HHMM.db
     python scripts/backup.py --verify       # 对最新备份做恢复演练（integrity_check）
     python scripts/backup.py --verify <path>
 
@@ -23,7 +23,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _API_ROOT = Path(__file__).resolve().parent.parent  # services/api/
-_BACKUP_NAME_RE = re.compile(r"^lifos-\d{8}-\d{4}\.db$")
+#: 备份文件名（`alongside-YYYYMMDD-HHMM.db`）。
+#: ★ 改名兼容：旧品牌期生成的是 `lifos-*`，必须一并认 —— 否则「清理过期备份」
+#: 与「取最新备份」都会对既有备份视而不见（旧备份越积越多、`--verify latest` 找不到）。
+_BACKUP_NAME_RE = re.compile(r"^(?:alongside|lifos)-\d{8}-\d{4}\.db$")
+
+#: 改名前的库文件名；仅用于兼容回退（同 db/engine.py）。
+_LEGACY_DB_NAME = "lifos.db"
 
 
 def _default_db_path() -> Path:
@@ -32,6 +38,10 @@ def _default_db_path() -> Path:
     p = Path(get_settings().db_path)
     if not p.is_absolute():
         p = _API_ROOT / p
+    # ★ 改名兼容：新名库还不存在、旧名库还在 → 备份旧库（别因为改名就备了个空）。
+    legacy = p.with_name(_LEGACY_DB_NAME)
+    if p.name != _LEGACY_DB_NAME and not p.exists() and legacy.exists():
+        return legacy
     return p
 
 
@@ -50,7 +60,7 @@ def backup(db_path: Path, backup_dir: Path) -> Path:
         raise FileNotFoundError(f"数据库不存在：{db_path}")
     backup_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M")
-    dest = backup_dir / f"lifos-{stamp}.db"
+    dest = backup_dir / f"alongside-{stamp}.db"
     src = sqlite3.connect(str(db_path))
     try:
         dst = sqlite3.connect(str(dest))

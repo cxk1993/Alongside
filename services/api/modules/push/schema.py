@@ -51,7 +51,7 @@ class SendIn(BaseModel):
         default="/", max_length=500, description="点击通知后打开的站内路径（如 `/` 或 `/pi/`）"
     )
     tag: str = Field(
-        default="lifeos",
+        default="alongside",
         max_length=64,
         description="通知分组标签：**同 tag 的新通知会覆盖旧的**（不刷屏）。想让多条独立并存就传不同 tag",
     )

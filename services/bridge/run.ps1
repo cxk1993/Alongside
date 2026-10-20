@@ -3,13 +3,13 @@
 # Pure ASCII + CRLF. Edit paths below to match this machine.
 $ErrorActionPreference = "Stop"
 
-$ProjectRoot = "E:\ai work\work\life"
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $BridgeDir   = Join-Path $ProjectRoot "services\bridge"
 $VenvPython  = Join-Path $ProjectRoot "services\api\.venv\Scripts\python.exe"
 $ConfigPath  = Join-Path $BridgeDir "config.yaml"
 
 # PORT and PSK come from the nssm service environment (set once):
-#   nssm set lifeos-bridge AppEnvironmentExtra BRIDGE_PORT=8790 BRIDGE_PSK=**** BRIDGE_CONFIG=...
+#   nssm set alongside-bridge AppEnvironmentExtra BRIDGE_PORT=8790 BRIDGE_PSK=**** BRIDGE_CONFIG=...
 $BridgePort = $env:BRIDGE_PORT
 if (-not $BridgePort) { $BridgePort = "8790" }
 

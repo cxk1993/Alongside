@@ -4,7 +4,7 @@
 
 覆盖：调度状态 / 手动 tick / 提醒日志 / 可选 bridge notify。
 用法：
-  LIFEOS_TOKEN=xxx python tools/probe_scenario_b.py --base http://192.0.2.10:18080
+  ALONGSIDE_TOKEN=xxx python tools/probe_scenario_b.py --base http://192.0.2.10:18080
 """
 from __future__ import annotations
 
@@ -17,12 +17,12 @@ import httpx
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", default=os.environ.get("LIFEOS_BASE") or "http://192.0.2.10:18080")
-    ap.add_argument("--token", default=os.environ.get("LIFEOS_TOKEN") or "")
+    ap.add_argument("--base", default=(os.environ.get("ALONGSIDE_BASE") or os.environ.get("LIFEOS_BASE")) or "http://192.0.2.10:18080")
+    ap.add_argument("--token", default=(os.environ.get("ALONGSIDE_TOKEN") or os.environ.get("LIFEOS_TOKEN")) or "")
     ap.add_argument("--tick", action="store_true", help="POST reminders/tick")
     args = ap.parse_args()
     if not args.token:
-        print("FAIL: 需要 LIFEOS_TOKEN")
+        print("FAIL: 需要 ALONGSIDE_TOKEN")
         return 2
     base = args.base.rstrip("/")
     h = {"Authorization": f"Bearer {args.token}"}

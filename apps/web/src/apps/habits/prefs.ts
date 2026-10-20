@@ -5,7 +5,7 @@ export interface HabitsPrefs {
   sortBy: "default" | "streak" | "name";
 }
 
-const KEY = "lifeos.plugin.habits.prefs";
+const KEY = "alongside.plugin.habits.prefs";
 
 export function loadPrefs(): HabitsPrefs {
   try {

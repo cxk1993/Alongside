@@ -228,7 +228,7 @@ def send_broadcast(
     title: str,
     body: str = "",
     url: str = "/",
-    tag: str = "lifeos",
+    tag: str = "alongside",
     topic: str = "manual",
 ) -> dict[str, Any]:
     """向全部活跃订阅广播。返回 {ok, sent, pruned, detail}。写 push_log。"""

@@ -7,7 +7,7 @@
  *   POST /api/v1/auth/logout  → { ok: true }（清 refresh Cookie）
  *   POST /api/v1/auth/refresh → { access_token }（client.ts 的 401 拦截自动走）
  *
- * token 只进 localStorage（key: lifeos.token，与 client.ts / 过渡页 login.html 一致），
+ * token 只进 localStorage（key: alongside.token，与 client.ts / 过渡页 login.html 一致），
  * 不进 URL、不进 git。
  */
 import { api, setToken, notifyUnauthorized, ApiError } from "./client";

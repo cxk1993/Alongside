@@ -4,7 +4,7 @@ export interface SidebarPrefs {
   hideDisabled: boolean;
 }
 
-const KEY = "lifeos.plugin.sidebar.prefs";
+const KEY = "alongside.plugin.sidebar.prefs";
 
 export function loadPrefs(): SidebarPrefs {
   try {

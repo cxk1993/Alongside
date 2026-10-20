@@ -6,7 +6,7 @@
 不替代 Qoder 浏览器深验；用于 T30 上线后快速确认「我的模块没半残」。
 
 用法：
-  set LIFEOS_TOKEN=eyJ...
+  set ALONGSIDE_TOKEN=eyJ...
   python tools/probe_mimo_modules.py --base http://192.0.2.10:18080
   python tools/probe_mimo_modules.py --base http://127.0.0.1:8000 --token $TOKEN
 """
@@ -22,13 +22,13 @@ import httpx
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", default=os.environ.get("LIFEOS_BASE") or "http://192.0.2.10:18080")
-    ap.add_argument("--token", default=os.environ.get("LIFEOS_TOKEN") or "")
+    ap.add_argument("--base", default=(os.environ.get("ALONGSIDE_BASE") or os.environ.get("LIFEOS_BASE")) or "http://192.0.2.10:18080")
+    ap.add_argument("--token", default=(os.environ.get("ALONGSIDE_TOKEN") or os.environ.get("LIFEOS_TOKEN")) or "")
     args = ap.parse_args()
     base = args.base.rstrip("/")
     token = args.token
     if not token:
-        print("FAIL: 需要 --token 或环境变量 LIFEOS_TOKEN")
+        print("FAIL: 需要 --token 或环境变量 ALONGSIDE_TOKEN")
         return 2
     h = {"Authorization": f"Bearer {token}"}
     results: list[tuple[str, bool, str]] = []

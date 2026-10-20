@@ -1,7 +1,7 @@
 """T20 能力目录后端测试（只跑这一个文件，不影响别的卡）。
 
 ★ 状态码约定：校验类 422、找不到 404、未鉴权 401、id 冲突 409（无）。
-数据库隔离：用临时库 ./data/tmp_t20.db，绝不碰主库 lifos.db。
+数据库隔离：用临时库 ./data/tmp_t20.db，绝不碰主库 alongside.db。
 表由模型直接建（create_app 不自动跑迁移）。
 ★ 不对 T19 模块 import / join —— web_entry 源经 get_plugin_client 跨插件调用。
 """

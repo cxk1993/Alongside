@@ -62,7 +62,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def _refresh_cookie_of(resp: TestClient) -> str | None:
-    """从响应里取 lifos_refresh 的 Set-Cookie 原始行（可能多条，取匹配的那条）。"""
+    """从响应里取 alongside_refresh 的 Set-Cookie 原始行（可能多条，取匹配的那条）。"""
     for raw in resp.headers.get_list("set-cookie"):
         if raw.startswith(f"{REFRESH_COOKIE}="):
             return raw

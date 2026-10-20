@@ -52,7 +52,10 @@ DEFAULT_MODEL = "alongside"
 #   实测不加后缀时默认是 medium，故显式带上。
 DEFAULT_THINKING = "high"
 DEFAULT_MODEL_SPEC = f"{DEFAULT_MODEL}:{DEFAULT_THINKING}"
-DEFAULT_SANDBOX_IMAGE = "lifeos-pi-sandbox:0.87.1"   # ★ 沙箱镜像（版本 pin 死）
+DEFAULT_SANDBOX_IMAGE = "alongside-pi-sandbox:0.87.1"   # ★ 沙箱镜像（版本 pin 死）
+#: ★ 改名兼容：旧品牌期的镜像名。默认镜像换成新名后，**已经 build 过旧镜像的机器**
+#: 不该因为一个标签名就跑不起来 —— 新名镜像不存在、旧名在 → 沿用旧名。
+LEGACY_SANDBOX_IMAGE = "lifeos-pi-sandbox:0.87.1"
 PROMPT_TIMEOUT_S = 120.0      # 单轮上限（实测 5~11s，留足余量）
 HEARTBEAT_TIMEOUT_S = 10.0    # 心跳单次超时
 HEARTBEAT_FAILS_TO_KILL = 3   # 连续失败判卡死
@@ -122,9 +125,49 @@ def load_mcp_env() -> dict[str, str]:
     try:
         with open(path, encoding="utf-8") as f:
             pat = f.read().strip()
-        return {"LIFEOS_MCP_PAT": pat} if pat else {}
+        # ★ 改名兼容：新旧两个变量名**都**注入 —— 容器里 pi 的 MCP 配置由用户在
+        #   runtime/ 下自配（不归仓库管），可能仍引用旧名；双写才不会把凭证弄丢。
+        return {"ALONGSIDE_MCP_PAT": pat, "LIFEOS_MCP_PAT": pat} if pat else {}
     except OSError:
         return {}
+
+
+def _docker_image_present(image: str) -> bool:
+    """本机是否已有该镜像。docker 不在 / 查询失败一律 False（交给后续正常报错路径）。"""
+    try:
+        return (
+            subprocess.run(
+                ["docker", "image", "inspect", image],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode
+            == 0
+        )
+    except OSError:
+        return False
+
+
+def resolve_sandbox_image(configured: str) -> str:
+    """解析实际要用的沙箱镜像名（★ 改名兼容）。
+
+    默认镜像由旧名换成新名后，**已经 build 过旧镜像的机器**会因为找不到新标签
+    而起不来沙箱。这里做一次探测：新名不在、旧名在 → 沿用旧名。
+    只在「用的就是默认镜像名」时回退 —— 用户显式配了别的镜像，说明他自己清楚
+    要用哪个，不自作聪明去改。
+    """
+    if configured != DEFAULT_SANDBOX_IMAGE:
+        return configured
+    if not _docker_image_present(DEFAULT_SANDBOX_IMAGE) and _docker_image_present(
+        LEGACY_SANDBOX_IMAGE
+    ):
+        log.warning(
+            "沙箱镜像 %s 尚未构建，沿用旧名镜像 %s（改名兼容回退；重新 docker build 后此日志消失）",
+            DEFAULT_SANDBOX_IMAGE,
+            LEGACY_SANDBOX_IMAGE,
+        )
+        return LEGACY_SANDBOX_IMAGE
+    return configured
 
 
 def find_pi_binary(configured: str | None = None) -> str | None:
@@ -183,7 +226,8 @@ class PiRpcClient:
         self.extra_args = list(extra_args or [])
         self.env = env
         self.sandbox = sandbox
-        self.sandbox_image = sandbox_image
+        # ★ 改名兼容：仅沙箱模式才需要解析镜像名（非沙箱跑不到镜像）。
+        self.sandbox_image = resolve_sandbox_image(sandbox_image) if sandbox else sandbox_image
         self.persist = persist
         self._proc: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
@@ -203,7 +247,7 @@ class PiRpcClient:
             #   - `-i` 保 stdin（RPC 的协议通道就是它，缺了 pi 会立刻退出）；
             #   - `--network host` 让容器内 127.0.0.1 指向宿主（访问 Alongside MCP 桥）；
             #   - `-v <cwd>:/workspace` **只暴露这一个目录**（最小暴露面）；
-            #   - `-e LIFEOS_MCP_PAT`（**不带值**）从宿主环境透传，**不落镜像/不落盘**。
+            #   - `-e ALONGSIDE_MCP_PAT`（**不带值**）从宿主环境透传，**不落镜像/不落盘**。
             if not shutil.which("docker"):
                 raise PiRpcError("沙箱模式需要 docker（未找到可执行文件）")
             # ★ 容器里必须能拿到 pi 的模型配置（否则报 Unknown provider "alongside"）。
@@ -231,8 +275,9 @@ class PiRpcClient:
                 "-e", "PI_CODING_AGENT_DIR=/workspace/.pi-agent",
                 "-e", "HOME=/workspace",
             ]
-            if env.get("LIFEOS_MCP_PAT"):
-                argv += ["-e", "LIFEOS_MCP_PAT"]
+            for _name in ("ALONGSIDE_MCP_PAT", "LIFEOS_MCP_PAT"):
+                if env.get(_name):
+                    argv += ["-e", _name]
             argv += [
                 self.sandbox_image,
                 "--mode", "rpc", *([] if self.persist else ["--no-session"]),

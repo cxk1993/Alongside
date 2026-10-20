@@ -6,10 +6,10 @@
 # ★ 与宿主的关系：
 #   - 工作目录经 `-v <runtime>:/workspace` 挂进来（只暴露这一个目录）；
 #   - Alongside 的 MCP 桥用 `--network host` 访问（容器内 127.0.0.1 = 宿主）；
-#   - 凭证（LIFEOS_MCP_PAT）走环境变量注入，**不落镜像**；
+#   - 凭证（ALONGSIDE_MCP_PAT）走环境变量注入，**不落镜像**；
 #   - 版本 pin 死（总监红线①）。
 #
-# 构建：docker build -t lifeos-pi-sandbox:0.87.1 -f Dockerfile.pi .
+# 构建：docker build -t alongside-pi-sandbox:0.87.1 -f Dockerfile.pi .
 FROM node:24-bookworm-slim
 
 # 工具链：pi 的 bash 工具需要这些；ripgrep 供搜索

@@ -1,6 +1,6 @@
 """T08 账本（finance）后端测试。
 
-数据库隔离：用临时库 ./data/tmp_t08.db，绝不碰主库 lifos.db。
+数据库隔离：用临时库 ./data/tmp_t08.db，绝不碰主库 alongside.db。
 表只在当前进程内由模型直接建（create_app 不自动跑迁移，避免跨插件迁移碰撞）。
 """
 from __future__ import annotations

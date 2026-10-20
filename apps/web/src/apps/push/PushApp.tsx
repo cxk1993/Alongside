@@ -145,7 +145,7 @@ export default function PushApp() {
   });
 
   const sendMut = useMutation({
-    mutationFn: () => pushApi.send({ title, body, url: "/", tag: "lifeos-manual" }),
+    mutationFn: () => pushApi.send({ title, body, url: "/", tag: "alongside-manual" }),
     onSuccess: (r) => {
       setErr(null);
       setMsg(

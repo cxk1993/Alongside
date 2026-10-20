@@ -18,7 +18,11 @@ from .service import AuthService
 
 router = APIRouter()
 
-REFRESH_COOKIE = "lifos_refresh"
+REFRESH_COOKIE = "alongside_refresh"
+
+#: ★ 改名兼容：旧品牌期的 cookie 名。升级瞬间浏览器手里还捏着旧 cookie，
+#: 只认新名会把人当场踢下线 —— 读取时新名优先、旧名兜底；写入只写新名。
+LEGACY_REFRESH_COOKIE = "lifos_refresh"
 
 
 def _cookie_secure(request: Request) -> bool:
@@ -85,8 +89,16 @@ def refresh(
     refresh_token: str | None = Cookie(
         default=None, alias=REFRESH_COOKIE, description="放在 httpOnly Cookie 里的 refresh token（浏览器自动带上）"
     ),
+    legacy_refresh_token: str | None = Cookie(
+        default=None,
+        alias=LEGACY_REFRESH_COOKIE,
+        include_in_schema=False,
+        description="改名前的旧 cookie 名（兼容回退，过渡期后自然失效）",
+    ),
 ) -> TokenOut:
     """用 refresh Cookie 换一枚新的 access token（并轮换 Cookie）。"""
+    # ★ 新名优先、旧名兜底：老用户手里的旧 cookie 仍能换到新 access token。
+    refresh_token = refresh_token or legacy_refresh_token
     if not refresh_token:
         raise UnauthorizedError("缺少 refresh token（Cookie）")
     access = AuthService().refresh(refresh_token)
@@ -111,6 +123,8 @@ def refresh(
 def logout(response: Response) -> dict[str, bool]:
     """登出：清掉 refresh Cookie（**尽力而为** —— 后端不可达也要把本地退干净）。"""
     response.delete_cookie(REFRESH_COOKIE, path="/api/v1/auth")
+    # ★ 改名兼容：旧名 cookie 也一并清掉，别让它在过渡期一直挂着。
+    response.delete_cookie(LEGACY_REFRESH_COOKIE, path="/api/v1/auth")
     event_bus.publish("auth.logout", {"sub": USER_SUB}, source="auth")
     return {"ok": True}
 

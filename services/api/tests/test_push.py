@@ -1,6 +1,6 @@
 """push 插件测试（Web Push：订阅/注销/刷新/广播兜错/410 清理/API 面）。
 
-数据库隔离：临时库 ./data/tmp_push.db，绝不碰主库 lifos.db（test_notes 先例）。
+数据库隔离：临时库 ./data/tmp_push.db，绝不碰主库 alongside.db（test_notes 先例）。
 外发 HTTP 全部 mock —— 没有真推送服务，不伪造「已推送」。
 """
 from __future__ import annotations

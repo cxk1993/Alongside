@@ -1,0 +1,53 @@
+{
+  "id": "packs",
+  "name": "整合包",
+  "version": "0.1.0",
+  "kind": "core",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "archive",
+  "description": "整合包的管理面：登记 / 试装 / 装配 / 卸包（包层六端点）",
+  "author": "ningxi",
+  "window": {
+    "w": 760,
+    "h": 540
+  },
+  "entry": "@/apps/packs",
+  "api": {
+    "base": "/api/v1/packs",
+    "openapi": "/api/v1/packs/openapi.json",
+    "health": "/api/v1/packs/health",
+    "tools": {
+      "packs.list": "/",
+      "packs.install": "/install",
+      "packs.dryrun": "/{pack_id}/dry-run",
+      "packs.assemble": "/{pack_id}/assemble",
+      "packs.uninstall": "/{pack_id}/uninstall"
+    }
+  },
+  "provides": [
+    "pack.list",
+    "pack.register",
+    "pack.dryrun",
+    "pack.assemble",
+    "pack.unregister",
+    "packs.health"
+  ],
+  "requires": [],
+  "slots": [],
+  "emits": [
+    "pack.registered",
+    "pack.assembled",
+    "pack.unregistered"
+  ],
+  "consumes": [],
+  "permissions": [],
+  "migrations": null,
+  "settingsSchema": null,
+  "lifecycle": {
+    "onInstall": null,
+    "onEnable": null,
+    "onDisable": null,
+    "onUninstall": null
+  }
+}

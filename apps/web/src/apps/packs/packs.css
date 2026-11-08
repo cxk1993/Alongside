@@ -1,0 +1,71 @@
+.packs-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+  padding: var(--sp-3);
+  box-sizing: border-box;
+  color: var(--txt);
+  font-size: 13px;
+  overflow: auto;
+}
+.packs-hint {
+  color: var(--txt-faint);
+}
+.packs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.packs-table th,
+.packs-table td {
+  text-align: left;
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  vertical-align: top;
+}
+.packs-table th {
+  color: var(--txt-faint);
+  font-weight: 500;
+}
+.packs-name {
+  font-weight: 500;
+}
+.packs-id {
+  color: var(--txt-faint);
+  font-size: 11px;
+}
+.packs-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+/* 三档半状态：颜色只在「已装配 / 目录缺失」上区分——
+   已登记与可发现都是「还没装」，不该用醒目色假装它们是终点。 */
+.packs-phase--installed {
+  color: var(--ok);
+}
+.packs-phase--registered {
+  color: var(--txt);
+}
+.packs-phase--discovered {
+  color: var(--txt-faint);
+}
+.packs-phase--missing {
+  color: var(--danger);
+}
+.packs-err {
+  color: var(--danger);
+}
+.packs-report {
+  border-top: 1px solid var(--line);
+  padding-top: var(--sp-2);
+}
+.packs-report__title {
+  font-size: 12px;
+  font-weight: 500;
+  margin: 0 0 var(--sp-2);
+}
+.packs-table--members td:last-child {
+  color: var(--txt-faint);
+}

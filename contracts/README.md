@@ -7,7 +7,10 @@
 | 文件 / 目录 | 所有者 | 说明 |
 |:--|:--|:--|
 | `README.md` | T01 | 本说明 |
-| `plugin.schema.json` | **T14** | 插件清单的 JSON Schema（总纲 §1.3.1 那套字段） |
+| `plugin.schema.json` | **T14** | 插件清单的 JSON Schema（总纲 §1.3.1 那套字段）；**2026-11 起 36 字段 / 必填 11** |
+| `pack.schema.json` | **包层** | 整合包清单 `pack.json` 的 JSON Schema（包层唯一真相源） |
+| `pack-lock.schema.json` | **包层** | 基线锁 `pack.lock.json` 的形状（成员内容摘要钉死） |
+| `pack-assembly.schema.json` | **包层** | 装配快照 `pack.assembly.json` 的形状（本次装配的实况） |
 | `data-dictionary.md` | **T04** | 核心数据字典（总纲 §1.5 落库后的正式版） |
 | `openapi.json` | **T03** | `scripts/gen_openapi.py` 生成的聚合产物 |
 | `modules/<id>.manifest.json` | **各插件卡** | 每个插件自己的清单，一个插件一个文件 |

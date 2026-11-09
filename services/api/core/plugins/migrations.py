@@ -29,22 +29,77 @@ from typing import Any
 
 from sqlmodel import text
 
+from core.errors import MigrationError
 from core.logging import get_logger
 
 log = get_logger("kernel.plugins.migrations")
 
 
-def _migration_dir(info: Any) -> Path:
-    """迁移目录双位置探测（ISSUE-006）。
+def _declared_migration_dir(info: Any) -> str | None:
+    """读 manifest 里声明的迁移目录（相对插件根）。
 
-    契约位 api/migrations/ 优先；历史位 migrations/ 兜底（实盘 builtin 全在此）。
-    两处都存在时契约位获胜（写新迁移请放 api/migrations/）；
-    都不存在时返回契约位，让 _discover 自然返回空。
+    ★ 为什么必须读 manifest（而不是猜路径）
+    --------------------------------------
+    协议 §4.1：「**manifest 是唯一契约**。所有需要被内核知道的信息都在
+    `manifest.json` 里，内核不需要去读插件的代码来判断。」
+
+    ⇒ 内核**按约定路径**去找（早先的 `api/migrations` 优先、`migrations` 兜底）
+    意味着 manifest 的 `migrations` 字段**说了不算数**：
+    作者写 `"db/migrations"`，内核照样去 `api/migrations` 找。
+    ⇒ 那是「manifest 说的」与「约定说的」两个真相源，而前者是死的。
+
+    ★ 但**未声明时**（null）仍走约定位兜底——
+      「没声明」的语义是「没指定」，不是「禁止」；
+      而 16 个内置插件的 manifest 恰好写的是 `"migrations"`（声明值 == 兜底位），
+      所以对它们而言按声明解析与按约定解析结果一致。
     """
-    api_dir = info.directory / "api" / "migrations"
+    manifest = getattr(info, "manifest", None)
+    if not isinstance(manifest, dict):
+        return None
+    rel = manifest.get("migrations")
+    if not rel or not isinstance(rel, str):
+        return None
+    return rel
+
+
+def _migration_dir(info: Any) -> Path:
+    """迁移目录解析：**先信 manifest 的声明**，再退回约定探测。
+
+    ★ 解析顺序（与协议「manifest 是唯一契约」一致）：
+      1. manifest 声明了 `migrations` ⇒ **按声明解析**（相对插件根）。
+         声明的目录不存在 ⇒ **报错**，不许静默退回约定位——
+         静默退回 = 「manifest 说的不算数」又活过来了。
+      2. 未声明（null）⇒ 退回约定探测：
+         `api/migrations/` 优先、`migrations/` 兜底（兼容既有第三方插件用法）。
+
+    ★ 为什么「声明了却不存在」要报错而不是退回
+    --------------------------------------------
+    因为作者的意图已经写在 manifest 里了。若内核悄悄去别处跑了一堆别的迁移，
+    他会以为自己的声明生效了——而实际上跑的不是他声明的那些。
+    ⇒ 报错是唯一诚实的做法（也是协议 §11 写的失败行为：
+      「启动失败（路径不存在）」）。
+
+    ★ 与早先的「双位置探测」的关系
+    ------------------------------
+    早先只有约定位探测，因为那时**没人读 manifest 的这个字段**。
+    现在是「声明优先 + 约定位兜底」——约定位那条路**仍然保留**，
+    所以依赖旧布局的第三方插件不受影响。
+    """
+    declared = _declared_migration_dir(info)
+    if declared is not None:
+        path = Path(info.directory) / declared
+        if not path.is_dir():
+            raise MigrationError(
+                f"插件「{getattr(info, 'id', '?')}」的 manifest.migrations 声明了 "
+                f"{declared!r}，但该目录不存在（相对插件根解析）"
+                "——声明了却不落地，等于这个声明从未生效。"
+            )
+        return path
+
+    api_dir = Path(info.directory) / "api" / "migrations"
     if api_dir.is_dir():
         return api_dir
-    legacy_dir = info.directory / "migrations"
+    legacy_dir = Path(info.directory) / "migrations"
     if legacy_dir.is_dir():
         return legacy_dir
     return api_dir
@@ -135,7 +190,16 @@ def run_migrations(engine: Any, info: Any) -> list[str]:
         if key in done:
             continue
         mod = _load(path, info)
-        mod.upgrade(engine)
+        # ★ 迁移脚本抛什么内核管不了，但对外必须是**一个**应用级错误。
+        #   否则调用方（启停流程、测试、用户）要区分「迁移写错了」和「内核坏了」，
+        #   而后者根本不是。原始异常类型与信息都带在消息里，不丢诊断线索。
+        try:
+            mod.upgrade(engine)
+        except Exception as exc:  # noqa: BLE001 — 迁移是插件自己的代码
+            raise MigrationError(
+                f"插件「{info.id}」迁移 {version} 执行失败"
+                f"（{type(exc).__name__}: {exc}）"
+            ) from exc
         _record(engine, info.id, version)
         executed.append(version)
     return executed
@@ -220,21 +284,53 @@ def ensure_record_table(engine: Any) -> None:
     AppSetting.__table__.create(bind=engine, checkfirst=True)  # type: ignore[attr-defined]
 
 
+def _as_info(entry: tuple[str, Path] | tuple[str, Path, Any]) -> SimpleNamespace:
+    """把模块条目规整成带 manifest 的 info。
+
+    ★ 为什么要带 manifest
+    -------------------
+    迁移目录**按 manifest 声明解析**（见 `_migration_dir`），
+    所以 info 上必须能拿到 manifest。
+    早先这里只造 `SimpleNamespace(id, directory)` ⇒ 声明读不到，
+    于是「按声明解析」在启动对账这条路径上是**假的**——
+    而启动对账恰恰是**唯一**会跑内置插件迁移的路径。
+
+    ★ 兼容两元组
+    ------------
+    接受 `(id, dir)`（无 manifest）⇒ 退化为约定位探测。
+    这样第三方调用方与既有测试不必立刻改。
+
+    ★ 为什么用 `SimpleNamespace` 而不是 `PluginInfo`
+    -----------------------------------------------
+    core 不 import 插件发现层（分层约定），
+    而 `SimpleNamespace` 让调用方不必构造完整的信息对象。
+    """
+    if len(entry) == 3:
+        plugin_id, directory, manifest = entry
+        return SimpleNamespace(id=plugin_id, directory=directory, manifest=manifest)
+    plugin_id, directory = entry
+    return SimpleNamespace(id=plugin_id, directory=directory, manifest=None)
+
+
 def reconcile_migrations(
-    engine: Any, modules: Sequence[tuple[str, Path]]
+    engine: Any, modules: Sequence[tuple[str, Path] | tuple[str, Path, Any]]
 ) -> dict[str, list[str]]:
-    """启动对账：按 (插件id, 目录) 逐个补跑未执行的迁移（ISSUE-006）。
+    """启动对账：按模块条目逐个补跑未执行的迁移（ISSUE-006）。
 
     run_migrations 本身幂等（台账只增不改），这里补的是「启动时机」——
     builtin 插件以前只有 third-party install 会触发迁移，新库首启全部
     建表即 500。任一插件迁移失败即抛错（fail fast，不许静默带病启动）。
 
+    ★ 条目可以是 `(id, 目录)` 或 `(id, 目录, manifest)`：
+      带 manifest 时，迁移目录**按声明解析**（协议：「manifest 是唯一契约」）。
+
     返回 {插件id: 本次执行的版本列表}（未执行任何迁移的插件值为 []）。
     """
     ensure_record_table(engine)
     result: dict[str, list[str]] = {}
-    for plugin_id, directory in modules:
-        info = SimpleNamespace(id=plugin_id, directory=directory)
+    for entry in modules:
+        info = _as_info(entry)
+        plugin_id = info.id
         try:
             result[plugin_id] = run_migrations(engine, info)
         except Exception as exc:
@@ -245,7 +341,7 @@ def reconcile_migrations(
 
 
 def make_startup_lifespan(
-    modules: Sequence[tuple[str, Path]],
+    modules: Sequence[tuple[str, Path] | tuple[str, Path, Any]],
     *,
     on_started: Any | None = None,
     on_stopping: Any | None = None,

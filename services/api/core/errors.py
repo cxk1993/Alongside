@@ -88,6 +88,16 @@ class ManifestError(AppError):
     title = "Module Manifest Invalid"
 
 
+class MigrationError(AppError):
+    """插件迁移执行失败：迁移脚本是插件自己的代码，它抛什么内核管不了，
+    但对外必须是**一个**应用级错误 —— 否则调用方要区分「迁移写错了」
+    和「内核坏了」，而后者根本不是。原始异常类型与信息带在消息里，不丢线索。
+    """
+
+    status_code = 500
+    title = "Plugin Migration Failed"
+
+
 def _trace_id(request: Request) -> str:
     return str(getattr(request.state, "trace_id", "") or "")
 

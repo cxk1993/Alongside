@@ -48,7 +48,8 @@ def is_mcp_call(request: Any) -> bool:
     if headers is None:
         return False
     try:
-        for name in (HEADER, *LEGACY_HEADERS):
+        # ★ 不用 any(...) 一行写完：拆开的 for 更好读，也更好逐个加条件。
+        for name in (HEADER, *LEGACY_HEADERS):  # noqa: SIM110
             if (headers.get(name) or "").strip().lower() == CLIENT_MCP:
                 return True
         return False

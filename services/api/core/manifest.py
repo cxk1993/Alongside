@@ -1,3 +1,4 @@
+# ── 协议在 Python 侧的运行时落点 ──
 """模块 manifest 模型 + 自动发现。
 
 ★ 这是 T03 的"模块自动发现"职责（总纲 §1.3 / 验收 #2-#3）。
@@ -59,6 +60,10 @@ class Manifest(BaseModel):
     #   SystemApp（70c0702）对接面一致：{key, label, entry?}，entry=模块 id
     #（无 entry 页 = 「后端模块 · 仅服务」薄壳语义）。非 container 型可忽略。
     tabs: list[dict[str, Any]] = []
+    # ★ 本容器吸收的模块 id 列表：这些模块**不再单独出现在底端栏**，入口收进本容器。
+    #   典型场景：某后端模块被更完整的容器取代（无独立视图页），由本容器接管其入口。
+    #   声明了 tabs[].entry 的模块**不必**在此重复列出 —— entry 已隐含吸收。
+    absorbs: list[str] = []
     provides: list[str] = []
     requires: list[str] = []
     # ★（#009 软依赖声明的静态半边）：缺了**不阻塞启动**的依赖。
@@ -74,7 +79,7 @@ class Manifest(BaseModel):
     #   此前模型只声明 list[str]，**对象格式会被 pydantic 直接判非法** → 与 schema 口径打架。
     #   此处放宽为联合类型；**归一化在 core/plugins/permissions.normalize_permissions**
     #（唯一入口），本模型只负责"看得见、不报错"。
-    permissions: list[str] | dict[str, bool] = Field(default_factory=list)
+    permissions: list[str] | dict[str, bool] = Field(default_factory=lambda: [])
     activates_on: list[str] = []
     migrations: str | None = None
     settingsSchema: str | None = None
@@ -86,6 +91,53 @@ class Manifest(BaseModel):
     entry: str | None = None
     window: dict[str, Any] | None = None
     lifecycle: dict[str, Any] = Field(default_factory=dict)
+
+    # ══════════════════════════════════════════════════════════════
+    # 协议新增字段的运行时落点（2026-10-26）
+    # ══════════════════════════════════════════════════════════════
+    # ★ 为什么补这一段：协议 Schema 已有 35 个字段，但这个模型只声明了 24 个。
+    #   剩下 10 个（下面这组）此前**只能从 model_extra 里摸**——校验层认真对待它们，
+    #   运行层却没有任何具名落点，调用方得写 m.model_extra.get("riskLevel")。
+    #   结果是：插件作者声明了 riskLevel / concurrency / schedule，
+    #   内核读得到值却从不消费——**声明了等于没声明**。
+    #   这是比「字段被静默吞掉」更隐蔽的一类协议失效：值没丢，但没人用。
+    #
+    # ★ 补法：给每个协议字段一个具名落点 + 明确默认值。
+    #   默认值取「内核推断的保守默认」——与协议兼容策略一致：
+    #   字段缺失不拦，按保守默认走；只有显式声明错才失败。
+    #   这样存量插件零改动通过，新插件又能真正被内核读懂。
+
+    # 能力定义（三角色的 Service Definition 侧）：本插件「定义」了哪些能力。
+    # ★ 一个能力最多一个 defines，可以有多个 provides（多 Provider 由配置选定）。
+    #   兼容模式：若全系统没有任何插件写 defines，则 provides 隐含 defines。
+    defines: list[str] = []
+    # 依赖丧失时的降级策略：manual（人工介入）/ auto（自动转 PAUSED）。
+    # ★ auto = requires 中任一能力被撤销时，内核**主动**把本插件转入 PAUSED。
+    #   这不是插件自己写逻辑，而是内核在依赖变化时转移阶段——
+    #   插件只声明希望被怎样对待。
+    # ★ 默认必须是 manual：若默认 auto，那么内核升级后所有老插件
+    #   都会在依赖丢失时被停掉，而它们甚至不知道自己有这个声明。
+    deactivation: str = "manual"
+    # 风险等级 L0~L3：决定审批与沙箱强度。third-party 不得声明 L0。
+    riskLevel: str | None = None
+    # 执行约束：沙箱等级 + 审批策略。
+    execution: dict[str, Any] = Field(default_factory=dict)
+    # 副作用声明：是否触碰外部系统、是否需要检查点。
+    sideEffects: dict[str, Any] = Field(default_factory=dict)
+    # 生命周期轨道：persistent（留数据）/ ephemeral（不留）。
+    track: str = "persistent"
+    # 来源与审计：谁装的、是否签名。
+    origin: dict[str, Any] = Field(default_factory=dict)
+    # 并发契约：乐观锁、独占、并行安全操作。
+    concurrency: dict[str, Any] = Field(default_factory=dict)
+    # 定时调度：六种选择器之一（at/after_seconds/every_seconds/daily/weekly/cron）。
+    schedule: dict[str, Any] = Field(default_factory=dict)
+    # 大输出策略：内联上限、溢出去处、失败兜底。
+    outputPolicy: dict[str, Any] = Field(default_factory=dict)
+    # 扩展位：协议向前兼容的容器。放行不报不拒——先让插件写上，
+    # 等内核开始解释它再收紧校验。之所以要给具名落点（而不是留在 model_extra），
+    # 是为了让「协议字段 ↔ 运行时落点」的对应关系可机器核对。
+    extensions: dict[str, Any] = Field(default_factory=dict)
 
     # ── D′-2（2026-09-23）：未知字段必须**被报告**，不再静默吞 ──
     # 为什么是 class-level：pydantic v2 的 extra 策略在模型级生效，而我们要按 manifest 的
@@ -157,6 +209,23 @@ def _validate(module_id: str, raw: dict[str, Any], dir_name: str) -> Manifest:
             raise ManifestError(
                 f"模块「{m.id}」tabs[{idx}].entry 必须是字符串（模块 id）或省略"
             )
+    # ★ absorbs 校验：被本容器吸收的模块 id 列表。
+    #   ① 必须是字符串 id，不能是自己（自己吸收自己无意义）；
+    #   ② 与 tabs[].entry 不得重复 —— entry 已隐含吸收，重复写两遍会让
+    #      "吸收关系"有两个来源，埋下分叉。
+    for aid in m.absorbs:
+        if not isinstance(aid, str) or not aid:
+            raise ManifestError(
+                f"模块「{m.id}」absorbs 条目 {aid!r} 非法：必须是非空字符串（被吸收的模块 id）"
+            )
+        if aid == m.id:
+            raise ManifestError(f"模块「{m.id}」不能吸收自己（absorbs 含自身 id）")
+    entry_ids = {t.get("entry") for t in m.tabs if isinstance(t, dict)}
+    dup = sorted(set(m.absorbs) & {e for e in entry_ids if isinstance(e, str)})
+    if dup:
+        raise ManifestError(
+            f"模块「{m.id}」absorbs 与 tabs[].entry 重复声明 {dup} —— entry 已隐含吸收，不必重复写"
+        )
     for act in m.activates_on:
         if not _ACTIVATES_ON_RE.match(act):
             raise ManifestError(
@@ -239,12 +308,38 @@ def _gate_dependency_declarations(found: dict[str, tuple[Manifest, Path]]) -> No
     """依赖声明闸门：全部模块发现后统一校验，失败抛 ManifestError（启动即失败）。"""
     # 能力名 → 提供者模块 id
     provider: dict[str, str] = {}
+    # 能力名 → 全部提供者（发现第二个就记下来，不静默忽略）
+    multi_providers: dict[str, list[str]] = {}
+
+    def _record(cap: str, mid: str) -> None:
+        if cap in provider:
+            multi_providers.setdefault(cap, [provider[cap]]).append(mid)
+        else:
+            provider[cap] = mid
+
     for mid, (m, _p) in found.items():
         for cap in m.provides:
-            provider.setdefault(cap, mid)
+            _record(cap, mid)
     # ★ 第三方插件的 provides 也纳入（否则内置无法依赖第三方能力）
     for cap, mid in _scan_third_party_provides().items():
-        provider.setdefault(cap, mid)
+        _record(cap, mid)
+
+    # ★ 发现第二个提供者 ⇒ **记录并告警**，不许静默忽略。
+    #   旧实现是 `provider.setdefault(cap, mid)`：先到先得，
+    #   后提供者被**静默忽略**——这正是跨插件校验规则 13 自己的注释
+    #   批评的行为（「违反『不许静默失败』铁律」）。
+    #   新口径（2026-10-28）：多 Provider **不阻断启动**，
+    #   但**必须留痕**——它是「待裁决冲突」，
+    #   由包层用 `providerChoice` 裁决；没包裁决则该能力标 unavailable。
+    #   ⇒ 这里既不抛错（抛错等于让内核替包层做业务裁决），也不静默。
+    for cap, mids in sorted(multi_providers.items()):
+        log.warning(
+            "能力 %s 有多个提供者（%s）：已选 %s，其余待裁决。"
+            "如需固定选谁，请在包的 pack.json 的 providerChoice 中声明。",
+            cap,
+            ", ".join(sorted(set(mids))),
+            provider[cap],
+        )
 
     # 模块 → 其硬依赖所指向的模块（经「能力 → 提供者」映射；软依赖不入图）
     hard_edges: dict[str, set[str]] = {mid: set() for mid in found}
@@ -325,7 +420,7 @@ class DependencyStatus:
     missing: tuple[str, ...]
 
 
-def dependency_status(m: Manifest, available: Collection[str]) -> DependencyStatus:
+def dependency_status(m: Any, available: Collection[str]) -> DependencyStatus:
     """按软依赖声明 + 当前可用能力集合，判定模块依赖态。
 
     ★ 只判软依赖（`optionalDependencies`）：硬依赖缺失已由启动期 fail-fast 拦下，

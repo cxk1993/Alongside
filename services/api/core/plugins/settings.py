@@ -19,12 +19,38 @@ _SCHEMA_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _load_schema(info: Any) -> dict[str, Any] | None:
+    """取该插件的设置 Schema。**声明了却找不到 ⇒ 报错，不静默放行。**
+
+    ★ 为什么不能「找不到就当没有 schema」
+    ----------------------------------
+    「没有 schema」与「schema 找不到」是**两件事**：
+      · 没有 schema ⇒ 这个插件**没有设置面**，不校验，合理；
+      · schema 找不到 ⇒ manifest **声明了**要按它校验，而文件不在。
+    后者是**配置错误**，而静默放行的后果是：
+    「声明了要校验」变成了「不校验」——**看起来一切正常，
+    而所有设置都绕过了校验直接落库**。
+    ⇒ 实测踩过：18 个内置模块的 manifest 都写 `api/settings.schema.json`，
+      而文件在模块根（内置模块没有 api/ 子目录）⇒ 校验被静默跳过。
+      迁移字段有「双目录探测」兜住所以没出事，设置字段没有兜底——
+      **一个字段有兜底、另一个没有，就只坏一个**。
+
+    ⇒ 所以这里 **fail closed**：找不到就报错，
+      报错信息说清「哪个插件 · 声明的路径 · 期望在哪」。
+    """
     rel = info.manifest.get("settingsSchema")
     if not rel:
+        # ★ 声明为 null ⇒ 本插件没有设置面，不校验（这是**正常**状态）。
         return None
     path = info.directory / rel
     if not path.is_file():
-        return None
+        # ★ fail closed：不静默放行。放行 = 所有设置绕过校验直接落库，
+        #   而「看起来一切正常」——那正是当初 18 个内置模块的病。
+        raise ValidationError(
+            f"插件「{info.id}」的设置 Schema 找不到：声明 settingsSchema={rel!r}，"
+            f"但 {path} 不存在。声明了要按它校验、文件却不在 ⇒ "
+            "只能放行的话，所有设置都会绕过校验直接落库。"
+            "请把 Schema 放到该路径，或把 settingsSchema 改成 null（无设置面）。"
+        )
     if path.as_posix() in _SCHEMA_CACHE:
         return _SCHEMA_CACHE[path.as_posix()]
     schema = json.loads(path.read_text(encoding="utf-8"))

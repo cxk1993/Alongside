@@ -10,7 +10,28 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, Request
+
+
+def _scope_dependency(plugin_id: str) -> Any:
+    """造一个「写入数据访问作用域」的路由级依赖。
+
+    ★ 为什么放在**路由级**（`include_router(dependencies=[...])`）
+      而不是每个端点自己加：
+      一处挂载 ⇒ 全部端点受益。插件作者不需要知道这件事，
+      也不会有人漏写（漏写 = 该插件的请求没有边界）。
+      ★ 而「每个端点自己加依赖」正是最容易被漏的写法。
+
+    ★ 写进 `request.state`：`get_db` 从那里读作用域。
+      （不用 contextvar：实测它跨不过 anyio 的 context 切换。）
+
+    ★ 内核自己的路由不经过这里 ⇒ 无作用域 ⇒ 不受边界约束。
+    """
+
+    def _set_scope(request: Request) -> None:
+        request.state.db_scope = plugin_id
+
+    return _set_scope
 
 
 @runtime_checkable
@@ -44,7 +65,12 @@ class ModuleRegistry:
             raise RuntimeError(f"模块已挂载：{plugin_id}")
         before = len(self._app.routes)
         try:
-            self._app.include_router(router, prefix=prefix, tags=[plugin_id])
+            self._app.include_router(
+                router,
+                prefix=prefix,
+                tags=[plugin_id],
+                dependencies=[Depends(_scope_dependency(plugin_id))],
+            )
         except BaseException:
             # ★ ADR-0005（2026-10-03）：include_router 可能**部分写入**后才抛
             #   （prefix 冲突、依赖注入签名错误等）。若就此上抛，这些路由已进

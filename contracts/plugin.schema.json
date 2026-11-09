@@ -21,8 +21,20 @@
   "allOf": [
     {
       "description": "★ 路径 a：仅 container 型可省 api；其余 kind 必须声明 api。",
-      "if": { "properties": { "kind": { "not": { "const": "container" } } } },
-      "then": { "required": ["api"] }
+      "if": {
+        "properties": {
+          "kind": {
+            "not": {
+              "const": "container"
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "api"
+        ]
+      }
     }
   ],
   "properties": {
@@ -43,7 +55,12 @@
     },
     "kind": {
       "type": "string",
-      "enum": ["core", "builtin", "third-party", "container"],
+      "enum": [
+        "core",
+        "builtin",
+        "third-party",
+        "container"
+      ],
       "description": "core 不可禁用不可卸载；builtin 可禁用不可卸载；third-party 可禁用可卸载；container 为容器型模块（纯前端编排容器，如系统窗，可无 api 与 entry）。"
     },
     "minKernel": {
@@ -70,15 +87,36 @@
     "window": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["w", "h"],
+      "required": [
+        "w",
+        "h"
+      ],
       "properties": {
-        "w": { "type": "integer", "minimum": 240 },
-        "h": { "type": "integer", "minimum": 200 },
-        "minW": { "type": "integer", "minimum": 240 },
-        "minH": { "type": "integer", "minimum": 200 },
-        "singleton": { "type": "boolean" },
-        "x": { "type": "integer" },
-        "y": { "type": "integer" }
+        "w": {
+          "type": "integer",
+          "minimum": 240
+        },
+        "h": {
+          "type": "integer",
+          "minimum": 200
+        },
+        "minW": {
+          "type": "integer",
+          "minimum": 240
+        },
+        "minH": {
+          "type": "integer",
+          "minimum": 200
+        },
+        "singleton": {
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
       }
     },
     "entry": {
@@ -88,32 +126,52 @@
     "api": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["base"],
+      "required": [
+        "base"
+      ],
       "properties": {
         "base": {
           "type": "string",
           "pattern": "^/api/v1/[a-z][a-z0-9-]*$",
           "description": "路由前缀，必须等于 /api/v1/<id>。"
         },
-        "openapi": { "type": "string" },
-        "health": { "type": "string" },
+        "openapi": {
+          "type": "string"
+        },
+        "health": {
+          "type": "string"
+        },
         "tools": {
           "type": "object",
-          "additionalProperties": { "type": "string", "pattern": "^/" },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^/"
+          },
           "description": "ISSUE-008 方案 A：resource → 真实路由段 的显式映射（如 {\"entry\": \"/entries\"}）。键为 provides 倒数第二段；声明则 MCP 转发优先用它，未声明 resource 走机械「resource+s」推导。"
         }
       }
     },
     "tabs": {
       "type": "array",
-      "description": "★ 路径 a：容器型模块（kind=container）的页签声明。一次定稿，形状与前端 SystemApp（70c0702）对接面一致：{key,label,entry?}。entry=模块 id（该页懒加载对应 App）；无 entry 的页 =「后端模块 · 仅服务」薄壳语义。",
+      "description": "★ 路径 a：容器型模块（kind=container）的页签声明。一次定稿，形状与前端 SystemApp（70c0702）对接面一致：{key,label,entry?}。entry=模块 id（该页懒加载对应 App），该模块**同时被本容器吸收**（不再单独出底端栏按钮）；无 entry 的页 =「后端模块 · 仅服务」薄壳语义。",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["key", "label"],
+        "required": [
+          "key",
+          "label"
+        ],
         "properties": {
-          "key": { "type": "string", "minLength": 1, "description": "页签唯一键（容器内稳定标识）。" },
-          "label": { "type": "string", "minLength": 1, "description": "页签显示名。" },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "页签唯一键（容器内稳定标识）。"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "页签显示名。"
+          },
           "entry": {
             "type": "string",
             "description": "可选：该页关联的模块 id（懒加载对应 App）；省略则为「仅服务」薄壳页。"
@@ -121,20 +179,37 @@
         }
       }
     },
+    "absorbs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "可选：被本容器吸收、不再单独出现在底端栏的模块 id 列表。用于「本容器接管了某模块的入口」但该模块并无独立视图页的情况（如后端模块被更完整的容器取代）。声明了 tabs[].entry 的模块**不必**在此重复列出（entry 已隐含吸收）。"
+    },
     "provides": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$" },
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$"
+      },
       "description": "本插件对外提供的能力，格式 <id>.<名词>.<动作>（至少一段点分）。"
     },
     "requires": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$" },
-      "description": "本插件需要别人提供的能力；没写的能力调用会被拒。"
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$"
+      },
+      "description": "本插件需要别人提供的能力；没写的能力调用会被拒。⚠️ 字段名拼错（如 requiers）会被当作未声明，能力一律 403 —— 请用校验器确认。"
     },
     "optionalDependencies": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$" },
-      "description": "软依赖：缺了不阻塞启动，O1 挂 degraded+reason_code。与 requires 互斥（同一条目不得两处都写）。"
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$"
+      },
+      "description": "软依赖：缺了不阻塞启动，降级并记 reason_code。⚠️ 能力在时软依赖也算已授权（可直接调用）；但它不参与激活判定。与 requires 互斥。"
     },
     "slots": {
       "type": "array",
@@ -158,32 +233,50 @@
           "window.sidecar"
         ]
       },
-      "description": "本插件要挂到的扩展点（只能从已知 14 个里挑；desktop.dock-left/right 为 U3 桌面级侧栏，window.sidecar 为 E5 窗口内测栏，附着目标用 attachTo 声明）。"
+      "description": "本插件要挂到的扩展点（只能从已知 15 个里挑；desktop.dock-left/right 为 U3 桌面级侧栏，window.sidecar 为 E5 窗口内测栏，附着目标用 attachTo 声明）。"
     },
     "emits": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "本插件会发出的事件，格式 <id>.<名词>.<过去式>。"
     },
     "consumes": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "本插件会监听的事件。"
     },
     "permissions": {
       "oneOf": [
         {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "【旧格式，向后兼容】权限字符串数组，如 [\"db:own\"]。新插件请用对象格式。"
         },
         {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "filesystem": { "type": "boolean", "default": false, "description": "允许访问本地文件系统" },
-            "network": { "type": "boolean", "default": false, "description": "允许发起网络请求" },
-            "subprocess": { "type": "boolean", "default": false, "description": "允许创建子进程" }
+            "filesystem": {
+              "type": "boolean",
+              "default": false,
+              "description": "允许访问本地文件系统"
+            },
+            "network": {
+              "type": "boolean",
+              "default": false,
+              "description": "允许发起网络请求"
+            },
+            "subprocess": {
+              "type": "boolean",
+              "default": false,
+              "description": "允许创建子进程"
+            }
           },
           "required": [],
           "description": "【新格式】声明式权限：filesystem / network / subprocess，默认均为 false，需显式授权"
@@ -200,22 +293,326 @@
       "description": "声明式激活事件。缺省或含 startup:always = 启动即激活（向后兼容）；event:<topic> = 事件命中触发懒加载（精确匹配）；未命中则保持注册未激活。"
     },
     "migrations": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "自带迁移目录（相对插件根）。无表则写 null。"
     },
     "settingsSchema": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "设置 JSON Schema 路径；无设置则写 null。"
     },
     "lifecycle": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "onInstall": { "type": ["string", "null"] },
-        "onEnable": { "type": ["string", "null"] },
-        "onDisable": { "type": ["string", "null"] },
-        "onUninstall": { "type": ["string", "null"] }
-      }
+        "onInstall": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "onEnable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "onDisable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "onUninstall": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "description": "四个生命周期钩子（onInstall/onEnable/onDisable/onUninstall）。⚠️ 钩子抛异常是软失败：effect 已生效、不回滚，只写 last_error 供 readyz 目击。只有迁移失败或路由加载失败才触发补偿。★ 需要「要么全成、要么全不成」的初始化应放在**迁移**里（迁移失败会补偿），而不是放在 onInstall 钩子里（钩子失败不回滚）。"
+    },
+    "defines": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$"
+      },
+      "description": "本插件**定义**（声明所有权）的能力，格式 <id>.<名词>.<动作>。三角色的第三角色：defines（定义者）/ provides（实现者）/ requires（使用者）。一个能力最多一个 defines，可以有多个 provides（多 Provider 由配置选定）。兼容模式：若全系统没有任何插件写 defines，则 provides 隐含 defines；一旦有任一插件开始写 defines，整个系统切到严格模式（provides 必须有人 defines）。"
+    },
+    "deactivation": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "auto"
+      ],
+      "default": "manual",
+      "description": "依赖丧失时的处置策略：manual（默认）= 只有人为 disable 才停用；auto = requires 中任一能力被撤销时，内核自动把本插件转入 PAUSED。★ 注意：这不是插件自己写逻辑，而是内核在依赖变化时主动转移阶段；插件只声明希望被怎样对待。软依赖（optionalDependencies）永远只降级，不触发停用。"
+    },
+    "riskLevel": {
+      "type": "string",
+      "enum": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ],
+      "description": "风险分级。未声明时按 kind 推断：core→L3, builtin→L2, third-party→L2, container→L1。★ 推断值可以显式降低，但**不得显式升高**（升高无意义且降低有免审批的诱惑）。门禁：kind=third-party 声明 L0 → 启动失败（免审批权不能交给被审批方自己声明）。"
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sandbox": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "workspace-write",
+            "full"
+          ],
+          "default": "read-only",
+          "description": "沙箱等级。read-only = 只能写必要 sink（如 /dev/null）；workspace-write = 工作区根目录 + 显式声明的额外目录；full = 不限（绕过隔离）。★ 默认取最保守值：需要写的插件应显式声明，这是有意识的动作。约束：不得高于内核策略允许的上限。"
+        },
+        "approval": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "never"
+          ],
+          "default": "ask",
+          "description": "审批策略。ask = 需要人工确认；never = 确定性拒绝所有审批请求。★ 门禁：kind != core 且 approval=never → 启动失败。原因：never 会把插件锁死成永远不可用（可用性问题，不是安全问题），且报错而非自动修正，是为了让作者的语义误解暴露出来。"
+        }
+      },
+      "description": "执行约束（沙箱 + 审批）。未声明时按上面的默认值。"
+    },
+    "sideEffects": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "external": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否产生外部副作用（发消息、改第三方系统、发请求等）。"
+        },
+        "checkpoint": {
+          "type": "string",
+          "enum": [
+            "before-side-effect",
+            "none"
+          ],
+          "default": "none",
+          "description": "检查点策略。external=true 时**必须**为 before-side-effect，否则启动失败。检查点失败 → 阻止执行（不是记日志继续）：没有恢复依据却让操作发生 = 出事无法收拾。★ 崩溃恢复语义：中断的副作用以「未知结果」恢复，**禁止自动重试也禁止自动回滚**（两者都要求知道上次做没做成，而这个信息恰恰没有）。"
+        }
+      },
+      "description": "副作用声明。AI 动态改造场景的刚需：让「出事能恢复」成为可机器验证的前提。"
+    },
+    "track": {
+      "type": "string",
+      "enum": [
+        "persistent",
+        "ephemeral"
+      ],
+      "default": "persistent",
+      "description": "状态跟踪方式。persistent（默认）= 写配置，跨会话存在，只能由人或经审批的 AI 创建；ephemeral = 仅进程内，重启即消失，AI 可直接创建。★ ephemeral 的约束：不得声明 migrations（会留下无人管理的残留表）、不得 kind=core、进程退出前必须自动清理。有价值的数据必须显式「提升」为 persistent，不能自动发生。"
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "builtin",
+            "local",
+            "remote"
+          ],
+          "description": "来源：builtin（随系统发布）/ local（本地开发）/ remote（远程拉取）。"
+        },
+        "signed": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否已签名。signed=true 但缺 signature → 启动失败。"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^sha256:.+$",
+          "description": "签名值。signed=true 时必填。"
+        },
+        "installedBy": {
+          "type": "string",
+          "pattern": "^(human\\.user|agent\\.[a-z0-9-]+)$",
+          "description": "安装者。human.user = 人装的；agent.<id> = AI 装的。★ 必填，缺失则启动失败（无法审计）。为什么要区分人/AI：人装的能追溯到具体的人；AI 装的还要额外考虑「这个 AI 当时被允许做这件事吗」。混在一个字段里事后分不清。"
+        }
+      },
+      "description": "来源与安装者。★ 为什么必填：已安装的插件代码在宿主进程内运行，**不受沙箱限制**——插件一旦装进来就和内核同权，沙箱管不了已加载进内存的代码。所以「谁装的、有没有签名、来自哪里」是现阶段唯一能给的信任信号。"
+    },
+    "concurrency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "optimisticLock": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否启用乐观锁（带版本号写，避免后写覆盖先写的丢失更新）。默认开；不许为 false，除非 exclusive=true（独占就不需要乐观锁）。"
+        },
+        "exclusive": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否独占。声明了 migrations 时**必须**为 true（独占迁移，不许并发跑）。"
+        },
+        "parallelSafe": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "可并发执行的操作白名单。**只能列只读操作**——出现 write / delete / patch → 启动失败。★ 为什么只给只读：写操作即使作用于不同数据也可能有隐式依赖（如都改同一张表的行数统计），「可并发」的前提是「互不影响」。"
+        }
+      },
+      "description": "并发策略。多个 AI 同时改同一插件配置时的丢失更新防护。"
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "type": "string",
+          "description": "严格未来的绝对时点（带显式时区），如 2026-11-01T09:00:00+08:00。"
+        },
+        "after_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "相对延迟（正安全整数秒数）。★ 不支持原地更新（更新只替换名称/指令/时间，保留 id 与记录）。"
+        },
+        "every_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "description": "固定间隔，最小 60 秒，初始对齐创建时间。★ every_seconds:86400 **不能**替代 daily——固定间隔对齐创建时刻，daily 对齐墙上时间，是两种语义。"
+        },
+        "daily": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "time",
+            "timeZone"
+          ],
+          "properties": {
+            "time": {
+              "type": "string",
+              "pattern": "^\\d{2}:\\d{2}:\\d{2}$"
+            },
+            "timeZone": {
+              "type": "string",
+              "description": "IANA 时区名，如 Asia/Shanghai。"
+            }
+          },
+          "description": "每日按本地钟表时间。"
+        },
+        "weekly": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "time",
+            "timeZone",
+            "weekdays"
+          ],
+          "properties": {
+            "time": {
+              "type": "string",
+              "pattern": "^\\d{2}:\\d{2}:\\d{2}$"
+            },
+            "timeZone": {
+              "type": "string"
+            },
+            "weekdays": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 7
+              },
+              "description": "ISO 星期集合（周一=1，周日=7）。"
+            }
+          },
+          "description": "每周按本地钟表时间 + 星期集合。"
+        },
+        "cron": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expression",
+            "timeZone"
+          ],
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "五字段 Vixie cron 表达式。"
+            },
+            "timeZone": {
+              "type": "string"
+            }
+          },
+          "description": "按 cron 表达式。"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "任务标题（去首尾空白后非空且 ≤120 字符）。"
+        },
+        "catchUp": {
+          "type": "string",
+          "enum": [
+            "latest-only",
+            "all"
+          ],
+          "default": "latest-only",
+          "description": "重启后错过时点的补发策略。默认 latest-only（只补最近一次）——停机 3 天的每日任务补 3 次会刷屏。"
+        }
+      },
+      "description": "定时任务声明。★ 六个选择器（at/after_seconds/every_seconds/daily/weekly/cron）**必须只给一个**，给多个 → 启动失败。★ 删除语义（必须显式）：删除定时任务时，连带移除任务行及其已保存的发送记录。破坏性行为不能靠「实现时自然如此」——协议要把隐式行为变成显式规定。"
+    },
+    "outputPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxInlineTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "超过此 token 阈值触发溢出。默认 null（不溢出）。"
+        },
+        "spillTo": {
+          "type": "string",
+          "enum": [
+            "own"
+          ],
+          "description": "溢出内容存到哪：own = 插件自己的临时目录。"
+        },
+        "onStoreFailure": {
+          "type": "string",
+          "enum": [
+            "keep-raw"
+          ],
+          "description": "存储失败时的行为。**强制 keep-raw，不给选项**——存不下就把结果丢掉是静默数据损失，违反「不允许静默失败」铁律。"
+        }
+      },
+      "description": "大输出处理。★ 做法：在模型上下文之外保存全文，返回定位信息与取回指引（既省 token 又防超限）。溢出文件在插件卸载时清理（属 effect）。"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "扩展位。放行不报不拒。"
+    }
+  },
+  "patternProperties": {
+    "^x_": {
+      "description": "扩展位：x_ 前缀字段一律放行。"
     }
   }
 }

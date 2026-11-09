@@ -1,3 +1,4 @@
+# ── 三层校验的串接点 ──
 """插件发现：扫描内置(services/api/modules/*) + 第三方(plugins/*) 的 manifest（总纲 §1.3）。
 
 ★ 加载器对两者一视同仁——除了 uninstall 只对 third-party 开放（见 manager）。
@@ -22,6 +23,7 @@ from typing import Any
 
 from core.errors import ManifestError
 from core.manifest import load_router
+from core.plugins.crosscheck import crosscheck_manifests
 from core.plugins.validate import validate_manifest
 
 _API_ROOT = Path(__file__).resolve().parents[2]  # services/api/
@@ -143,15 +145,32 @@ def discover_plugins(
     modules_dir: Path | None = None,
     plugins_dir: Path | None = None,
 ) -> DiscoveryResult:
-    """扫描内置与第三方插件，返回通过校验的插件列表 + 失败清单。"""
+    """扫描内置与第三方插件，返回通过校验的插件列表 + 失败清单。
+
+    ★ 校验三层（协议报告 §19）：
+      ① 结构校验   —— core/plugins/validate.py（单插件形状）
+      ② 跨字段一致性 —— 同上（单插件内部矛盾）
+      ③ 跨插件一致性 —— core/plugins/crosscheck.py（需全量插件，故在此处统一跑）
+    ★ ③ 必须等全量扫描结束才能判：「这个能力有没有人 provides / defines」
+      的答案可能出现在扫描顺序的后面。
+    """
     root = Path(modules_dir) if modules_dir else _DEFAULT_MODULES_DIR
     plug = Path(plugins_dir) if plugins_dir else _DEFAULT_PLUGINS_DIR
     builtins, b_errs = _scan(root, "builtin")
     third_party, t_errs = _scan(plug, "third-party")
-    return DiscoveryResult(
-        plugins=builtins + third_party,
-        errors=b_errs + t_errs,
-    )
+    plugins = builtins + third_party
+
+    # ── ③ 跨插件一致性（规则 12 / 13）──
+    #   ★ 违反时不丢弃任何插件：能力重复/无定义是**系统级**问题，
+    #   把出错的那个插件单独剔掉会让系统静默地少一块能力，比报错更糟。
+    if plugins:
+        violations = crosscheck_manifests([p.manifest for p in plugins])
+        if violations:
+            raise ManifestError(
+                "跨插件一致性校验失败：\n  - " + "\n  - ".join(violations)
+            )
+
+    return DiscoveryResult(plugins=plugins, errors=b_errs + t_errs)
 
 
 def load_python_module_from_file(path: Path, module_name: str) -> Any:
@@ -161,7 +180,16 @@ def load_python_module_from_file(path: Path, module_name: str) -> Any:
         raise RuntimeError(f"无法加载插件模块：{path}")
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception as exc:  # noqa: BLE001 — 插件自己的代码出错，一律归成「插件加载失败」
+        # ★ 为什么必须包一层：插件代码抛什么（ModuleNotFoundError、SyntaxError、
+        #   业务异常……）内核管不了，但**对外必须是一个统一的应用级错误**。
+        #   否则调用方要区分「插件坏了」和「内核坏了」，而后者根本不是。
+        #   原始异常类型与信息都带在消息里，不丢诊断线索。
+        raise ManifestError(
+            f"插件模块加载失败：{path}（{type(exc).__name__}: {exc}）"
+        ) from exc
     return mod
 
 

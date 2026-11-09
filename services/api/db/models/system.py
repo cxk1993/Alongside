@@ -60,6 +60,15 @@ class PluginState(TimestampMixin, table=True):
     """plugin_state · 插件注册状态（T14 用）。
 
     ★ id = 插件 id（不是随机 UUID）：注册表与运行时分离，是热插拔的前提。
+
+    ★ 阶段五列（Phase Machine，2026-11 内核全量替换）：
+      `phase` 是状态的唯一真相，`enabled` 保留下来做存量读法
+      （前端 / MCP 工具面 / 既有测试都在读它，删列是破坏性的）。
+      这五列的**唯一写入方**是 `core.plugins.state_store.apply_transition()`
+      （它保证「改阶段 + 写审计」同事务）；db 层只声明存储形状，
+      **不 import core**（分层），所以按字符串存、长度够枚举值即可。
+      取值域定义在 `core.plugins.phase` 的 `Phase` / `PhaseReason`
+      （`PENDING`…`TERMINATED` / `manual`…`runtime-error`）。
     """
 
     __tablename__ = "plugin_state"
@@ -71,6 +80,25 @@ class PluginState(TimestampMixin, table=True):
     installed_at: datetime = Field(default_factory=utcnow, sa_type=TimestampTZ)
     last_error: str | None = Field(default=None, sa_column=Column(SAText))
     granted_permissions: str = Field(default="[]", sa_column=Column(SAText))
+
+    # ── 阶段机五列 ──────────────────────────────────────────────────
+    #: 当前阶段（Phase 的裸值：PENDING/LOADING/ACTIVE/PAUSED/FAILED/
+    #: UNLOADING/TERMINATED）。默认 PENDING =「已发现、等前置条件」：
+    #: ★ 存量行升级后一律落在这里——它**是合法阶段**，不会把老行判成非法值；
+    #:   也不假装它们已经是 ACTIVE（那会让启动对账跳过重载）。
+    phase: str = Field(default="PENDING", max_length=16, nullable=False)
+    #: 最近一次阶段变化**之前**的阶段（转移的起点，不是「退出时的状态」）。
+    #: 存量行为 NULL = 未知：不伪造起点，否则对账会读出一个没发生过的转移。
+    last_known_phase: str | None = Field(default=None, max_length=16, nullable=True)
+    #: 变化原因（PhaseReason 的裸值：manual/dependency-lost/…）。
+    phase_reason: str | None = Field(default=None, max_length=32, nullable=True)
+    #: 最近一次阶段变化的时间（UTC 存储、本地读出——用 TimestampTZ，别用 naive）。
+    #: 存量行为 NULL = 从未记录过阶段变化。
+    phase_changed_at: datetime | None = Field(default=None, sa_type=TimestampTZ, nullable=True)
+    #: 依赖满足性的上次判定结果（依赖通知用，与 phase 同一行）。
+    #: NULL = 从未判定过（存量行），不是 False——两者在「依赖刚丧失」判定里
+    #: 语义不同，不能合并。
+    was_satisfied: bool | None = Field(default=None, nullable=True)
 
 
 class PluginSetting(PkMixin, TimestampMixin, table=True):

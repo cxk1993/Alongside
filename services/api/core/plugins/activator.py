@@ -18,7 +18,8 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from core.logging import get_logger
 from core.plugins.discover import PluginInfo, mount_plugin

@@ -56,26 +56,33 @@ async def _fetch_one(
     url: str,
     headers: dict[str, str],
     timeout: float,
+    label: str = "",
 ) -> dict[str, Any]:
     """转发一家插件的 today-summary（模块级，便于用 httpx.MockTransport 单测注入）。
 
     状态语义：404 = not-implemented（合法）· 5xx/网络错 = unavailable · 200 = ok（data 原样透传）。
     ★ R-1：这里**不解析** data 的业务字段，只包装状态 —— 内核只许转发，不许解释。
     """
+    # ★ label 只在**有值时**才出现在响应里 —— 响应体不塞空字段。
+    #   前端拿不到 label 时会回退到模块 manifest 里的 name，行为一致。
+    base: dict[str, Any] = {"id": pid}
+    if label:
+        base["label"] = label
+
     try:
         r = await client.get(url, headers=headers, timeout=timeout)
     except Exception:  # noqa: BLE001 — 网络/超时一律 unavailable（缺一不塌）
-        return {"id": pid, "status": "unavailable"}
+        return {**base, "status": "unavailable"}
     if r.status_code == 404:
-        return {"id": pid, "status": "not-implemented"}
+        return {**base, "status": "not-implemented"}
     if r.status_code >= 500:
-        return {"id": pid, "status": "unavailable"}
+        return {**base, "status": "unavailable"}
     if r.status_code == 200:
         try:
-            return {"id": pid, "status": "ok", "data": r.json()}
+            return {**base, "status": "ok", "data": r.json()}
         except ValueError:
-            return {"id": pid, "status": "unavailable"}
-    return {"id": pid, "status": "unavailable"}
+            return {**base, "status": "unavailable"}
+    return {**base, "status": "unavailable"}
 
 # 默认模块目录：services/api/modules
 _DEFAULT_MODULES_DIR = Path(__file__).resolve().parents[1] / "modules"
@@ -134,7 +141,12 @@ def create_app(
         # 对账完成后挂激活器的事件监听、退出时摘除——
         # 迁移对账时点不动（硬约束 3），激活器只搭 lifespan 的顺风车。
         lifespan=make_startup_lifespan(
-            [(m.id, d) for m, d in discovered],
+            # ★ 带 manifest：迁移目录**按 manifest 声明解析**
+            #   （协议 §4.1「manifest 是唯一契约」）。
+            #   早先这里只传 (id, 目录)，于是启动对账这条路径上
+            #   **读不到声明** ⇒ 「按声明解析」只在第三方安装路径上成立，
+            #   而启动对账恰恰是**唯一**会跑内置插件迁移的路径。
+            [(m.id, d, m.model_dump() if hasattr(m, "model_dump") else dict(m)) for m, d in discovered],
             on_started=lambda: event_bus.add_listener(activator_listener),
             on_stopping=lambda: event_bus.remove_listener(activator_listener),
         ),
@@ -284,10 +296,13 @@ def create_app(
     # ★ 鉴权：聚合的是用户数据，端点本身必须先过 get_current_user（不能成为新的裸奔口）。
     # ★ 自查修正（2026-09-24 深夜 · 主人「严格检验」轮）：原硬编码四家违反
     #   「一切皆插件」ADR-0005 —— 新插件加聚合源要改内核代码。
-    #   改为**从 manifest 动态发现**：插件在 provides 声明 x.summary.today
+    # 改为**从 manifest 动态发现**：插件在 provides 声明 x.summary.today
     #   即自动成为聚合源，零内核改动（Manifest 模型 D′ 后字段可见）。
-    _summary_providers: tuple[tuple[str, str], ...] = tuple(
-        (m.id, f"/api/v1/{m.id}/today-summary")
+    # ★ 带上模块显示名（name）：前端要渲染「日程 / 待办 / 日记」这类分区标题，
+    #   若让前端自己维护一份 id→名称的对照表，内核与前端就会各认识一遍业务，
+    #   「内核洁癖」也就破了。名称随聚合结果一起下发，前端只管渲染。
+    _summary_providers: tuple[tuple[str, str, str], ...] = tuple(
+        (m.id, f"/api/v1/{m.id}/today-summary", m.name)
         for m, _ in discovered
         if "x.summary.today" in (m.provides or ())
     )
@@ -318,9 +333,9 @@ def create_app(
                 await asyncio.gather(
                     *(
                         _fetch_one(
-                            client, pid, base + path, headers, _SUMMARY_TIMEOUT
+                            client, pid, base + path, headers, _SUMMARY_TIMEOUT, label
                         )
-                        for pid, path in _summary_providers
+                        for pid, path, label in _summary_providers
                     )
                 )
             )
@@ -370,10 +385,10 @@ def create_app(
     #   - 从未启用过（无记录 / enabled=False）的**不动** —— 保持"可禁用"语义；
     #   - 单个插件失败**只记目击、不影响其它**（缓行纪律，与 activator 一致）。
     try:
-        from core.deps import db_session as _db_session
+        from core.deps import db_session as _db_session  # noqa: I001
         from core.plugins.discover import discover_plugins as _discover_plugins
-        from core.plugins.manager import PluginManager as _PluginManager
         from core.plugins.manager import (
+            PluginManager as _PluginManager,
             note_recovery_attempt as _note_attempt,
             note_recovery_result as _note_result,
         )
@@ -386,6 +401,9 @@ def create_app(
         _skipped: list[str] = []
         _failed: list[tuple[str, str]] = []
         _backed_off: list[str] = []
+        # ★ Phase Machine 对账的两个新增分类
+        _needs_human: list[str] = []
+        _compensated: list[str] = []
         for _info in _res.plugins:
             if _info.source != "third-party":
                 continue
@@ -396,6 +414,7 @@ def create_app(
                         _st = _db.get(_PluginState, _info.id)
                         _enabled = bool(_st.enabled) if _st is not None else False
                         _prev_error = _st.last_error if _st is not None else None
+                        _phase = _st.phase if _st is not None else None
                 except Exception:
                     # ★ 表不存在（如测试用的临时库）→ 视为"未启用"，**静默跳过**
                     #（不刷 warning 噪音；这是"没记录"的正常情形之一）
@@ -410,6 +429,37 @@ def create_app(
                 #   旧行为只读 enabled、不看 last_error → 失败插件每轮重启重试、
                 #   每轮无声重复半提交（"永远不自愈"）。现在把残留错误显式纳入
                 #   对账，运维一眼可见「它上次就是坏的」。
+                # ★ Phase Machine 的启动对账（技术报告 §3.6 / §3.9.3）：
+                #   遗留 FAILED 的插件**不自动重试**——
+                #   加载失败的原因绝大多数是确定性的（kernelApi 不兼容、迁移脚本
+                #   有语法错误、依赖的能力无人提供），重试一百次结果相同，
+                #   只会刷满日志、拖长启动；而每次重试都会走一遍
+                #   「部分提交 → 失败」的流程，往数据库里留下新的残留。
+                #
+                #   ★ 这一条**改变了既有行为**（旧实现是「有 last_error 也重试」）：
+                #     旧行为让失败插件每轮重启重试、每轮无声重复半提交
+                #     （ADR-0005 记的「永远不自愈」病灶）。
+                if _phase == "FAILED":
+                    log.error(
+                        "第三方插件上次加载失败（phase=FAILED），本次不自动重试，"
+                        "需人工确认",
+                        extra={"module": _info.id, "last_error": _prev_error},
+                    )
+                    _needs_human.append(_info.id)
+                    continue
+                if _phase == "LOADING":
+                    # ★ 遗留 LOADING：上次崩在加载中途，可能留下部分 effect。
+                    #   补偿**只摘路由**（进程内状态，重启后本就不存在）；
+                    #   **不回滚迁移**——台账不记「执行到哪一步」，
+                    #   差分回滚可能删掉带历史数据的表。
+                    #   「回到 PENDING 再加载」本身就是安全的：
+                    #   迁移台账幂等，已执行的版本会跳过。
+                    log.warning(
+                        "第三方插件上次崩在加载中途（phase=LOADING），"
+                        "先摘残留路由再重新加载",
+                        extra={"module": _info.id},
+                    )
+                    _compensated.append(_info.id)
                 if _prev_error:
                     log.warning(
                         "第三方插件上次启用留有错误，本次将重试",
@@ -456,6 +506,19 @@ def create_app(
                 len(_failed),
                 "；".join(f"{pid}（{err}）" for pid, err in _failed),
             )
+        # ★ Phase Machine：需人工确认的必须点名（不点名就会静默地一直不工作）。
+        if _needs_human:
+            log.error(
+                "第三方插件启动对账：%d 个上次加载失败，本轮未重试（需人工确认）—— %s",
+                len(_needs_human),
+                "、".join(_needs_human),
+            )
+        if _compensated:
+            log.warning(
+                "第三方插件启动对账：%d 个上次崩在加载中途，已摘残留路由后重载 —— %s",
+                len(_compensated),
+                "、".join(_compensated),
+            )
         # ★ ADR-0005：退避跳过也必须点名（这是最容易被误读成"正常"的状态）。
         if _backed_off:
             log.error(
@@ -465,5 +528,26 @@ def create_app(
             )
     except Exception as _exc:  # noqa: BLE001 —— 整段兜底，绝不让它拖垮启动
         log.warning("第三方插件恢复流程整体跳过：%s", _exc)
+
+    # ── ★ 整合包（包层）装配 ──────────────────────────────
+    # 放在第三方插件恢复**之后**：包里的成员是插件，插件得先被发现、
+    # 恢复到位，装配器才能判断「这个成员在不在、版本对不对」。
+    #
+    # ★ 内核在这里只做一件事：把 app 递过去、把结果接住。
+    #   逻辑全在 `packs/boot.py`（包层）——内核认识包层的**这一个动作**，
+    #   不认识包层的内部结构，**也不认识包层有什么配置项**：
+    #   「要不要装 / 什么时候装 / 失败怎么办」全是产品判断，
+    #   由包层自己读 .env 决定（PACKS_ENABLED / PACKS_AUTOLOAD / PACKS_FAILURE_MODE）。
+    #
+    # ★ 为什么内核连「要不要装」都不判断：
+    #   写了 `if settings.packs_enabled` 就等于让内核知道「包层有开关」，
+    #   边界就开始漏。⇒ 内核无条件调一次，没开的场合包层返回空列表。
+    try:
+        from packs.boot import boot_packs  # noqa: PLC0415
+
+        app.state.pack_reports = boot_packs(app)
+    except Exception as _exc:  # noqa: BLE001 —— 包层是增强，不是前提
+        log.warning("整合包装配流程整体跳过：%s", _exc)
+        app.state.pack_reports = []
 
     return app

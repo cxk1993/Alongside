@@ -42,6 +42,11 @@
 | plugin_state | installed_at | datetime | 安装时刻 UTC |
 | plugin_state | last_error | text | 最近一次错误（可空） |
 | plugin_state | granted_permissions | text | 已授权权限 JSON 数组（对应 manifest.permissions） |
+| plugin_state | phase | str(16) | 当前阶段（Phase 枚举裸值：PENDING/LOADING/ACTIVE/PAUSED/FAILED/UNLOADING/TERMINATED），默认 PENDING |
+| plugin_state | last_known_phase | str(16) | 最近一次阶段变化**之前**的阶段（转移起点）；NULL = 未知 |
+| plugin_state | phase_reason | str(32) | 变化原因（PhaseReason 裸值：manual/dependency-lost/…）；NULL = 从未记录 |
+| plugin_state | phase_changed_at | datetime | 最近一次阶段变化时刻（UTC）；NULL = 从未变化 |
+| plugin_state | was_satisfied | bool | 依赖满足性上次判定结果；NULL = 从未判定（≠ False） |
 | plugin_setting | id | str pk | UUID hex |
 | plugin_setting | created_at | datetime | UTC，索引 |
 | plugin_setting | updated_at | datetime | UTC |

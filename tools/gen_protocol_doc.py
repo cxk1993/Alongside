@@ -39,9 +39,38 @@ _TOOLS_DIR = str(Path(__file__).resolve().parent)
 if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 
-from paths import CONTRACTS, rel  # noqa: E402
+from paths import CONTRACTS, REPO, rel  # noqa: E402
 
 SCHEMA_PATH = CONTRACTS / "plugin.schema.json"
+
+#: ★ 协议代码本体：逐字内嵌的九份文件（顺序 = 阅读顺序）。
+#:
+#: 为什么内嵌而不是只给路径：这份文档的读者是**组内技术部**，
+#: 要求是「拿到本文档，不打开仓库就能读完整份实现」。
+#: 只列路径的文档会随着仓库演进而失真，而逐字嵌入的内容**由脚本从真源码取**，
+#: 改了实现不重跑生成器，`--check` 就会报红——文档与代码不可能分叉。
+CODE_FILES: tuple[tuple[str, str, str], ...] = (
+    ("① 契约本体", "contracts/plugin.schema.json", "json"),
+    ("② 运行时数据模型", "services/api/core/manifest.py", "python"),
+    ("③ 校验器第一层（结构）+ 第二层（跨字段）", "services/api/core/plugins/validate.py", "python"),
+    ("④ 校验器第三层（跨插件一致性）", "services/api/core/plugins/crosscheck.py", "python"),
+    ("⑤ 接入点（发现与挂载）", "services/api/core/plugins/discover.py", "python"),
+    ("⑥ 门禁测试网", "services/api/tests_protocol/test_protocol_gates.py", "python"),
+    ("⑦ 校验器的外部裁判", "tools/crosscheck_validator.py", "python"),
+    ("⑧ 调研对齐核查器", "tools/check_research_alignment.py", "python"),
+    ("⑨ 质量门禁的自检测试", "services/api/tests_protocol/test_protocol_quality_gates.py", "python"),
+)
+
+
+def _read_lf(rel_path: str) -> str:
+    """读仓库内文件并归一为 LF（嵌入文档的代码块不该带 CR）。"""
+    raw = (REPO / rel_path).read_text(encoding="utf-8")
+    return raw.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
+
+
+def _fence_for(body: str) -> str:
+    """代码里含 ``` 时用四反引号包，避免提前闭合。"""
+    return "````" if "```" in body else "```"
 
 #: 字段分组（**阅读顺序**，不是判据）。顺序写死 ⇒ 输出确定。
 #: 未列出的字段会进「未分组」一节，不会被丢掉。
@@ -319,20 +348,21 @@ def render() -> str:
     out: list[str] = []
     add = out.append
 
-    add("<!-- 本文件由 tools/gen_protocol_doc.py 从真实 schema 生成，请勿手改。 -->")
+    add("<!-- 本文件由 tools/gen_protocol_doc.py 从真实 schema 与真源码生成，请勿手改。 -->")
     add("<!-- 改协议请改 contracts/plugin.schema.json，然后重跑生成脚本。 -->")
     add("")
-    add("# Alongside 插件协议 · 契约")
+    add("# Alongside 插件协议 · 契约 + 代码本体")
     add("")
-    add("> **本文档是契约本身。**")
+    add("> **本文档是协议本身。**")
     add(">")
-    add(f"> 真相源：`{rel(SCHEMA_PATH)}`（{schema_lines} 行，{len(props)} 个顶层字段）")
+    add(f"> 契约真相源：`{rel(SCHEMA_PATH)}`（{schema_lines} 行，{len(props)} 个顶层字段）")
+    add("> 代码真相源：§5 逐字内嵌的九份文件（由脚本从真源码取，不手抄）")
     add(">")
     add("> 协议的**语义与规则**在《Alongside 插件协议技术报告 v1.1》里；")
-    add("> 执行体（`validate.py` / `crosscheck.py`）在《Alongside 插件协议代码》里；")
-    add("> 本文档只回答一件事：**契约现在到底规定了哪些字段、哪些必填**。")
+    add("> 本文档回答两件事：**契约规定了哪些字段**（§1–§4）与")
+    add("> **协议在代码里长什么样**（§5，含校验器、接入点、门禁与外部裁判）。")
     add(">")
-    add("> 文档与 schema 冲突时，**以 schema 为准**，并重跑本脚本。")
+    add("> 文档与 schema / 源码冲突时，**以代码为准**，并重跑本脚本。")
     add(">")
     add("> ★ 本文档**不写生成时间**：时间戳会让同一份 schema 生成出不同字节，")
     add("> `--check` 就永远对不上。字段数、必填数全部**实数**，不写死。")
@@ -428,18 +458,29 @@ def render() -> str:
     add("````")
     add("")
 
-    # ── 5 · 契约原文 ──
+    # ── 5 · 协议代码本体（九份逐字）──
     add("---")
     add("")
-    add("## 5 · 契约原文")
+    add("## 5 · 协议代码本体")
     add("")
-    add(f"`{rel(SCHEMA_PATH)}` 逐字嵌入（{schema_lines} 行）。")
-    add("与上文任何表格冲突时，**以这段原文为准**。")
+    add("本节是**协议本身**：九份文件逐字内嵌，内容由脚本从真源码取。")
+    add("技术部拿到这份文档，不需要另外打开仓库，就能读到协议从契约到门禁的全部实现。")
     add("")
-    add("````json")
-    add(raw.rstrip("\n"))
-    add("````")
+    add("| # | 文件 | 角色 |")
+    add("|:--:|---|---|")
+    for idx, (role, rel_path, _lang) in enumerate(CODE_FILES, start=1):
+        body = _read_lf(rel_path)
+        add(f"| {idx} | `{rel(REPO / rel_path)}`（{len(body.splitlines())} 行） | {role} |")
     add("")
+    for idx, (role, rel_path, lang) in enumerate(CODE_FILES, start=1):
+        body = _read_lf(rel_path)
+        add(f"### 5.{idx} {role}：`{rel(REPO / rel_path)}`（{len(body.splitlines())} 行）")
+        add("")
+        fence = _fence_for(body)
+        add(f"{fence}{lang}")
+        add(body)
+        add(fence)
+        add("")
     add("---")
     add("")
     add("## 6 · 生成信息")

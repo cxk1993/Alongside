@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -46,42 +47,51 @@ def _load(path: Path, name: str):
 # ══════════════════════════════════════════════════════════════
 
 
-def test_crosscheck_catches_injected_bug() -> None:
+def test_crosscheck_catches_injected_bug(tmp_path: Path) -> None:
     """注入一个明显 bug，交叉验证必须报出差异。
 
     ★ 这是「门禁有效」的唯一硬证据。
       如果注入 bug 后门禁仍然报「零差异」，
       那它就抓不到任何 bug——它的「全绿」毫无意义。
+
+    ★ 注入写在**沙箱副本**上：早先直接改写仓库里的 `validate.py`，进程一旦
+      被打断（休眠/超时/kill）就留下注入残留——历史上真的留下过
+      `if "enum" in schema and False:` 与 `if field in value:` 两处，
+      线上校验逻辑被静默反转。与 `crosscheck_validator --selfcheck` 同一条纪律：
+      **写操作的测试一律进沙箱，真源码一个字节都不动。**
     """
     cross = _load(CROSSCHECK, "_cc")
     original = VALIDATE.read_text(encoding="utf-8")
-    try:
-        # 注入：把 enum 校验整个废掉
-        mutated = original.replace(
-            'if "enum" in schema and value not in schema["enum"]:',
-            'if "enum" in schema and False:',
-            1,
-        )
-        assert mutated != original, "注入锚点不存在（源码变了？）"
-        VALIDATE.write_text(mutated, encoding="utf-8")
+    # 注入：把 enum 校验整个废掉
+    mutated = original.replace(
+        'if "enum" in schema and value not in schema["enum"]:',
+        'if "enum" in schema and False:',
+        1,
+    )
+    assert mutated != original, "注入锚点不存在（源码变了？）"
 
-        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-        v = cross.load_our_validator()
+    # 沙箱要镜像真源码的目录深度：validate.py 用 parents[4] 定位 contracts/
+    sandbox = tmp_path / "services" / "api" / "core" / "plugins" / "validate_sandbox.py"
+    sandbox.parent.mkdir(parents=True)
+    (tmp_path / "contracts").mkdir(parents=True)
+    shutil.copyfile(SCHEMA, tmp_path / "contracts" / "plugin.schema.json")
+    sandbox.write_text(mutated, encoding="utf-8", newline="\n")
 
-        # 独立构造一个「enum 违规」的 manifest
-        m = cross.base_manifest()
-        m["kind"] = "totally-not-a-valid-kind"
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    v = cross.load_our_validator(sandbox)
 
-        structure_ok, _ = cross.ours_layers(v, m)
-        std_ok = cross.standard_says_ok(schema, m)
+    # 独立构造一个「enum 违规」的 manifest
+    m = cross.base_manifest()
+    m["kind"] = "totally-not-a-valid-kind"
 
-        assert std_ok is False, "标准校验器应拒绝非法 enum"
-        assert structure_ok is True, (
-            "注入 bug 后自研校验器应放行——正是要抓的漏网之鱼"
-        )
-        assert structure_ok != std_ok, "两边结论必须出现差异，交叉验证才有得报"
-    finally:
-        VALIDATE.write_text(original, encoding="utf-8")
+    structure_ok, _ = cross.ours_layers(v, m)
+    std_ok = cross.standard_says_ok(schema, m)
+
+    assert std_ok is False, "标准校验器应拒绝非法 enum"
+    assert structure_ok is True, (
+        "注入 bug 后自研校验器应放行——正是要抓的漏网之鱼"
+    )
+    assert structure_ok != std_ok, "两边结论必须出现差异，交叉验证才有得报"
 
 
 def test_crosscheck_clean_code_has_no_dangerous_diff() -> None:
@@ -127,36 +137,38 @@ def test_crosscheck_selfcheck_passes() -> None:
 # ══════════════════════════════════════════════════════════════
 
 
-def test_alignment_detects_missing_field() -> None:
+def test_alignment_detects_missing_field(tmp_path: Path, monkeypatch: Any) -> None:
     """把 Schema 里的字段删掉，对齐核查必须报缺失。
 
     ★ 同样是「门禁有效」的硬证据。
       对齐核查如果对字段缺失无感，那它报「24/24 全覆盖」是假的。
+
+    ★ 同样进沙箱：早先直接删仓库里的 `contracts/plugin.schema.json` 再写回，
+      中断即留下「字段被删掉的契约」——那比测试红严重得多。
+      这里改成**临时 schema + monkeypatch 模块常量**。
     """
     align = _load(ALIGNMENT, "_al")
-    original = SCHEMA.read_text(encoding="utf-8")
-    try:
-        schema = json.loads(original)
-        # 删掉一个对齐表里要求存在的字段
-        victim = "defines"
-        assert victim in schema["properties"], f"字段 {victim} 不存在，换一个"
-        del schema["properties"][victim]
-        SCHEMA.write_text(
-            json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    # 删掉一个对齐表里要求存在的字段
+    victim = "defines"
+    assert victim in schema["properties"], f"字段 {victim} 不存在，换一个"
+    del schema["properties"][victim]
+    tmp_schema = tmp_path / "plugin.schema.json"
+    tmp_schema.write_text(
+        json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n"
+    )
+    monkeypatch.setattr(align, "SCHEMA_PATH", tmp_schema)
 
-        results = align.check()
-        defines_result = next(
-            r for r in results if r["mechanism"].startswith("能力缝三角色：Service Definition")
-        )
-        assert defines_result["status"] != "✓", (
-            f"删掉 {victim} 后仍报「协议侧已完备」★ 对齐核查失效"
-        )
-        assert victim in defines_result["fields_miss"], (
-            f"应把 {victim} 报为缺字段，实际：{defines_result['fields_miss']}"
-        )
-    finally:
-        SCHEMA.write_text(original, encoding="utf-8")
+    results = align.check()
+    defines_result = next(
+        r for r in results if r["mechanism"].startswith("能力缝三角色：Service Definition")
+    )
+    assert defines_result["status"] != "✓", (
+        f"删掉 {victim} 后仍报「协议侧已完备」★ 对齐核查失效"
+    )
+    assert victim in defines_result["fields_miss"], (
+        f"应把 {victim} 报为缺字段，实际：{defines_result['fields_miss']}"
+    )
 
 
 def test_alignment_all_mechanisms_covered() -> None:

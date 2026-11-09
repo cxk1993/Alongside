@@ -456,6 +456,23 @@ def cmd_check(args: argparse.Namespace) -> None:
 def cmd_verify(_: argparse.Namespace) -> None:
     cmd_lint( argparse.Namespace() )
     cmd_test( argparse.Namespace() )
+
+    # ★ 整合包基线锁自检（2026-11-09 加）：
+    #   官方包的锁里钉的是**成员文件内容摘要**，所以 `modules/*` 任何一处改动
+    #   （哪怕只是把 db_session 换成 kernel_session）都会让锁失效。
+    #   实测这个摩擦点一天咬了三次——每次都是等 tests_packs 红了才想起来重签。
+    #   ⇒ 在 verify 里当场检查并给出**怎么修**的命令，让失败可自解释。
+    pack_cli = API / "scripts" / "pack.py"
+    pack_dir = ROOT / "packs" / "official.life-tasks"
+    if pack_cli.exists() and pack_dir.is_dir():
+        log("── 整合包基线锁自检 ──")
+        try:
+            run([str(venv_python()), str(pack_cli), "check", str(pack_dir)], cwd=API)
+        except SystemExit:
+            log("基线锁与成员不一致（改了 modules/* 却没重签锁）。修：")
+            log(f"  cd services/api && python scripts/pack.py lock {pack_dir}")
+            raise
+
     log("── 前端构建 ──")
     run(npm_cmd(["run", "build"]), cwd=WEB)
     # T18 唯一判据守门：发现脚本存在即自动运行（同 check_kernel_purity 的接入模式）。

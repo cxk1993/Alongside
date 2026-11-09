@@ -22,7 +22,7 @@ from typing import Any
 
 from sqlmodel import select
 
-from core.deps import db_session
+from core.deps import kernel_session
 from core.errors import ConflictError, ForbiddenError, NotFoundError
 from core.kernel import EffectKind, get_kernel
 from core.plugins import discover as discover_mod
@@ -261,7 +261,7 @@ class PluginManager:
 
     def list_plugins(self) -> list[dict[str, Any]]:
         result = self.discover()
-        with db_session() as db:
+        with kernel_session() as db:
             states = {
                 s.id: s
                 for s in db.exec(select(PluginState)).all()
@@ -342,7 +342,7 @@ class PluginManager:
         return out
 
     def _enabled(self, plugin_id: str, *, default_enabled: bool = True) -> bool:
-        with db_session() as db:
+        with kernel_session() as db:
             st = db.get(PluginState, plugin_id)
         return st.enabled if st else default_enabled
 
@@ -367,7 +367,7 @@ class PluginManager:
         """
         manifest = info.manifest
         granted = normalize_permissions(manifest.get("permissions"))
-        with db_session() as db:
+        with kernel_session() as db:
             st = db.get(PluginState, info.id)
             if st is None:
                 st = PluginState(id=info.id)
@@ -393,7 +393,7 @@ class PluginManager:
         不新建 —— 激活器只对**已有注册态**的插件报错，凭空建行会让
         list_plugins 的「无状态行 ⇒ 按来源取默认」口径漂移。
         """
-        with db_session() as db:
+        with kernel_session() as db:
             st = db.get(PluginState, plugin_id)
             if st is None:
                 return
@@ -522,7 +522,7 @@ class PluginManager:
                     undo=lambda: self._unmount(info, registry),
                 )
 
-                with db_session() as db:
+                with kernel_session() as db:
                     err = run_lifecycle_hook(info, "enable", db=db)
         except Exception as exc:  # noqa: BLE001
             # ★ 逆序回放由 `kernel.effect()` 的上下文管理器负责：
@@ -566,7 +566,7 @@ class PluginManager:
 
     def _state_snapshot(self, plugin_id: str) -> dict[str, Any] | None:
         """取插件状态行的可恢复快照（无行时为 None）。"""
-        with db_session() as db:
+        with kernel_session() as db:
             st = db.get(PluginState, plugin_id)
             if st is None:
                 return None
@@ -610,7 +610,7 @@ class PluginManager:
 
     def _restore_state(self, plugin_id: str, snapshot: dict[str, Any] | None) -> None:
         """把状态行恢复到快照值；原先无行则删除该行（完整回滚）。"""
-        with db_session() as db:
+        with kernel_session() as db:
             st = db.get(PluginState, plugin_id)
             if snapshot is None:
                 if st is not None:
@@ -647,7 +647,7 @@ class PluginManager:
         #      DATA    = 暂停时保留（表留着等下次启用）
         #    以前这层区分是散落在各个手写分支里的判断，
         #    现在由原语统一执行——**「什么该撤」只由 kind 决定**。
-        with db_session() as db:
+        with kernel_session() as db:
             err = run_lifecycle_hook(info, "disable", db=db)
         # ★ 撤 RUNTIME effect（逆序：路由 → requires → provides）。
         #   路由会被摘掉，能力提供会被撤销，依赖声明会被注销。
@@ -744,7 +744,7 @@ class PluginManager:
                 )
 
                 # ── 2. install 钩子（RUNTIME）─────────────────────────────
-                with db_session() as db:
+                with kernel_session() as db:
                     run_lifecycle_hook(info, "install", db=db)
                 # 钩子的逆是与它配对的 teardown。run_lifecycle_hook 对
                 # 「钩子缺失/不抛」一律 best-effort 吞掉（见 lifecycle.py），故这里
@@ -790,7 +790,7 @@ class PluginManager:
     def _run_hook_safe(self, info: PluginInfo, stage: str) -> None:
         """在补偿路径上跑钩子：自己吞异常（补偿绝不允许二次上抛）。"""
         try:
-            with db_session() as db:
+            with kernel_session() as db:
                 run_lifecycle_hook(info, stage, db=db)
         except Exception as hook_exc:  # noqa: BLE001
             log.warning(
@@ -815,7 +815,7 @@ class PluginManager:
         #     启动对账看到这个状态会**强制跑完卸载**。）
         _transition(plugin_id, Phase.UNLOADING, PhaseReason.UNINSTALL)
         # 1) 生命周期 on_uninstall
-        with db_session() as db:
+        with kernel_session() as db:
             run_lifecycle_hook(info, "uninstall", db=db)
         # 2) 撤掉全部 RUNTIME effect（路由 / 依赖声明 / 能力提供）。
         #    逆序由原语保证（施加顺序的逆序）。
@@ -830,7 +830,7 @@ class PluginManager:
         engine = get_engine()
         rollback_migrations(engine, info)
         # 4) 清状态表（plugin_state + plugin_setting）
-        with db_session() as db:
+        with kernel_session() as db:
             st = db.get(PluginState, plugin_id)
             if st is not None:
                 db.delete(st)
@@ -853,12 +853,12 @@ class PluginManager:
     # ───────────────────────── 设置 ─────────────────────────
     def get_settings(self, plugin_id: str) -> dict[str, Any]:
         self._require(plugin_id)
-        with db_session() as db:
+        with kernel_session() as db:
             return read_settings(db, plugin_id)
 
     def set_settings(self, plugin_id: str, settings: dict[str, Any]) -> dict[str, Any]:
         info = self._require(plugin_id)
-        with db_session() as db:
+        with kernel_session() as db:
             return write_settings(db, info, plugin_id, settings)
 
     # ───────────────────────── 健康 ─────────────────────────

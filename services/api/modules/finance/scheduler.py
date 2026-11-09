@@ -31,13 +31,13 @@ def _run_sync_job() -> None:
     global _last_run
     import time
 
-    from core.deps import db_session  # ★ 非 Depends 场景必须 db_session
+    from core.deps import kernel_session  # ★ 非 Depends 场景必须 kernel_session
 
     from .beecount_sync import sync_snapshot
 
     started = int(time.time())
     try:
-        with db_session() as db:
+        with kernel_session() as db:
             out = sync_snapshot(db)
         snap = getattr(out, "snapshot", None)
         date = getattr(snap, "date", None) if snap is not None else None

@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlmodel import select
 
-from core.deps import get_db, db_session
+from core.deps import get_db, kernel_session
 from db.models.system import AuditLog
 
 MCP_ACTOR_PREFIX = "mcp:"
@@ -36,7 +36,7 @@ def audit_call(
     payload: dict[str, Any] | None,
 ) -> None:
     """写操作成功执行后落一条（读操作不强制，与 REST 口径一致）。"""
-    with db_session() as db:
+    with kernel_session() as db:
         db.add(
             AuditLog(
                 actor=(MCP_ACTOR_PREFIX + token_prefix)[:64],
@@ -55,7 +55,7 @@ def audit_denied(
     reason: str,
 ) -> None:
     """越权 / 未知工具等拒绝也落一条（同 T14 越权处理口径）。"""
-    with db_session() as db:
+    with kernel_session() as db:
         db.add(
             AuditLog(
                 actor=(MCP_ACTOR_PREFIX + token_prefix)[:64],
@@ -68,7 +68,7 @@ def audit_denied(
 
 def list_mcp_audit(limit: int = 100) -> list[AuditLog]:
     """前端 CallLog 用：最近 N 条 MCP 流水（actor 以 mcp: 开头）。"""
-    with db_session() as db:
+    with kernel_session() as db:
         rows = db.exec(
             select(AuditLog)
             .where(AuditLog.actor.startswith(MCP_ACTOR_PREFIX))

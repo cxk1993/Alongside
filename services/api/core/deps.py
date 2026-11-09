@@ -24,6 +24,7 @@ from core.security import get_current_user, require_scope
 __all__ = [
     "get_db",
     "db_session",
+    "kernel_session",
     "get_current_user",
     "require_scope",
     "set_engine",
@@ -85,33 +86,76 @@ def get_db(request: Request) -> Iterator[Session]:
 
 
 @contextmanager
-def db_session(plugin_id: str | None = None) -> Iterator[Session]:
-    """**非依赖注入场景**用（如插件 lifecycle hook、迁移脚本）。
+def db_session(plugin_id: str) -> Iterator[Session]:
+    """**插件作用域会话**：`plugin_id` 必填，只能碰 `{plugin_id}_*` 的表。
 
-    ★ 为什么需要它（2026-09-25 根因修复的配套）：
-      `get_db` 现在是**生成器函数**（供 `Depends(get_db)`，FastAPI 会自动 close）——
-      **生成器对象不是上下文管理器**，故原 `with db_session() as db` 写法必须改为
-      `with db_session() as db:`（本文件同批把 16 处调用点迁过来）。
-      两者共用同一把 `_engine_factory`，语义一致：**进入建 session，退出必 close**。
+    ★ 2026-11-09「翻转默认值」：这个参数从**可选**改成**必填**。
 
-    ★ `plugin_id`（2026-10-28 新增，**可选**）：数据访问作用域。
-      传了就让这个 Session 落在该插件的作用域里
-      （只能碰 `{plugin_id}_*` 的表）；不传（默认）= 内核级，不受边界约束。
+      旧签名是 `db_session(plugin_id: str | None = None)`，并且文档里写着
+      「不传（默认）= 内核级，不受边界约束」。那条设计的出发点是善意的
+      （后台任务要写 `audit_log` 这类内核表），但代价是：
+      **「读别人的表会被拒」只在「插件端点 + Depends(get_db)」这一条路径上成立**，
+      定时任务 / 事件处理器 / 生命周期钩子 / 插件自开的 session 全都绕开了它。
+      AI 动态改造的第一条红线「AI 不许修改审计日志」，在数据层等于没有执行点。
 
-      ★ 为什么是**可选参数**而不是强制：
-        后台任务 / 生命周期钩子里，有些操作要碰**内核表**
-        （如 MCP 写操作的审计日志落 `audit_log`——那是内核能力，不是插件的数据）。
-        强制作用域会把这些误伤 ⇒ 边界必须是**显式选择**的。
-      ★ 当前所有调用点都**不传**（保持现状，无行为变化）。
-        将来某个插件的后台任务确定只碰自己的表时，再显式传。
+      ⇒ 现在分成两个函数，**没有第三种**：
+
+      | 想做什么 | 用哪个 |
+      |---|---|
+      | 内核/内置模块自己的活（状态机、迁移台账、审计、对账、定时任务） | `kernel_session()` |
+      | 第三方插件自己的活（钩子、后台任务） | `db_session("<plugin_id>")` |
+      | 忘了声明 | 不存在——签名不允许 |
+
+    ★ 为什么内置模块也用 `kernel_session()`：
+      模块之间本来就有跨模块读（dashboard 读 `calendar_event`、finance 读 `habits_habit`、
+      catalog 读 `web_entry`…）。它们是**系统的一部分**，不是外来者。
+      边界只约束外来者——这条在 `core/registry.py:mount(scoped=...)` 里是同一个判断。
     """
     if _engine_factory is None:
         raise ServiceUnavailableError(
             "数据库未就绪：等待 T04 注入引擎（core.deps.set_engine）"
         )
     session = _engine_factory()
-    if plugin_id is not None:
-        scope_session(session, plugin_id)
+    scope_session(session, plugin_id)
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@contextmanager
+def kernel_session() -> Iterator[Session]:
+    """**内核特权会话**：不受插件数据边界约束。
+
+    ★ 与 `db_session(plugin_id)` 的分工（2026-11-09「翻转默认值」）：
+
+    | 谁 | 用哪个 | 能碰哪些表 |
+    |---|---|---|
+    | 内核自己（状态机、迁移台账、审计落库、启动对账） | `kernel_session()` | 全部 |
+    | 插件自己（生命周期钩子、定时任务、事件处理器） | `db_session("<plugin_id>")` | 自己的 `{id}_*` |
+
+    ★ **没有第三种**。不显式声明作用域的 Session 会被 **deny-all** 挡下
+      （只放行 `sqlite_*` 内部表与 PRAGMA）——见 `core/db_scope.py` 的三态判定。
+
+    ★ 为什么必须显式（这条是本次改造的核心理由）
+      --------------------------------------------------
+      旧实现对「不传 `plugin_id`」的默认是**内核级、不受任何约束**。
+      于是「读别人的表会被拒」这句话，只在「插件端点 + `Depends(get_db)`」
+      这一条路径上成立；**定时任务、事件处理器、生命周期钩子、插件自己开的
+      `db_session()` 全都绕开了它**。而 AI 动态改造的四条红线里第一条
+      「AI 不许修改审计日志」，在数据层没有任何执行点。
+      ⇒ 把默认翻过来：**不声明 = 拒绝；要特权 = 显式写出来**。
+
+    ★ 谁能用：只有 `core/`。`modules/` 与 `plugins/` **禁止 import**——
+      由 `tools/gates/` 的门禁守着（写了这条门禁，才不会有人图省事又绕回去）。
+    """
+    if _engine_factory is None:
+        raise ServiceUnavailableError(
+            "数据库未就绪：等待 T04 注入引擎（core.deps.set_engine）"
+        )
+    session = _engine_factory()
+    # ★ 显式声明「内核」——它与「压根没声明」（deny-all）是两种不同的状态。
+    scope_session(session, None)
     try:
         yield session
     finally:

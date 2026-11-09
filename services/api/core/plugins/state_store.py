@@ -47,20 +47,20 @@ def read_phase_reason(plugin_id: str) -> str | None:
       而这两种暂停在阶段上**长得一模一样**（都是 PAUSED），
       不看原因就分不出来。
     """
-    from core.deps import db_session  # noqa: PLC0415
+    from core.deps import kernel_session  # noqa: PLC0415
     from db.models.system import PluginState
 
-    with db_session() as db:
+    with kernel_session() as db:
         st = db.get(PluginState, plugin_id)
         return st.phase_reason if st else None
 
 
 def read_phase(plugin_id: str) -> str | None:
     """读某插件的阶段（无行 → None）。"""
-    from core.deps import db_session  # noqa: PLC0415 —— 延迟导入，避免 import 期连库
+    from core.deps import kernel_session  # noqa: PLC0415 —— 延迟导入，避免 import 期连库
     from db.models.system import PluginState
 
-    with db_session() as db:
+    with kernel_session() as db:
         st = db.get(PluginState, plugin_id)
         return st.phase if st is not None else None
 
@@ -69,10 +69,10 @@ def read_states() -> list[dict[str, Any]]:
     """读所有插件的状态行（启动对账用）。"""
     from sqlmodel import select
 
-    from core.deps import db_session  # noqa: PLC0415
+    from core.deps import kernel_session  # noqa: PLC0415
     from db.models.system import PluginState
 
-    with db_session() as db:
+    with kernel_session() as db:
         rows = db.exec(select(PluginState)).all()
         return [
             {
@@ -104,10 +104,10 @@ def apply_transition(
     ★ 审计与状态变更同事务：一旦这两件事分开，就一定有路径能在崩溃时
       只完成一半。
     """
-    from core.deps import db_session  # noqa: PLC0415
+    from core.deps import kernel_session  # noqa: PLC0415
     from db.models.system import AuditLog, PluginState
 
-    with db_session() as db:
+    with kernel_session() as db:
         st = db.get(PluginState, plugin_id)
         if st is None:
             # 状态行不存在：只有「已注册」的插件才有阶段。
@@ -153,10 +153,10 @@ def set_was_satisfied(plugin_id: str, value: bool) -> None:
     ★ 它与 `phase` 存在**同一行**——满足性判定和阶段是配套的，
       分开存会出现「阶段是 ACTIVE、但满足性记录是 False」这种自相矛盾的中间态。
     """
-    from core.deps import db_session  # noqa: PLC0415
+    from core.deps import kernel_session  # noqa: PLC0415
     from db.models.system import PluginState
 
-    with db_session() as db:
+    with kernel_session() as db:
         st = db.get(PluginState, plugin_id)
         if st is None:
             return

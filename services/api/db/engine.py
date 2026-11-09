@@ -48,6 +48,49 @@ def _apply_sqlite_pragmas(target: Engine) -> None:
             cursor.close()
 
 
+#: `after_begin` 是 **Session 类级**事件，整个进程只该挂一次。
+#: （`checkin` 是 **engine 级**，每个新引擎都要挂——两个作用域不同，别混。）
+_SCOPE_SESSION_HOOKED = False
+
+
+def _apply_db_scope(target: Engine) -> None:
+    """接上数据作用域的两个事件（2026-11-09 · 「翻转默认值」落地）。
+
+    ★ 为什么必须接：`core/db_scope.py` 里的 `apply_scope_on_begin` /
+      `clear_scope_on_checkin` 此前**一行 `event.listen` 都没有**——
+      它们是写完就没接线的死代码。于是「数据边界」这条纪律在运行时**根本不存在**，
+      而文档里写着它已落地（这是最坏的一种：看不出来是空的）。
+
+    ★ 两个事件的挂载点不同，不能合并：
+
+    | 事件 | 挂在 | 何时触发 | 干什么 |
+    |---|---|---|---|
+    | `after_begin` | **Session 类** | 每次事务开始（语句执行前） | 按 Session 上的作用域给这条连接挂 authorizer |
+    | `checkin` | **engine** | 连接归还池时 | 卸下 authorizer，防下一个使用者继承上一位的规则 |
+
+      为什么 `after_begin` 不能挂 engine：authorizer 是**连接级**的，
+      而连接池被所有插件共用；挂在 `connect` 上等于给这条物理连接永久钉死
+      一个插件的规则，换个插件用就误拒（SQLite 官方也明确「一条连接同时只能有一个 authorizer」）。
+
+    ★ 三态语义见 `core/db_scope.py:apply_scope_on_begin`：
+      没有作用域 = deny-all（安全默认）· `None` = 内核特权 · `"<id>"` = 插件边界。
+    """
+    global _SCOPE_SESSION_HOOKED
+    from sqlalchemy.orm import Session as _SASession
+
+    from core.db_scope import apply_scope_on_begin, clear_scope_on_checkin
+
+    if not _SCOPE_SESSION_HOOKED:
+        event.listens_for(_SASession, "after_begin")(apply_scope_on_begin)
+        _SCOPE_SESSION_HOOKED = True
+
+    @event.listens_for(target, "checkin")
+    def _scope_checkin(dbapi_connection: Any, _connection_record: Any = None) -> None:
+        # ★ `checkin` 事件的签名是 (dbapi_connection, connection_record) 两个参数，
+        #   只接一个会抛 TypeError（实测：每个测试都在归还连接时炸）。
+        clear_scope_on_checkin(dbapi_connection)
+
+
 #: 改名前的库文件名（旧品牌期）。仅用于**兼容回退**，不参与新建。
 LEGACY_DB_NAME = "lifos.db"
 
@@ -103,6 +146,7 @@ def make_engine(db_url: str | None = None) -> Engine:
         max_overflow=20,
     )
     _apply_sqlite_pragmas(engine)
+    _apply_db_scope(engine)          # ★ 数据作用域接线（2026-11-09）
     return engine
 
 

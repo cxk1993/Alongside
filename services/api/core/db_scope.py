@@ -213,6 +213,47 @@ def allowed_tables(plugin_id: str) -> frozenset[str]:
 # ─────────────────────── authorizer ───────────────────────
 
 
+def make_deny_all_authorizer() -> Any:
+    """**未声明作用域**时挂的授权器：默认拒绝一切表访问。
+
+    ★ 为什么是 deny-all，而不是「把 authorizer 卸掉」
+      --------------------------------------------------
+      卸掉 = 默认放行。旧实现正是这么做的（`set_authorizer(None)`），
+      于是「读别人的表会被拒」只在「插件端点 + `Depends(get_db)`」这一条路上成立，
+      **定时任务 / 事件处理器 / 生命周期钩子 / 插件自开的 session 全部绕过**。
+
+    ★ 放行的只有三样（否则连 ORM 自身都跑不起来）：
+      · `sqlite_*` 内部表（`sqlite_master` / `sqlite_sequence`）
+      · `PRAGMA`（ORM 与迁移代码要读 `table_info`）
+      · `arg1 is None` 的语句（不属于任何具体表的动作，如 BEGIN/COMMIT）
+
+    ★ 正常情况下它**永远不该被触发**：真触发了，说明某处漏写
+      `kernel_session()` 或 `db_session(plugin_id)`。报错会直接给出表名，
+      比「静默放行」好查一万倍——这就是翻转默认值的收益。
+    """
+
+    def _auth(
+        action: int,
+        arg1: str | None,
+        arg2: str | None,
+        dbname: str | None,
+        trigger: str | None,
+    ) -> int:
+        if action in (SQLITE_ATTACH, SQLITE_DETACH):
+            return sqlite3.SQLITE_DENY
+        if action == SQLITE_PRAGMA:
+            return sqlite3.SQLITE_OK
+        if action in READ_SCOPED_ACTIONS or action in TABLE_SCOPED_ACTIONS:
+            if arg1 is None:
+                return sqlite3.SQLITE_OK
+            if str(arg1).startswith("sqlite_"):
+                return sqlite3.SQLITE_OK
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+
+    return _auth
+
+
 def make_authorizer(plugin_id: str) -> Any:
     """造一个只允许访问 `plugin_id` 自有表的 authorizer。
 
@@ -254,8 +295,36 @@ def make_authorizer(plugin_id: str) -> Any:
 
 
 def scope_session(session: Any, plugin_id: str | None) -> None:
-    """给 Session 记上作用域（`plugin_id` 为 None = 内核，无边界）。"""
-    session.info[SCOPE_KEY] = plugin_id
+    """给 Session 记上作用域（`plugin_id` 为 None = 内核，无边界）。
+
+    ★ 对**没有 `.info` 的对象**（测试替身、mock session）静默跳过：
+      作用域是「这条连接能碰哪些表」的概念，替身根本不连库，谈不上边界。
+      硬要求 `.info` 只会让一堆 FakeSession 在无关处炸掉。
+    """
+    info = getattr(session, "info", None)
+    if info is None:
+        return
+    info[SCOPE_KEY] = plugin_id
+
+
+def declare_scope(session: Any, plugin_id: str | None = None) -> Any:
+    """给**已经构造好**的 Session 显式声明作用域，并原样返回（便于 `with` 链式写法）。
+
+    ★ 为什么需要它：2026-11-09「翻转默认值」之后，**没有声明作用域的 Session
+      一律被 deny-all 挡下**（只放行 `sqlite_*` 与 PRAGMA）。但有些地方是
+      **直接构造** Session 的——测试 fixture、一次性脚本、种子数据——它们不经过
+      `kernel_session()` / `db_session(plugin_id)`。这些地方必须显式说清自己是谁：
+
+      ```python
+      with declare_scope(Session(engine)) as s:              # 内核级（无边界）
+      with declare_scope(Session(engine), "finance") as s:   # 插件级（只能碰 finance_*）
+      ```
+
+    ★ 别在业务代码里用它。业务代码该用 `kernel_session()` / `db_session(plugin_id)`
+      （那两个封装了引擎获取与关闭）。它只服务「手上已经有一个 Session」的场景。
+    """
+    scope_session(session, plugin_id)
+    return session
 
 
 def session_scope(session: Any) -> str | None:
@@ -269,17 +338,26 @@ def apply_scope_on_begin(session: Any, transaction: Any, connection: Any) -> Non
     ★ 事件签名是 `(session, transaction, connection)`（SQLAlchemy 2.x）。
       它在**每条语句执行前**触发 ⇒ 挂上 authorizer 时机正好。
 
-    ★ 没有作用域 ⇒ 卸下 authorizer：
-      内核自身（迁移、启动对账、后台任务）不受插件边界约束。
-      这正是需要的——插件的迁移要写内核表 `app_setting`（迁移台账），
-      而它不带插件前缀。
+    ★ **三态判定（2026-11-09「翻转默认值」）**：
+      · Session 上没有 `db_scope` 键 → **deny-all**（忘了声明 = 拒绝，安全默认）
+      · `db_scope = None`（显式）    → 卸下 authorizer（声明了「我是内核」）
+      · `db_scope = "<id>"`          → 该插件的前缀白名单
+
+    ★ 旧实现只有后两态，且把「没有键」和「None」当成同一件事（都放行）——
+      那等于**默认放行**：定时任务 / 事件处理器 / 生命周期钩子全都绕开了边界。
+      现在把默认翻过来：**不声明 = 拒绝；要特权 = 显式写 `kernel_session()`**。
     """
+    has_scope = SCOPE_KEY in session.info
     plugin_id = session.info.get(SCOPE_KEY)
     try:
         dbapi = connection.connection.dbapi_connection
     except Exception:  # noqa: BLE001 —— 取不到连接就跳过，不阻断业务
         return
-    if plugin_id is None:
+    if not has_scope:
+        # ★ 未声明 ⇒ deny-all。真走到这儿说明某处漏了 kernel_session / db_session，
+        #   报错会直接给出表名（access to X is prohibited），比静默放行好查得多。
+        dbapi.set_authorizer(make_deny_all_authorizer())
+    elif plugin_id is None:
         with contextlib.suppress(Exception):
             dbapi.set_authorizer(None)
     else:
@@ -316,7 +394,7 @@ def scoped_session(session: Any, plugin_id: str | None) -> Iterator[Any]:
     用法：
 
     ```python
-    with db_session() as db:
+    with kernel_session() as db:            # 或 db_session("<plugin_id>")（第三方插件）
         with scoped_session(db, "finance"):
             db.execute(...)          # 只能碰 finance_* 表
     ```

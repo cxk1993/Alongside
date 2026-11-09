@@ -58,18 +58,34 @@ class ModuleRegistry:
     def bind(self, app: FastAPI) -> None:
         self._app = app
 
-    def mount(self, plugin_id: str, router: APIRouter, prefix: str) -> None:
+    def mount(
+        self, plugin_id: str, router: APIRouter, prefix: str, scoped: bool = True
+    ) -> None:
+        """把模块的 APIRouter 挂到 app 上，prefix 由 manifest.api.base 决定。
+
+        ★ `scoped`（2026-11-09 新增）：要不要给这些路由挂**数据作用域依赖**。
+
+        | kind | scoped | 为什么 |
+        |:--:|:--:|---|
+        | `third-party` | ✔ True | 外来者，只该碰自己的表 |
+        | `builtin` / `core` | ✘ False | 它们是系统的一部分；模块之间本来就有跨模块读（dashboard 读 `calendar_event`、finance 读 `habits_habit`、catalog 读 `web_entry`…），给它们上作用域会把这些**正常功能**全部拦死 |
+
+        ★ 这个参数就是「数据边界只约束外来者」这句话的代码形态。
+          没有它，`include_router(dependencies=[scope])` 会一视同仁地挂在所有模块上，
+          而内核与内置模块的路由请求也会被设上作用域——那是误伤，不是安全。
+        """
         if self._app is None:
             raise RuntimeError("ModuleRegistry 未绑定 app，无法挂载")
         if plugin_id in self._mounted:
             raise RuntimeError(f"模块已挂载：{plugin_id}")
         before = len(self._app.routes)
+        deps = [Depends(_scope_dependency(plugin_id))] if scoped else []
         try:
             self._app.include_router(
                 router,
                 prefix=prefix,
                 tags=[plugin_id],
-                dependencies=[Depends(_scope_dependency(plugin_id))],
+                dependencies=deps,
             )
         except BaseException:
             # ★ ADR-0005（2026-10-03）：include_router 可能**部分写入**后才抛

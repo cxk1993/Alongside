@@ -54,10 +54,10 @@ def _spawn_pi_execution(task_id: str, dispatch_id: str, pi_client: Any, prompt: 
     import threading
 
     def _run() -> None:
-        from core.deps import db_session
+        from core.deps import kernel_session
 
         try:
-            with db_session() as db:
+            with kernel_session() as db:
                 t = db.get(AgentTask, task_id)
                 if t is None:
                     return

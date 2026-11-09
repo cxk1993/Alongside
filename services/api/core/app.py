@@ -385,7 +385,7 @@ def create_app(
     #   - 从未启用过（无记录 / enabled=False）的**不动** —— 保持"可禁用"语义；
     #   - 单个插件失败**只记目击、不影响其它**（缓行纪律，与 activator 一致）。
     try:
-        from core.deps import db_session as _db_session  # noqa: I001
+        from core.deps import kernel_session as _db_session  # noqa: I001
         from core.plugins.discover import discover_plugins as _discover_plugins
         from core.plugins.manager import (
             PluginManager as _PluginManager,

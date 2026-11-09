@@ -184,11 +184,11 @@ def start_scheduler() -> bool:
     )
 
     def _job() -> None:
-        # ★ 根因/纪律：非 Depends 场景必须用 db_session()（get_db 是生成器依赖）
-        from core.deps import db_session
+        # ★ 根因/纪律：非 Depends 场景必须用 kernel_session()（get_db 是生成器依赖）
+        from core.deps import kernel_session
 
         try:
-            with db_session() as db:
+            with kernel_session() as db:
                 run_due_tick(db)
         except Exception as exc:  # noqa: BLE001 — tick 失败不打断主进程
             log.warning("todo due tick failed: %s", exc)

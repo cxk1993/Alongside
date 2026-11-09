@@ -154,10 +154,10 @@ def start_scheduler() -> bool:
     )
 
     def _job() -> None:
-        from core.deps import db_session
+        from core.deps import kernel_session
 
         try:
-            with db_session() as db:
+            with kernel_session() as db:
                 run_course_tick(db)
         except Exception as exc:  # noqa: BLE001 — tick 失败不打断主进程
             log.warning("course remind tick failed: %s", exc)

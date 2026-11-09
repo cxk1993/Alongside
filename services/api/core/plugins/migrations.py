@@ -358,9 +358,9 @@ def make_startup_lifespan(
 
     @asynccontextmanager
     async def lifespan(_app: Any) -> AsyncIterator[None]:
-        from core.deps import db_session
+        from core.deps import kernel_session
 
-        with db_session() as session:
+        with kernel_session() as session:
             engine = session.get_bind()
         executed = reconcile_migrations(engine, modules)
         ran = {pid: v for pid, v in executed.items() if v}

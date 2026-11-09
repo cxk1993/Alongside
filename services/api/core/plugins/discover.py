@@ -220,8 +220,17 @@ def mount_plugin(info: PluginInfo, registry: Any) -> None:
 
     启动全量挂载（create_app）与运行时启停（PluginManager.enable/install）
     共用本入口。已挂载时静默返回（幂等），重复调用安全。
+
+    ★ 数据作用域只给 `third-party`（2026-11-09）：
+      内置模块与内核是系统的一部分，模块间本来就有跨模块读；
+      给它们挂作用域依赖会把正常功能拦死（详见 `core/registry.py:mount` 的说明）。
     """
     if info.id in registry.mounted():
         return
     router = load_plugin_router(info)
-    registry.mount(info.id, router, prefix=info.manifest["api"]["base"])
+    registry.mount(
+        info.id,
+        router,
+        prefix=info.manifest["api"]["base"],
+        scoped=(info.kind == "third-party"),
+    )

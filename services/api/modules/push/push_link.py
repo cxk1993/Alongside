@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.deps import db_session
+from core.deps import kernel_session
 from core.events import event_bus
 
 from .sender import send_broadcast
@@ -39,7 +39,7 @@ def handle_course_due_event(event: dict[str, Any]) -> None:
     if payload.get("location"):
         parts.append(str(payload["location"]))
     body = " · ".join(parts)
-    with db_session() as db:
+    with kernel_session() as db:
         try:
             out = send_broadcast(
                 db,
@@ -67,7 +67,7 @@ def handle_todo_due_event(event: dict[str, Any]) -> None:
     body = f"截止：{due_s}" if due_s else ""
     if prio == "high":
         body = ("【高优先】" + body).strip()
-    with db_session() as db:
+    with kernel_session() as db:
         try:
             out = send_broadcast(
                 db,
@@ -91,8 +91,8 @@ def handle_reminder_event(event: dict[str, Any]) -> None:
     title = f"日程提醒：{payload.get('title') or ''}".strip()
     start_s = str(payload.get("start_at") or "")
     # ★ 根因补刀（hermes 亲修）：get_db 已生成器化（仅供 Depends），
-    #   非依赖场景直调它拿到的是 generator —— 必须用 db_session()。
-    with db_session() as db:
+    #   非依赖场景直调它拿到的是 generator —— 必须用 kernel_session()。
+    with kernel_session() as db:
         try:
             out = send_broadcast(
                 db, title=title, body=f"开始：{start_s}" if start_s else "",

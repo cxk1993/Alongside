@@ -10,6 +10,7 @@
 幂等：所有种子行使用固定 id（uuid5 命名空间），重复执行不会灌出重复数据。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import uuid
 from datetime import UTC, datetime, timedelta, timezone
@@ -220,7 +221,7 @@ def _seed_sample_events(session: Session) -> list[str]:
 def run(engine: Engine) -> list[str]:
     """灌种子数据。返回逐表结果说明（供验收贴输出）。"""
     logs: list[str] = []
-    with Session(engine) as session:
+    with declare_scope(Session(engine)) as session:
         if _table_exists(engine, "app_setting"):
             logs.append(_seed_app_setting(session))
         else:

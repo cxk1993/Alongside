@@ -350,11 +350,11 @@ def start_scheduler() -> bool:
     )
 
     def _job() -> None:
-        # ★ 补刀：get_db 已生成器化，非 Depends 场景必须 db_session()。
-        from core.deps import db_session
+        # ★ 补刀：get_db 已生成器化，非 Depends 场景必须 kernel_session()（内置模块属系统的一部分；第三方插件才用 db_session(id)）。
+        from core.deps import kernel_session
 
         try:
-            with db_session() as db:
+            with kernel_session() as db:
                 run_reminder_tick(db)
         except Exception as exc:  # noqa: BLE001
             log.warning("calendar reminder tick failed: %s", exc)

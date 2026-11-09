@@ -45,7 +45,7 @@
     "db:own",
     "net:out:127.0.0.1"
   ],
-  "migrations": "api/migrations",
+  "migrations": "migrations",
   "settingsSchema": "api/settings.schema.json",
   "lifecycle": {
     "onInstall": null,

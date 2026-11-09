@@ -47,6 +47,10 @@ dev = [
   "ruff==0.8.6",
   "mypy==1.14.1",
   "pytest==8.3.4",
+  # 协议/包层门禁的「外部裁判」——用标准实现交叉验证自研校验器。
+  # tools/crosscheck_validator.py 与 tools/gates/verify_pack_invariants.py 都按
+  # 可选依赖导入：缺了不报错，但「裁判」这一层会静默缺席（假绿）。故登记进 dev。
+  "jsonschema==4.26.0",
 ]
 
 [build-system]

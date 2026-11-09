@@ -42,7 +42,7 @@
   "emits": [],
   "consumes": [],
   "permissions": [],
-  "migrations": "api/migrations",
+  "migrations": null,
   "settingsSchema": "api/settings.schema.json",
   "lifecycle": {
     "onInstall": null,

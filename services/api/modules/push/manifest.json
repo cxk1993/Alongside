@@ -42,7 +42,7 @@
   "permissions": [
     "db:own"
   ],
-  "migrations": "api/migrations",
+  "migrations": "migrations",
   "settingsSchema": "api/settings.schema.json",
   "lifecycle": {
     "onInstall": null,

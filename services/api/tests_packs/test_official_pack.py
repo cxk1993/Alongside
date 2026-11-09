@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from packs.assembler import PackAssembler
@@ -201,15 +202,20 @@ def test_lock_file_is_committed_and_matches() -> None:
         )
 
 
-def test_lock_pack_is_idempotent() -> None:
-    """再跑一次 lock，锁内容不变（幂等）。"""
-    before = (_pack_dir() / "pack.lock.json").read_text(encoding="utf-8")
-    lock_pack(_pack_dir(), discover=_real_discover(), now="2026-01-01T00:00:00+08:00")
-    after = (_pack_dir() / "pack.lock.json").read_text(encoding="utf-8")
-    # generatedAt 会变，selfDigest 也会变（它对整个包目录算，包含锁自己？——见下）
-    before_data = json.loads(before)
-    after_data = json.loads(after)
-    assert before_data["members"] == after_data["members"]
+def test_lock_pack_is_idempotent(tmp_path: Path) -> None:
+    """再跑一次 lock，锁内容不变（幂等）。
+
+    ★ 在临时副本上跑：`lock_pack` 是**写操作**。早先它在真包目录上跑，于是
+      每次执行 pytest 都会改写仓库里的基线锁（generatedAt 被钉成 2026-01-01、
+      kernelApi 被抹成 None），而「测试通过」这件事本身就把提交物弄脏了。
+      写操作的负例/幂等测试一律进沙箱——与 crosscheck selfcheck 同一条纪律。
+    """
+    work = tmp_path / "official.life-tasks"
+    shutil.copytree(_pack_dir(), work)
+    before = json.loads((work / "pack.lock.json").read_text(encoding="utf-8"))
+    lock_pack(work, discover=_real_discover(), now="2026-01-01T00:00:00+08:00")
+    after = json.loads((work / "pack.lock.json").read_text(encoding="utf-8"))
+    assert before["members"] == after["members"]
 
 
 # ─────────────────────────── 能被装配器真装配 ───────────────────────────

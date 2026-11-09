@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alongside.local/contracts/pack-lock.schema.json",
+  "title": "Alongside 基线锁（pack.lock.json）契约",
+  "description": "基线锁 = 「我装的是什么」——作者声明的期望，住在包目录里，跟着包分发，别人能拿来对账。唯一写入口是显式命令 `alongside pack lock`（协议 §15.2 规则 2）；装载流程只读它、从不写它。字段集合是封闭的：多一个字段不会被忽略，而会被下游当成「不认识的东西」静默跳过（规则 LOCK-1）。本契约以 `services/api/packs/state.py` 的 `write_baseline_lock` 实际写出的形状为准，逐字段对齐 `packs/validate.py` 的 LOCK_REQUIRED_FIELDS / LOCK_OPTIONAL_FIELDS / LOCK_MEMBER_REQUIRED / LOCK_MEMBER_OPTIONAL；代码里没有的字段（例如某些文档提到的 schemaVersion）一律不收录——契约不许虚构字段，否则门禁会去校验一个永远不存在的键。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["packId", "packVersion", "generatedAt"],
+  "properties": {
+    "packId": {
+      "type": "string",
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$",
+      "description": "这份锁属于哪个包。反向命名空间、至少两段，与 pack.json 的 id 同格式（规则 LOCK-3）。写成单段的 `finance` 是插件 id 的形状——那会让「这份锁属于哪个包」答不上来。"
+    },
+    "packVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "钉锁时包的版本。三段式精确版本，包层没有版本区间（规则 LOCK-4）。"
+    },
+    "generatedAt": {
+      "type": "string",
+      "minLength": 1,
+      "format": "date-time",
+      "description": "生成时间，带时区偏移的 ISO 8601。写侧由 `datetime.isoformat()` 产生（`pack lock` 用 UTC，装配快照用本地时区），两者都是合法 date-time。只要求非空是不够的——没有时区的时间戳无法回答「谁先谁后」。"
+    },
+    "selfDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "包级摘要：算的是**包目录的内容**（pack.json 原文、内嵌 plugins/、README），不算成员插件的目录——成员是引用关系，它们的摘要在 members[].digest 里。算的时候**排除 pack.lock.json 自己**：锁住在包目录里，把它算进去 ⇒ 每写一次锁摘要就变一次 ⇒ 摘要恒等于现状 ⇒ 什么也不证明（自指的摘要比没有摘要更坏，它看起来像有保护）。格式写错比缺失更糟：后续每次装载都判「摘要不符」，用户永远装不上这个包，而报错指向「内容被改过」——完全指错方向（规则 LOCK-5）。"
+    },
+    "kernelApi": {
+      "type": "string",
+      "minLength": 1,
+      "description": "这份基线是在哪个内核接口下钉的（caret 范围，如 `^1.0`）。内核接口变了，基线的含义可能也变了——不记它就无法回答「这份锁还是不是当前内核认的那一份」。形状校验只要求非空字符串（规则 LOCK-2）；语义比对由装载流程做。"
+    },
+    "members": {
+      "type": "array",
+      "description": "成员记录：版本 + 内容摘要 + 归属。写侧**总是写出**这个键（可以是空数组）；读侧对缺失宽容（`validate_lock_payload` 不把它列为必填）——第一次钉锁时清单可能没有成员，那不是坏锁。",
+      "items": { "$ref": "#/$defs/lockedMember" }
+    }
+  },
+  "$defs": {
+    "lockedMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "description": "一条成员记录。基线锁与装配快照**共用同一个序列化函数**（`packs/state.py` 的 `_member_payload`），所以两个文件里这个形状必须逐字段相同——各自写一份序列化逻辑，早晚会长歪。",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "成员指的是**插件**，用插件 id 的形状：单段小写连字符（finance / weekly-report）。用包的命名空间规则校验它，会把所有真实插件全判成非法（规则 LOCK-3）。"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "精确三段式版本。包层没有版本求解器，也不该有「自动选一个」（规则 LOCK-4）。"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "成员内容摘要。**算不出来时整个键省略**——不是 null、不是空串、不是全零占位。那三种写法都会让「摘要一致」这个判断恒真，等于把「变了能发现」这个唯一价值架空；省略的含义是「没算出来」，是个待办，不是一个结论。"
+        },
+        "fromPacks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "归属集合：这个成员是被哪些包引入的（协议 §10.2 第 4 条：归属是集合，不是单值）。记全才能回答「这个成员是谁带进来的」——升级其中一个包时，不该把另一个包带来的同一个成员也拽着走。形状校验只要求「非空字符串组成的数组」（规则 LOCK-6），不校验每项是不是合法包 id：那是写侧的责任，读侧过严会让旧锁读不出来。"
+        }
+      }
+    }
+  }
+}

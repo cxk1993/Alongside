@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alongside.local/contracts/pack-assembly.schema.json",
+  "title": "Alongside 装配快照与装载报告契约",
+  "description": "本文件覆盖包层装配的**两个真实产物**，形状不同、用途不同，用 oneOf 分开：① 落盘的装配快照 `pack.assembly.json`（住数据目录，装载成功后由 `packs/state.py` 的 `save_snapshot` 重写，回答「这台机器上次装成了什么」）；② API 返回的装载报告（由 `packs/boot.py` 的 `summarize_reports` 定义形状，`modules/packs/router.py` 原样返回，回答「这一次装的结果是什么」）。两者的字段名大小写不同（快照 camelCase、报告 snake_case）是**既有事实**，契约照抄代码：统一命名要改代码，不在契约层单方面改名——那会让契约与实现分叉，而分叉的契约比没有契约更坏。★ 报告里**没有** enabled / disabled / warnings 这三个字段：成员的启用与停用体现在 `members[].status`（loaded / reused / skipped / degraded / failed），警告走日志（`logging.warning`）不进报告。契约不收录代码里不存在的字段。",
+  "oneOf": [
+    { "$ref": "#/$defs/assemblySnapshot" },
+    { "$ref": "#/$defs/loadReport" }
+  ],
+  "$defs": {
+    "assemblySnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packId", "packVersion", "generatedAt"],
+      "description": "装配快照（`pack.assembly.json`，住**数据目录**）：形状与基线锁**同构**（协议 §15.1），差别只在住址与谁写——基线锁跟着包走、只由显式命令写；快照跟着机器走、每次装载成功后重写。为什么必须分成两个文件：若只有一个文件且装载时重写它，「代码被改过 ⇒ 硬拒绝」永远不会触发——每次装载都把它改成当前状态，基线就永远等于现状。⇒ 对账基准不能被对账动作本身改写。",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "maxLength": 96,
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$",
+          "description": "装的是哪个包。与基线锁同格式（反向命名空间、至少两段）。"
+        },
+        "packVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "这次装成的包版本。"
+        },
+        "generatedAt": {
+          "type": "string",
+          "minLength": 1,
+          "format": "date-time",
+          "description": "写快照的时间，带时区偏移的 ISO 8601（装配器注入的 `now` 回调产生，默认 `time.strftime('%Y-%m-%dT%H:%M:%S%z')`）。"
+        },
+        "selfDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "这次装成的**包级摘要**（包目录内容，排除 pack.lock.json 自身）。快照也要记它：快照回答的不只是「装了哪些成员」，还有「装的是**哪个包**」——没有包级摘要，就分不清「同一个成员集合来自同一个包」与「来自两个不同的包」。算不出来时整个键省略。"
+        },
+        "kernelApi": {
+          "type": "string",
+          "minLength": 1,
+          "description": "这次装配依据的内核接口范围（取自 pack.json 的 kernelApi）。"
+        },
+        "members": {
+          "type": "array",
+          "description": "这次装成的成员。写侧**总是写出**这个键；只收**非 SKIPPED** 的成员（被用户停用、未选中、被移除的不进快照——它们没装成，记进来会让下次的差量装配拿错误的基线做「复用」判断）。",
+          "items": { "$ref": "#/$defs/lockedMember" }
+        }
+      }
+    },
+    "lockedMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "description": "一条成员记录。与 `pack-lock.schema.json` 的 `$defs/lockedMember` **逐字段相同**（同一个 `_member_payload` 序列化）。这里重复定义而不是跨文件 `$ref`：跨文件引用需要解析器与网络/文件定位，会让门禁在离线或换目录时失效——契约文件必须能单独校验。",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "成员插件 id：单段小写连字符。"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "精确三段式版本。"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "成员内容摘要。算不出来时整个键省略（不是 null、不是全零）——「没算出来」是待办，「全零」会让摘要一致恒真。"
+        },
+        "fromPacks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "归属集合：这个成员是被哪些包（含 includes 展开出来的子包）引入的。"
+        }
+      }
+    },
+    "loadReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pack_id", "status", "ok", "error", "members",
+        "new_members", "summary_not_verified", "overridden",
+        "selected_providers", "provider_conflicts"
+      ],
+      "description": "装载报告（API 返回，形状由 `packs/boot.py` 的 `summarize_reports` 定义）。十个键**全部无条件写出**，所以全部必填。★ 一个反直觉但真实的行为：`partial` 失败姿态下 `status` 仍是 `loaded`、`ok` 仍是 `true`，而 `error` 非空（内容是「部分成功：N 个成员已启用，但 X 启用失败」）——「部分成功是一个合法状态」，逐成员留痕让用户能问出「哪个没装上、为什么」。契约因此**不加**「ok=true ⇒ error=null」这类约束：加了就会拒绝真实产物。",
+      "properties": {
+        "pack_id": {
+          "type": "string",
+          "maxLength": 96,
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$",
+          "description": "报告属于哪个包。注意这里是 snake_case（`pack_id`），与快照的 `packId` 不同——两处命名都是既有实现，契约照抄。"
+        },
+        "status": {
+          "enum": ["loaded", "failed", "aborted"],
+          "description": "整包结论。`loaded` = 本次装配成功（含 partial 的部分成功）；`failed` = 硬拒绝或整包回滚；`aborted` = 预留值，`LoadReport.status` 的 docstring 声明了它，当前实现没有产生点——收录它是为了不把已声明的取值判成非法，而不是假装它会发生。"
+        },
+        "ok": {
+          "type": "boolean",
+          "description": "`status == 'loaded'` 的派生值（`LoadReport.ok` 是 property，不是独立字段）。不要用它判断「有没有问题」——partial 时它为 true 而 error 非空；要看 `error` 与 `members[].status`。"
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "失败原因（人话，含「怎么修」）。成功且无部分失败时为 null。"
+        },
+        "members": {
+          "type": "array",
+          "description": "逐成员留痕。**必带字段，不是可选**：不论最终状态如何，用户都要能问出「每个成员到底怎么了」——这是「可追问、可审计」的地基。注意摘要里**只保留 id / status / reason** 三个键：`MemberOutcome` 还有 version 与 from_packs，但 `summarize_reports` 不把它们透出去，契约不虚构。",
+          "items": { "$ref": "#/$defs/reportMember" }
+        },
+        "new_members": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "本次新增的成员（不在装配快照里）——协议 §15.3 要求**显著标出**：新成员没有基线可比，摘要校验必然落在「未校验」里，用户得知道哪些是新的。"
+        },
+        "summary_not_verified": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "摘要**没校验**的成员（协议 §19.3 的 summaryNotVerified）。什么算「没校验」：算不出实际摘要（插件目录不可达），或清单里没钉摘要、锁里也没有基线可比。这与「摘要不符」是两件事：不符是**发现了不一致**（硬拒绝），没校验是**没能力发现**（留痕放行）——一个是结论，一个是待办。必须透出去，藏起来就等于让用户以为一切都被验过了。"
+        },
+        "overridden": {
+          "type": "array",
+          "description": "覆盖留痕（协议 §19.3 硬要求②「不能省」）：用户必须能看出「我看到的值是哪个包给的」。收录范围是**包的值生效**的项（含无变化的 same），不含「用户的值赢了」的项。",
+          "items": { "$ref": "#/$defs/overriddenEntry" }
+        },
+        "selected_providers": {
+          "type": "array",
+          "description": "能力路由留痕（协议 §19.3 的 selectedProviders）：能力名 → 选中的提供者插件 id。它回答一个问题——「我现在的账单数据，是哪个插件在提供」。在有多 Provider 的系统里，这个问题必须随时能回答。",
+          "items": { "$ref": "#/$defs/selectedProvider" }
+        },
+        "provider_conflicts": {
+          "type": "array",
+          "description": "**待裁决**的多 Provider 冲突：能力名 → 候选提供者列表。与 selected_providers 是一对：有选定的记在 selected，没选定的记在这里；两者都非空 ⇒ 该能力装配后为 unavailable。★ 这不是失败：系统照常起来，只是那个能力不可用——阻断会让内核在包层说话之前就把系统判死，包层就永远没机会裁决。",
+          "items": { "$ref": "#/$defs/providerConflict" }
+        }
+      }
+    },
+    "reportMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "reason"],
+      "description": "报告里的一条成员留痕。三个键无条件写出（reason 可以是 null）。",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "成员插件 id。"
+        },
+        "status": {
+          "enum": ["loaded", "reused", "skipped", "degraded", "failed"],
+          "description": "该成员本次的结论。`loaded` = 本次启用成功；`reused` = 摘要一致且已在位，差量装配不动它；`skipped` = 可选成员未被选 / 被用户停用 / 被用户移除 / 包声明停用；`degraded` = 超出包权限预算或所需能力无人提供——该成员降级，不整包失败；`failed` = 启用失败。"
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "为什么是这个结论（人话）。`loaded` 且无异常时为 null。"
+        }
+      }
+    },
+    "overriddenEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["member", "path", "layer", "current"],
+      "description": "一条覆盖留痕（`packs/config.py` 的 `ConfigPlan.overridden`）。粒度是**单个 key**，不是整段——协议 §19.3 的示例已经定死了留痕粒度；而 §11.1 的「整段替换」说的是值的替换方式，不是留痕粒度。",
+      "properties": {
+        "member": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "成员插件 id。"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^config\\.[a-z][a-z0-9-]*\\..+$",
+          "description": "设置项路径，形如 `config.finance.ledger`——落在单个 key 上。"
+        },
+        "layer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "这一层是谁给的。填**包 id**（如 local.my-pack），不是成员 id——协议 §19.3 的示例里 layer 就是包 id。"
+        },
+        "current": {
+          "type": "string",
+          "description": "当前生效值的 JSON 文本（留痕用：回答「原来是什么」）。没有当前值时是空串，不是 null。"
+        }
+      }
+    },
+    "selectedProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "provider", "layer"],
+      "description": "一条能力路由留痕（`packs/routing.py` 的 `route_capabilities`）。",
+      "properties": {
+        "capability": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$",
+          "description": "能力名，形如 finance.bill.read（带点）。"
+        },
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "选中的提供者**插件** id（单段）。键与值形状不同，写错一边就会被挡下。"
+        },
+        "layer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "这次选择来自哪一层（基包 / 派生包 / 用户层）。层序算不出来时实现会填 `?`——所以这里只要求非空，不限定取值。"
+        }
+      }
+    },
+    "providerConflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "candidates"],
+      "description": "一条待裁决的多 Provider 冲突（`packs/routing.py` 的 `route_capabilities`）。",
+      "properties": {
+        "capability": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$",
+          "description": "能力名。"
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "description": "候选提供者插件 id。至少两个——只有一个提供者时不构成冲突（显式指定唯一提供者只会记一条 warning 日志）。"
+        }
+      }
+    }
+  }
+}

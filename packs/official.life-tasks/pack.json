@@ -1,0 +1,54 @@
+{
+  "packFormat": 1,
+  "id": "official.life-tasks",
+  "name": "生活事务整理",
+  "version": "1.0.0",
+  "kind": "official",
+  "kernelApi": "^1",
+  "description": "账本、待办、日程装在一起，今天的事一处看清。",
+  "tagline": "把散落的账、事、日程收进一个包",
+  "author": "yunxi",
+  "license": "Apache-2.0",
+  "icon": "box",
+  "entry": "todo",
+  "source": {
+    "type": "bundled",
+    "locator": "builtin"
+  },
+  "members": {
+    "required": [
+      { "id": "finance", "version": "0.2.0" },
+      { "id": "todo", "version": "0.1.0" },
+      { "id": "calendar", "version": "0.1.0" }
+    ],
+    "optional": [
+      { "id": "review", "version": "0.1.0" },
+      { "id": "push", "version": "0.1.0" }
+    ],
+    "excluded": []
+  },
+  "permissionBudget": {
+    "objectLevel": "L1",
+    "capabilities": [
+      "finance.entry.read",
+      "finance.entry.write",
+      "finance.snapshot.read",
+      "todo.item.read",
+      "todo.item.write",
+      "todo.tag.read",
+      "calendar.event.read",
+      "calendar.event.write",
+      "calendar.slot.free",
+      "x.summary.today"
+    ],
+    "approvalRequired": []
+  },
+  "providerChoice": {
+    "x.summary.today": "todo"
+  },
+  "onboarding": [
+    "先记一笔账，看看这个月的钱去了哪儿",
+    "把今天要做的事写进待办",
+    "在日程表上给这件事留出时间"
+  ]
+}

@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alongside.local/contracts/pack.schema.json",
+  "title": "Alongside 整合包清单（pack.json）契约",
+  "description": "整合包清单的唯一契约。未知顶层字段一律拒绝——包清单承载装配副作用，宽松解析等于静默的权限缺口。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packFormat", "id", "name", "version", "kind", "kernelApi",
+    "description", "author", "license", "source", "members", "permissionBudget"
+  ],
+  "properties": {
+    "packFormat": {
+      "type": "integer",
+      "const": 1,
+      "description": "清单格式版本。缺失或高于实现支持的版本一律拒绝。与 kernelApi 是两个维度：本字段管清单长什么样，kernelApi 管内核接口能不能满足。"
+    },
+    "id": {
+      "type": "string",
+      "maxLength": 96,
+      "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+      "description": "反向命名空间，必须等于包目录名。官方包用 official.*；第三方用自有域名反写或 io.github.<user>.*；本地用 local.<user>.*。official.* 前缀只允许 kind=official 使用（保留名拒绝）。"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 24,
+      "description": "界面显示的中文名。"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "三段式精确版本。包层没有版本区间，也不做区间解析。"
+    },
+    "kind": {
+      "enum": ["official", "third-party", "local", "derived"],
+      "description": "包的来源分类。与插件的 kind（core/builtin/third-party/container）不是同一个维度：插件那套决定权限与可卸载性，这套决定来源与信任。"
+    },
+    "kernelApi": {
+      "type": "string",
+      "pattern": "^(\\^)?[0-9]+(\\.[0-9]+){0,2}$",
+      "description": "要求的内核接口范围，caret 语义；不兼容即拒绝装载，不许静默降级。"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "一句话描述。"
+    },
+    "author": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "description": "SPDX 标识或等价表述。引用了第三方成员时，包自身与成员的许可必须相容，且必须在 README 里逐项列出。"
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "可选。非法 URL 会让该包被标注降级，但不阻止装载。"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["bundled", "local", "remote"],
+          "description": "bundled=随发行版；local=本地目录；remote=远端获取。remote 的**形状**被接受（预留位语义），但第一期一律拒绝装载。"
+        },
+        "locator": {
+          "type": "string",
+          "description": "定位符。内置包写 builtin。"
+        }
+      }
+    },
+    "members": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required"],
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/member" },
+          "description": "必需成员：缺任何一个，这个包就不成立。定义「这个包是什么」。"
+        },
+        "optional": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/member" },
+          "description": "可选成员：缺了不阻塞装载，标注降级并记入装载报告。"
+        },
+        "excluded": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "显式排除（派生包用）：从基包继承时把某个成员移出。与 required 不得有交集。"
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": { "type": "object" },
+      "description": "按成员 id 给出该成员的配置值。整段替换，不做深合并——某一项的值永远只有一个来源。同一个成员的 config 只能由一个包提供，两个包都写同一成员 → 拒绝装载。"
+    },
+    "secrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "title", "for"],
+        "properties": {
+          "key": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "sensitive": { "type": "boolean", "default": true },
+          "required": { "type": "boolean", "default": true },
+          "for": { "type": "string", "description": "使用该凭据的成员 id。" }
+        }
+      },
+      "description": "声明式凭据需求。包里只写「需要什么、给谁用」，绝不写值。"
+    },
+    "permissionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objectLevel"],
+      "properties": {
+        "objectLevel": {
+          "enum": ["L0", "L1", "L2"],
+          "description": "对象维度上限。L3（内核）一律不接受——包不得声明对内核的操作。"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$" },
+          "uniqueItems": true,
+          "description": "能力预算。只能 ≤ 必需成员声明之并集：包不得声明任何成员都没声明的能力（只能收紧，不能放大）。"
+        },
+        "approvalRequired": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "icon": { "type": "string", "description": "从内核图标表挑选。" },
+    "tagline": { "type": "string", "maxLength": 40, "description": "面向使用者的一句话价值。" },
+    "onboarding": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 60 },
+      "maxItems": 5,
+      "description": "首次装载后的上手引导。"
+    },
+    "entry": { "type": "string", "description": "装载完成后默认打开的模块 id。包只做索引，不做内容。" },
+    "derivedFrom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      },
+      "description": "派生包专用：基包标识。派生包只写差异，不复制基包的成员清单。"
+    },
+    "overrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "派生包专用：对**包级字段**的覆盖（整段替换，最后写入者胜）。这份白名单就是「包只能覆盖配置、不能覆盖声明」在 Schema 层面的强制。",
+      "properties": {
+        "members": { "$ref": "#/properties/members" },
+        "config": { "$ref": "#/properties/config" },
+        "secrets": { "$ref": "#/properties/secrets" },
+        "permissionBudget": { "$ref": "#/properties/permissionBudget" },
+        "tagline": { "$ref": "#/properties/tagline" },
+        "onboarding": { "$ref": "#/properties/onboarding" },
+        "icon": { "$ref": "#/properties/icon" },
+        "entry": { "$ref": "#/properties/entry" }
+      }
+    },
+    "deprecated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["since"],
+      "properties": {
+        "since": { "type": "string" },
+        "supersededBy": { "type": "string" },
+        "reason": { "type": "string", "maxLength": 120 }
+      },
+      "description": "弃用声明。第一期只声明、不强制：允许继续使用，装载报告里标注。"
+    },
+    "renames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to"],
+        "properties": { "from": { "type": "string" }, "to": { "type": "string" } }
+      },
+      "description": "预留位：改名映射。第一期只校验形状、不生效。"
+    },
+    "removedAt": {
+      "type": "string",
+      "description": "预留位：从清单移除的时间。第一期只校验形状、不生效。"
+    },
+    "views": {
+      "type": "object",
+      "description": "预留位：按身份/场景裁剪的成员视图（包是全集，激活集是其子集）。第一期只校验形状、不生效。"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "扩展位。放行不报不拒——本 Schema 里唯一不做未知键检查的字段。"
+    }
+  },
+  "$defs": {
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "期望版本。"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "可选的期望内容摘要。只在确实要钉住时手写；日常由 alongside pack lock 生成到 pack.lock.json——摘要的维护是工具的事，不是人的事。"
+        },
+        "license": {
+          "type": "string",
+          "description": "引用第三方成员时必写：该成员的许可，用于合规检查。"
+        }
+      }
+    }
+  }
+}

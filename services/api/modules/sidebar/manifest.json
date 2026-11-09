@@ -39,7 +39,7 @@
     "db:own"
   ],
   "migrations": "migrations",
-  "settingsSchema": "api/settings.schema.json",
+  "settingsSchema": "settings.schema.json",
   "lifecycle": {
     "onInstall": null,
     "onEnable": null,

@@ -232,8 +232,20 @@ def create_app(
         return app.openapi()
 
     @app.get("/api/{module_id}/openapi.json", tags=["_kernel"], include_in_schema=False)
+    @app.get("/api/v1/{module_id}/openapi.json", tags=["_kernel"], include_in_schema=False)
     def module_openapi(module_id: str, request: Request) -> Any:
-        """模块级 openapi 端点（内核兜底）—— 按 manifest 声明路径返回该模块的 schema。"""
+        """模块级 openapi 端点（内核兜底）—— 按 manifest 声明路径返回该模块的 schema。
+
+        ★ 为什么有两个路径（2026-11-09 补）：
+          manifest 里 `api.base` 是 `/api/v1/<id>`、`api.health` 也是 `/api/v1/<id>/health`，
+          而 `api.openapi` 声明的是 `/api/v1/<id>/openapi.json` ——
+          内核此前只实装了 `/api/<id>/openapi.json`（少了 `v1`），于是
+          **声明路径 404、实装路径 200**（实测：`/api/v1/agents/openapi.json`=404）。
+
+          ⇒ 补上声明路径，让「manifest 声明」成真。
+          **旧路径保留**：`services/api/modules/mcp/openapi_params.py` 还在调它，
+          那是历史兼容，不是第二个真相源——真相源是 manifest 里的 `api.openapi`。
+        """
         if module_id not in app.state.modules:
             raise HTTPException(status_code=404, detail=f"模块 {module_id} 未注册")
         mod = app.state.modules[module_id]

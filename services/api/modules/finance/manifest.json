@@ -46,7 +46,7 @@
     "net:out:127.0.0.1"
   ],
   "migrations": "migrations",
-  "settingsSchema": "api/settings.schema.json",
+  "settingsSchema": "settings.schema.json",
   "lifecycle": {
     "onInstall": null,
     "onEnable": null,

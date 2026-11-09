@@ -36,7 +36,7 @@
   ],
   "activates_on": [],
   "migrations": null,
-  "settingsSchema": "api/settings.schema.json",
+  "settingsSchema": null,
   "lifecycle": {
     "onInstall": null,
     "onEnable": null,

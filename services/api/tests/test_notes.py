@@ -4,6 +4,7 @@
 桥客户端全部 mock——本机没有真实 vault，不伪造「已接入」。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -58,7 +59,7 @@ def client():
 @pytest.fixture(autouse=True)
 def _clean():
     engine = get_engine()
-    with __import__("sqlmodel").Session(engine) as s:
+    with declare_scope(__import__("sqlmodel").Session(engine)) as s:
         s.exec(text("DELETE FROM note_index"))
         s.exec(text("DELETE FROM note_lib"))
         s.commit()
@@ -160,7 +161,7 @@ def test_sync_removes_missing(client, auth, monkeypatch):
     engine = get_engine()
     from sqlmodel import Session
 
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         s.add(NoteIndex(lib_id=lib["id"], rel_path="gone.md", title="会消失"))
         s.commit()
 
@@ -193,7 +194,7 @@ def _seed_index(client, auth) -> tuple[dict, dict]:
     engine = get_engine()
     from sqlmodel import Session
 
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         n1 = NoteIndex(
             lib_id=lib["id"],
             rel_path="weekly/2026-09-13.md",

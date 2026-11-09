@@ -4,6 +4,7 @@
 ★ 用假 pi_client（鸭子类型）注入，不真起 pi —— 这一层只验证**编排逻辑**。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -50,7 +51,7 @@ def _setup_db():
 @pytest.fixture(autouse=True)
 def _clean():
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         for tbl in ("agents_dispatch", "agents_task", "agents_agent"):
             try:
                 s.exec(text(f"DELETE FROM {tbl}"))
@@ -63,7 +64,7 @@ def _clean():
 @pytest.fixture()
 def db():
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         yield s
 
 

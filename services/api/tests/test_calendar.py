@@ -4,6 +4,7 @@
 表只在当前进程内由模型直接建（create_app 不自动跑迁移，避免跨插件迁移碰撞）。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -52,7 +53,7 @@ def _clean_events():
     from db.engine import get_engine as _ge
 
     engine = _ge()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         s.exec(text("DELETE FROM calendar_event WHERE parent_id IS NOT NULL"))
         s.exec(text("DELETE FROM calendar_event WHERE parent_id IS NULL"))
         s.commit()

@@ -3,6 +3,7 @@
 数据库隔离：./data/tmp_t10.db，绝不碰主库。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -36,7 +37,7 @@ def client():
 @pytest.fixture(autouse=True)
 def _clean():
     engine = get_engine()
-    with __import__("sqlmodel").Session(engine) as s:
+    with declare_scope(__import__("sqlmodel").Session(engine)) as s:
         s.exec(text("DELETE FROM habits_log"))
         s.exec(text("DELETE FROM habits_habit"))
         s.commit()

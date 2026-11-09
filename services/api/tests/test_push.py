@@ -4,6 +4,7 @@
 外发 HTTP 全部 mock —— 没有真推送服务，不伪造「已推送」。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import base64
 import os
@@ -51,7 +52,7 @@ def client():
 @pytest.fixture(autouse=True)
 def _clean():
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         for row in s.exec(select(PushSubscription)).all():
             s.delete(row)
         for row in s.exec(select(PushLog)).all():
@@ -62,7 +63,7 @@ def _clean():
 
 @pytest.fixture()
 def db():
-    with Session(get_engine()) as s:
+    with declare_scope(Session(get_engine())) as s:
         yield s
 
 

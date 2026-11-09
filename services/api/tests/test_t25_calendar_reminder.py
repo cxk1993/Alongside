@@ -1,5 +1,6 @@
 """T25 calendar 提醒：collect/tick/持久化去重/日志（不触网）。"""
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 from datetime import UTC, datetime, timedelta
@@ -27,7 +28,7 @@ from modules.calendar.reminder_scheduler import (  # noqa: E402
 def db(tmp_path: Path) -> Session:
     engine = create_engine(f"sqlite:///{tmp_path}/t25.db")
     SQLModel.metadata.create_all(engine)
-    session = Session(engine)
+    session = declare_scope(Session(engine))
     _lock_state["notified"] = {}
     yield session
     session.close()

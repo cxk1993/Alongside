@@ -20,6 +20,7 @@ from core.security import create_access_token  # noqa: E402
 from db.engine import get_engine, init_engine  # noqa: E402
 from modules.todo.models import TodoItem  # noqa: E402
 from modules.todo.service import tag_hit  # noqa: E402
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 
 @pytest.fixture(scope="module")
@@ -38,7 +39,7 @@ def _clean():
     """清表（★ 容错：纯函数测试时表可能尚未建 —— 跳过即可）。"""
     try:
         engine = get_engine()
-        with Session(engine) as s:
+        with declare_scope(Session(engine)) as s:
             s.exec(text("DELETE FROM todo_item"))
             s.commit()
     except Exception:  # noqa: BLE001 —— 未建表/未初始化时静默跳过
@@ -135,7 +136,7 @@ def test_study_item_enters_window_24h_early() -> None:
 
     eng = create_engine("sqlite://")
     SQLModel.metadata.create_all(eng)
-    db = Session(eng)
+    db = declare_scope(Session(eng))
 
     due_scheduler._notified.clear()
     now = datetime.now(UTC)

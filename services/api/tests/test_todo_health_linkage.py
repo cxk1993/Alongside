@@ -1,5 +1,6 @@
 """ISSUE-007 · todo 订阅 health.care.requested 测试。"""
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 from datetime import date, timedelta
@@ -26,10 +27,10 @@ from modules.todo.models import TodoItem, tags_from_json
 def db(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path}/t007.db")
     SQLModel.metadata.create_all(engine)
-    session = Session(engine)
+    session = declare_scope(Session(engine))
 
     def _factory() -> Session:
-        return Session(engine)
+        return declare_scope(Session(engine))
 
     set_engine(_factory)
     yield session

@@ -5,6 +5,7 @@
 表只在当前进程内由模型直接建（create_app 不自动跑迁移）。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import atexit
 import os
@@ -61,7 +62,7 @@ def client():
 def _clean():
     """每条测试前清空本插件表，测试之间不得相互依赖。"""
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         s.exec(text("DELETE FROM docs_fts"))
         s.exec(text("DELETE FROM docs_revision"))
         s.exec(text("DELETE FROM docs_content"))
@@ -279,7 +280,7 @@ def test_purge_hard_delete(client, auth):
     assert r.status_code == 404
     # content / revision 也清了
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         assert s.get(DocsContent, child["id"]) is None
         stmt = text("SELECT COUNT(*) FROM docs_revision WHERE node_id = :n")
         revs = s.exec(stmt.bindparams(n=child["id"])).one()

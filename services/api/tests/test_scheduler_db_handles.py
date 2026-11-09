@@ -43,7 +43,7 @@ def test_scheduler_db_handles_use_session_not_generator() -> None:
             offenders.append(f"{rel}:{line_no}  {m.group(0)}")
     assert not offenders, (
         "★ 防回潮：以下直调点会拿到 generator 而非 Session —— "
-        "请改用 `with db_session() as db:`：\n" + "\n".join(offenders)
+        "请改用 `with kernel_session() as db:`：\n" + "\n".join(offenders)
     )
 
 
@@ -55,7 +55,7 @@ def test_get_db_is_generator_for_depends() -> None:
 
 
 def test_db_session_yields_instance_and_closes(monkeypatch) -> None:
-    """`db_session()` 必须产出**实例**（非 generator），且**退出即 close**。"""
+    """`kernel_session()` 必须产出**实例**（非 generator），且**退出即 close**。"""
     closed = {"n": 0}
 
     class FakeSession:
@@ -63,6 +63,6 @@ def test_db_session_yields_instance_and_closes(monkeypatch) -> None:
             closed["n"] += 1
 
     monkeypatch.setattr(deps, "_engine_factory", lambda: FakeSession())
-    with deps.db_session() as db:
+    with deps.kernel_session() as db:
         assert isinstance(db, FakeSession), "非 Depends 场景拿到的不该是 generator"
     assert closed["n"] == 1, "退出必须 close —— 否则连接不回池（根因复发）"

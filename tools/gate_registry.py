@@ -158,6 +158,18 @@ GATES: tuple[Gate, ...] = (
         blocking=True,
         has_regression_test=False,
     ),
+    Gate(
+        id="db-scope-wiring",
+        path="tools/gates/verify_db_scope_wiring.py",
+        description=(
+            "G16 · 数据作用域接线：after_begin 是否真挂、未声明作用域是否真被拒、"
+            "插件白名单是否拦读/写/删、连接是否不泄漏、作用域是否只约束第三方。"
+            "★ 全部是运行时判据——「文件里有 event.listen」抓不到 checkin 签名这类错。"
+        ),
+        blocking=True,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_db_scope_wiring.py",
+    ),
 )
 
 #: 文件名判据：前缀或后缀命中即视为「像门禁」。

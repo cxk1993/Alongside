@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import SQLModel
 
 from core.app import create_app
-from core.deps import db_session
+from core.deps import kernel_session
 from core.plugins.discover import PluginInfo
 from core.plugins.manager import get_plugin_manager
 from core.registry import ModuleRegistry
@@ -146,7 +146,7 @@ def _mk_info(pid: str) -> PluginInfo:
 
 
 def _state(pid: str) -> PluginState | None:
-    with db_session() as db:
+    with kernel_session() as db:
         return db.get(PluginState, pid)
 
 
@@ -348,7 +348,7 @@ def test_activator_persists_error_to_plugin_state(isolated_db: None) -> None:
         PLUGINS_DIR / pid,
         router_src="import this_module_does_not_exist_xyz  # noqa\n",
     )
-    with db_session() as db:
+    with kernel_session() as db:
         db.add(PluginState(id=pid, enabled=True))
         db.commit()
 
@@ -433,7 +433,7 @@ def test_install_failure_rolls_back_migration_and_state(isolated_db: None) -> No
                 )
             ).first()
         assert tbl is None, "★ install 失败后新建的表必须被回滚删除"
-        with db_session() as db:
+        with kernel_session() as db:
             assert db.get(PluginState, pid) is None, (
                 "★ install 失败后不得残留 plugin_state 行（应回到未安装态）"
             )
@@ -504,7 +504,7 @@ def test_hook_failure_is_soft_does_not_rollback(isolated_db: None) -> None:
         reg = app.state.registry
         get_plugin_manager().enable(pid, reg)  # 不得上抛
         assert pid in reg.mounted(), "钩子软失败不得摘掉路由（effect 已生效）"
-        with db_session() as db:
+        with kernel_session() as db:
             st = db.get(PluginState, pid)
         assert st is not None and st.enabled is True, "软失败仍保持启用"
         assert st.last_error and "hook boom" in st.last_error, "错误须落到 last_error"

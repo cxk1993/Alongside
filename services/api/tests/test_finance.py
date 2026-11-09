@@ -4,6 +4,7 @@
 表只在当前进程内由模型直接建（create_app 不自动跑迁移，避免跨插件迁移碰撞）。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -43,7 +44,7 @@ def client():
 def _clean():
     """每条测试前清空本插件表，测试之间不得相互依赖。"""
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         s.exec(text("DELETE FROM finance_entry"))
         s.commit()
     yield

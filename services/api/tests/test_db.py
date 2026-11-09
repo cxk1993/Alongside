@@ -1,5 +1,6 @@
 """T04 数据层单测：mixin建表 / repo分页边界 / todo真实样例 / 迁移 / 并发 / 备份 / 字典一致。"""
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import sys
 import threading
@@ -29,7 +30,7 @@ def engine_fixture(tmp_path):
 def test_mixin_creates_table_and_defaults(engine: None) -> None:
     Base.metadata.create_all(engine)
     row = AuditLog(actor="t", action="test")
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         s.add(row)
         s.commit()
         s.refresh(row)
@@ -40,7 +41,7 @@ def test_mixin_creates_table_and_defaults(engine: None) -> None:
 
 def test_naive_datetime_rejected(engine) -> None:
     Base.metadata.create_all(engine)
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         s.add(AuditLog(actor="t", action="naive", at=datetime(2026, 9, 15, 8, 0)))
         with pytest.raises(Exception):  # noqa: B017,PT011 —— naive 必须在写入时报错
             s.commit()
@@ -51,7 +52,7 @@ def test_naive_datetime_rejected(engine) -> None:
 # ---------------------------------------------------------------------------
 def test_repo_pagination_boundaries(engine) -> None:
     Base.metadata.create_all(engine)
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         repo = Repo(s, AppSetting)
         # 边界一：空结果
         items, nxt = repo.page()
@@ -199,7 +200,7 @@ def test_concurrent_writers_no_lock(tmp_path) -> None:
 
     def writer(i: int) -> None:
         try:
-            with Session(engine) as s:
+            with declare_scope(Session(engine)) as s:
                 s.add(AppSetting(key=f"c{i}", value_json=str(i)))
                 s.commit()
         except Exception as ex:  # noqa: BLE001
@@ -212,7 +213,7 @@ def test_concurrent_writers_no_lock(tmp_path) -> None:
     for t in threads:
         t.join()
     assert errors == []
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         assert len(s.exec(select(AppSetting)).all()) == 10
 
 
@@ -253,10 +254,10 @@ def test_dictionary_matches_models() -> None:
 def test_utc_roundtrip_cross_day(engine) -> None:
     Base.metadata.create_all(engine)
     src = datetime(2026, 9, 18, 20, 0, tzinfo=timezone(timedelta(hours=8)))  # 周五 20:00+08
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         s.add(AuditLog(actor="t", action="crossday", at=src))
         s.commit()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         row = s.exec(select(AuditLog).where(AuditLog.action == "crossday")).one()
         assert row.at == src  # ★ 往返仍是**同一瞬间**（跨时区相等）—— 这是真正的不变量
         # ★ 2026-09-28（主人「统一为本地时区」）：读出不再补 UTC，而是转主人本地时区。

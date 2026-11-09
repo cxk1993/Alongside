@@ -4,6 +4,7 @@
 上游：REVIEW_UPSTREAM=mock（离线全绿）；api 模式另测错误语义。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -52,7 +53,7 @@ def client():
 @pytest.fixture(autouse=True)
 def _clean():
     engine = get_engine()
-    with __import__("sqlmodel").Session(engine) as s:
+    with declare_scope(__import__("sqlmodel").Session(engine)) as s:
         s.exec(text("DELETE FROM review_note"))
         s.exec(text("DELETE FROM review_daily"))
         s.commit()
@@ -173,7 +174,7 @@ def test_ingest_idempotent(client, auth):
     assert a["date"] == b["date"] == day.isoformat()
     assert a["raw_path"] == f"work-review:{day.isoformat()}"
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         rows = list(s.exec(select(ReviewDaily).where(ReviewDaily.date == day)).all())
         assert len(rows) == 1
         assert rows[0].raw_path == f"work-review:{day.isoformat()}"

@@ -35,6 +35,9 @@ from db.engine import get_engine, init_engine
 API_ROOT = Path(__file__).resolve().parents[1]
 PLUGINS_DIR = API_ROOT.parent.parent / "plugins"  # 项目根/plugins
 DEMO_ID = f"demo3p-{uuid.uuid4().hex[:6]}"
+# 表名跟随插件 id 动态生成：每次测试 uuid 不同，表名随之隔离；
+# 且必须以 `{id 连字符→下划线}_` 开头，否则 authorizer 拒绝访问。
+DEMO_TABLE = DEMO_ID.replace("-", "_") + "_thing"
 
 TOKEN = create_access_token("admin")
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -83,7 +86,7 @@ def _write_demo_plugin(root: Path, *, kernel_api: str = "^1") -> None:
     (root / "api" / "models.py").write_text(
         "from sqlmodel import Field, SQLModel\n"
         "class DemoThing(SQLModel, table=True):\n"
-        "    __tablename__ = 'demo3p_thing'\n"
+        f"    __tablename__ = '{DEMO_TABLE}'\n"
         "    __table_args__ = {'extend_existing': True}\n"
         "    id: str = Field(primary_key=True, max_length=32)\n"
         "    title: str = Field(default='', max_length=80)\n",
@@ -301,7 +304,7 @@ def test_full_lifecycle_install_enable_disable_uninstall(
 
     with get_engine().connect() as conn:
         tbl = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='demo3p_thing'")
+            text(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{DEMO_TABLE}'")
         ).fetchone()
     assert tbl is None, "卸载后插件表应被清理"
 
@@ -378,7 +381,7 @@ def test_enable_runs_migrations_when_table_missing(
     #（模拟 countdown 场景：插件在 plugins/ 里，plugin_state 有行且 enabled=1）
     from db.models.system import PluginState
     from core.plugins import discover as discover_mod
-    from core.deps import db_session
+    from core.deps import kernel_session
 
     _res = discover_mod.discover_plugins()
     info = next((p for p in _res.plugins if p.id == DEMO_ID), None)
@@ -387,17 +390,17 @@ def test_enable_runs_migrations_when_table_missing(
     # ★ 前置：确保"未跑迁移"的状态 —— 主动 DROP 表 + 清台账
     #（不能假设表不存在：同模块别的用例可能已装过同 id 插件，表会残留）
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS demo3p_thing"))
+        conn.execute(text(f"DROP TABLE IF EXISTS {DEMO_TABLE}"))
         conn.execute(text("DELETE FROM app_setting WHERE key LIKE :p"), {"p": f"migration.{DEMO_ID}.%"})
 
     with engine.connect() as conn:
         before = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='demo3p_thing'")
+            text(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{DEMO_TABLE}'")
         ).fetchone()
-    assert before is None, "前置条件：此刻 demo3p_thing 表不应存在（已 DROP）"
+    assert before is None, f"前置条件：此刻 {DEMO_TABLE} 表不应存在（已 DROP）"
 
     # 手工写 plugin_state 行（enabled=1）—— 等价于"直接放进 plugins/ 后启用"
-    with db_session() as db:
+    with kernel_session() as db:
         row = db.get(PluginState, DEMO_ID)
         if row is None:
             db.add(
@@ -421,7 +424,7 @@ def test_enable_runs_migrations_when_table_missing(
     # ── ③ 断言：表被建出来了（迁移真跑了）──
     with engine.connect() as conn:
         after = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='demo3p_thing'")
+            text(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{DEMO_TABLE}'")
         ).fetchone()
     assert after is not None, "★ enable() 应补跑迁移建表（回归：countdown 500 根因）"
 
@@ -438,7 +441,7 @@ def test_enable_runs_migrations_when_table_missing(
     mgr.enable(DEMO_ID, client.app.state.registry)
     with engine.connect() as conn:
         still = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='demo3p_thing'")
+            text(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{DEMO_TABLE}'")
         ).fetchone()
     assert still is not None, "重复 enable 后表应仍存在（迁移幂等）"
 
@@ -449,7 +452,7 @@ def test_enable_runs_migrations_when_table_missing(
     # 清理状态行（表由 fixture 兜底删目录，这里顺手清 plugin_state）
     from db.models.system import PluginState as _PS
 
-    with db_session() as db:
+    with kernel_session() as db:
         row = db.get(_PS, DEMO_ID)
         if row is not None:
             db.delete(row)

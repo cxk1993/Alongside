@@ -12,6 +12,7 @@ FINANCE_UPSTREAM 默认 mock：离线全绿，不访问真实外网 / 不写真�
   - 全库无 /api/v1/sync/* 调用（源码扫描）
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -74,7 +75,7 @@ def _clean():
     os.environ["FINANCE_UPSTREAM"] = "mock"
     os.environ.pop("BEECOUNT_MCP_TOKEN", None)
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         s.exec(text("DELETE FROM finance_snapshot"))
         s.exec(text("DELETE FROM finance_entry"))
         s.commit()
@@ -180,7 +181,7 @@ def test_sync_idempotent_same_day_does_not_double(client, auth):
     assert lst["total"] == 1  # 同日覆盖，不翻倍
 
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         rows = list(s.exec(text("SELECT date, total_asset FROM finance_snapshot")).all())
     assert len(rows) == 1
 
@@ -189,7 +190,7 @@ def test_sync_service_level_inject_client_idempotent():
     """直接测 service 层：注入 mock client，两次 sync 同日仍一条。"""
     engine = get_engine()
     mock = MockBeeCountClient()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         out1 = sync_from_client(s, mock, upstream="mock")
         out2 = sync_from_client(
             s,
@@ -393,7 +394,7 @@ def test_mcp_client_http_error_mapped():
 
 def test_sync_snapshot_accepts_injected_client():
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         out = sync_snapshot(s, client=MockBeeCountClient())
         assert out.ok is True
         assert out.snapshot is not None

@@ -9,6 +9,7 @@
   ④ 上课提醒调度（窗口命中 + 幂等 + 状态端点）
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -48,7 +49,7 @@ def client():
 @pytest.fixture(autouse=True)
 def _clean():
     engine = get_engine()
-    with __import__("sqlmodel").Session(engine) as s:
+    with declare_scope(__import__("sqlmodel").Session(engine)) as s:
         s.exec(text("DELETE FROM course_item"))
         try:
             s.exec(text("DELETE FROM plugin_setting WHERE plugin_id='course'"))
@@ -262,7 +263,7 @@ def test_collect_due_courses_window(client, auth):
     from sqlmodel import Session
 
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         due = collect_due_courses(s, now=datetime.now(UTC))
     due_ids = {r.id for r, _ in due}
     assert soon["id"] in due_ids
@@ -284,7 +285,7 @@ def test_run_tick_publishes_and_is_idempotent(client, auth):
     from sqlmodel import Session
 
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         first = run_course_tick(s)
         second = run_course_tick(s)
     assert first == 1, f"首次应发布 1 条，实得 {first}"
@@ -302,6 +303,6 @@ def test_tick_no_start_time_skipped(client, auth):
     from sqlmodel import Session
 
     engine = get_engine()
-    with Session(engine) as s:
+    with declare_scope(Session(engine)) as s:
         assert run_course_tick(s) == 0
     _notified.clear()

@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session, SQLModel, create_engine
 
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 from modules.todo import due_scheduler
 from modules.todo.models import TodoItem
 
@@ -19,7 +20,7 @@ from modules.todo.models import TodoItem
 def _db() -> Session:
     eng = create_engine("sqlite://")  # 内存库
     SQLModel.metadata.create_all(eng)
-    return Session(eng)
+    return declare_scope(Session(eng))
 
 
 def test_collect_only_within_window_and_not_done() -> None:

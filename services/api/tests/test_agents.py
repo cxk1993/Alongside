@@ -4,6 +4,7 @@
 不调外网：dispatch / report 全离线。
 """
 from __future__ import annotations
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import os
 
@@ -37,7 +38,7 @@ def client():
 @pytest.fixture(autouse=True)
 def _clean():
     engine = get_engine()
-    with __import__("sqlmodel").Session(engine) as s:
+    with declare_scope(__import__("sqlmodel").Session(engine)) as s:
         s.exec(text("DELETE FROM agents_dispatch"))
         s.exec(text("DELETE FROM agents_task"))
         s.exec(text("DELETE FROM agents_agent"))

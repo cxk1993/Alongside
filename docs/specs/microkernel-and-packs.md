@@ -50,16 +50,37 @@
 
 ## 4. ★ 哪些声称的能力还没接线（诚实登记）
 
+**2026-11-09 更新：数据作用域已接线，且实测三态成立。**
+
 | 能力 | 现状 | 差在哪 |
 |---|---|---|
-| 数据作用域（SQLite authorizer） | **代码在，未接线** | `core/db_scope.py` 的 `apply_scope_on_begin` / `clear_scope_on_checkin` 没有任何 `event.listen` 注册。接上之前必须先解决：内置模块与第三方插件走**同一个** `registry.mount`，后者会给所有模块挂 `_scope_dependency(plugin_id)`；而内置模块有 7 处跨模块读（todo→calendar_event、dashboard→calendar_event+finance_snapshot、finance→habits_habit+mcp_pat、ai-chat→todo_item+health_record、mcp→calendar_event+todo_item、calendar→push_log、catalog→web_entry），接上即被拦。**下一步**：`mount` 按 `kind` 区分，builtin/core 不挂作用域。 |
-| 逐次拦截层 / Reactive Coeffect | 机制在（`coeffect.py` / `dependency.py`），按依赖表驱动 | 与上面同源：依赖通知已可用，拦截仍是三合一通道 |
-| `lifecycle` 四钩子 | 已被内核调用（`run_lifecycle_hook`） | — |
-| `emits` / `consumes` 声明即订阅 | 已接入（未声明 topic 一律不投递） | — |
+| **数据作用域（SQLite authorizer）** | ✅ **已接线（2026-11-09）** | 三态：`kernel_session()`=内核特权 / `db_session(id)`=插件边界 / **未声明=deny-all**。`registry.mount(scoped=...)` 只给 `kind=third-party` 挂作用域依赖（内置模块之间本来就有跨模块读，那是误伤不是安全）。`db/engine.py` 挂 `Session.after_begin` + `engine.checkin`。**实测 7/7**：kernel 读写任意表 OK；`db_session("todo")` 读/写 `todo_item` OK、读 `finance_entry` 与 `plugin_state` DENIED；裸 Session DENIED。门禁 `tools/gates/verify_db_scope_wiring.py`（G16）守着它 |
+| 逐次拦截层 / Reactive Coeffect | 机制在（`coeffect.py` / `dependency.py`），按依赖表驱动 | 依赖通知已可用；拦截仍是三合一通道 |
+| `lifecycle` 四钩子 | ✅ 已被内核调用（`run_lifecycle_hook`，**按固定名** `on_enable/on_disable/on_uninstall`） | **manifest 的 `lifecycle` 映射字段不被消费**——pi-agent 曾声明全仓不存在的 `start_pi/stop_pi/cleanup_pi`，已改成与实现一致的固定名。⇒ 协议里应注明「钩子名固定，此字段仅声明位」 |
+| `consumes` 声明即订阅 | ⚠️ **未建** | `core/events.py:177 subscribe_declared()` **全仓零调用**；push 模块反而用被明令禁止的 `add_listener` 直连（`modules/push/push_link.py:114`）。已登记在 `check_protocol_consumption` 的未消费表里 |
+| `absorbs` 吸收机制 | ⚠️ **未建** | 31 份 manifest **全部未声明**该字段；真正的吸收写死在前端 `Dock.tsx` 的 `DOCK_MERGE`（19 条硬编码），且与 `SystemApp.tsx` 的 `DEFAULT_TABS` **已经分叉**（diary/countdown 被吸收却无页签 ⇒ 入口消失；habits 有页签却没被吸收 ⇒ 重复入口） |
+| `emits` / `consumes` 投递 | 未声明 topic 一律不投递 ✅ | 但 `emits` 有 9 个声明从未发布、6 个发布未声明（agents/packs/plugins/push 最严重）⇒ 作为「事件契约」目前不成立 |
 
 > 口径提醒：数据作用域是**纪律边界，不是沙箱**。
 > 插件与内核同进程同权，`import sqlite3; sqlite3.connect(path)` 就绕开了。
 > 它防 bug / 无意越界 / AI 写错表名，**不防恶意代码**。对外不许写成「隔离」。
+
+### 4.1 ★ 内核仍持有业务路由（不是缺陷，但必须写清）
+
+`/api/v1/summary/today`（BFF 聚合）与 `summary` 模块**同前缀** ⇒ FastAPI「先注册先匹配」，
+**模块自己的 `/today` 是死代码**（`modules/summary/router.py` 的注释里也这么写着）。
+
+同样在 `core/` 里的还有：`/api/v1/events/*`（事件总线 SSE）、`/api/v1/modules`、
+`/api/docs`（聚合文档）、`/api/{module_id}/openapi.json` 与 `/api/v1/{module_id}/openapi.json`。
+
+**这不是「内核不纯」**——BFF 聚合与事件总线是内核职责（协议 R-1：内核只转发不解析）。
+但**下一个人很容易去调 summary 模块那个死端点**，所以写在这里：
+**要看今日摘要，走 `/api/v1/summary/today`（BFF），不要走模块路由。**
+
+### 4.2 初版范围
+
+三档（必带 / 可带需标注 / 本期剥离）见
+`E:\ai work\alongside-refresh\reports\initial-version-scope.md`。
 
 ## 5. 门禁在哪
 

@@ -46,11 +46,11 @@
     "subprocess"
   ],
   "migrations": null,
-  "settingsSchema": "api/settings.schema.json",
+  "settingsSchema": null,
   "lifecycle": {
     "onInstall": null,
-    "onEnable": "start_pi",
-    "onDisable": "stop_pi",
-    "onUninstall": "cleanup_pi"
+    "onEnable": "on_enable",
+    "onDisable": "on_disable",
+    "onUninstall": "on_uninstall"
   }
 }

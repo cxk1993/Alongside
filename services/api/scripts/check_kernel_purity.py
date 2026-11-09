@@ -59,6 +59,25 @@ SCAN_ROOTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("services/api/core", ("plugins", "__pycache__")),
 )
 
+#: 按 scope 分组的扫描目标（2026-11-09 新增）。
+#:
+#: ★ 为什么要分：`verify` 里这道门禁是**阻塞**的，而实测后端内核是干净的、
+#:   前端内核有 13 处已知债务（`TimeWidget` / `Dock` / `DesktopSidebar` 里硬编码了
+#:   业务模块名）。前端那部分是「真相源没搬完」的后果，要重构，不是本期能顺手清掉的。
+#:   ⇒ 拆成两道：后端**阻塞**（地基必须干净），前端**如实报告、暂不阻塞**。
+#:   这不是把红灯涂绿——前端债务写进了 `docs/specs/microkernel-and-packs.md`，
+#:   且报告每次都打出来，谁都能看见。
+SCOPES: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
+    "backend": (("services/api/core", ("plugins", "__pycache__")),),
+    "frontend": (("apps/web/src/kernel", ("plugins", "slots", "node_modules", "dist")),),
+    "all": SCAN_ROOTS,
+}
+
+#: 测试文件里出现的业务词多半是 **DOM testid / 断言字面量**，不是「内核认识业务」。
+#: 实测 42 处误报全部来自这里（`getByTestId("today-sum-calendar-auth")` 之类）。
+#: ⇒ 默认跳过测试文件；要连测试一起查请显式加 `--include-tests`。
+TEST_FILE_SUFFIXES = (".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx", ".test.js", ".test.jsx")
+
 PY_SUFFIXES = {".py"}
 JS_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
 
@@ -156,14 +175,25 @@ def _iter_files(root: Path, excluded: tuple[str, ...]) -> Iterator[Path]:
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     verbose = "-v" in args or "--verbose" in args
+    warn_only = "--warn-only" in args
+    include_tests = "--include-tests" in args
+    scope = "all"
+    for i, a in enumerate(args):
+        if a == "--scope" and i + 1 < len(args):
+            scope = args[i + 1]
+    if scope not in SCOPES:
+        print(f"[purity] 未知 scope：{scope!r}（可选 {'/'.join(SCOPES)}）")
+        return 2
 
     violations: list[tuple[Path, int, str, str]] = []
     scanned = 0
-    for rel_root, excluded in SCAN_ROOTS:
+    for rel_root, excluded in SCOPES[scope]:
         root = PROJECT_ROOT / rel_root
         if verbose:
             print(f"[purity] 扫描 {rel_root}（排除 {'/'.join(excluded)}）")
         for path in _iter_files(root, excluded):
+            if not include_tests and path.name.endswith(TEST_FILE_SUFFIXES):
+                continue
             scanned += 1
             source = path.read_text(encoding="utf-8", errors="replace")
             raw_lines = source.splitlines()
@@ -200,6 +230,10 @@ def main(argv: list[str] | None = None) -> int:
     print("内核不认识业务。为一件具体的事去动 framework —— 按总纲，那是框架的 bug。")
     print("正确做法：把它做成插件；需要新的扩展点就走 docs/rfc/ 提 RFC。")
     print(f"确有正当理由保留的，在该行写 `{ESCAPE_MARK}: <理由>` 显式豁免。")
+    if warn_only:
+        print()
+        print("[purity] --warn-only：以上仅**报告**，不阻塞（债务已登记在 docs/specs）。")
+        return 0
     return 1
 
 

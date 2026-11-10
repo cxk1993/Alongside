@@ -1,3 +1,6 @@
+import { useMemo } from "react";
+
+import { buildModuleGraph } from "./moduleGraph";
 import { pluginHost } from "./ModuleRegistry";
 import { useDesktopStore } from "./store";
 
@@ -5,72 +8,35 @@ import { useDesktopStore } from "./store";
  * 底部模块坞。列出已注册模块；点图标 → 开窗（singleton 重复点=聚焦）。
  * 模块有打开的窗口时，图标亮起小圆点；被禁用时置灰且不可点。
  *
- * ★ 主人 ⑤/⑫（2026-09-25）：**合并入口** —— 底端栏不再每个模块一个按钮：
- *   被合并的模块（见 DOCK_MERGE）不单独出按钮，统一由**容器模块**承载
- *（点容器 → 窗口内多页/页签展示，这正是主人要的「一个按钮打开，窗口内分页」）。
- *   **fail-safe**：容器模块不存在或未启用时，**保留原按钮**（绝不因合并丢入口）。
+ * ★ 合并入口（主人 ⑤/⑫ 2026-09-25；2026-11-09 重构）：
+ *   被容器吸收的模块**不单独出按钮**，统一由**容器模块**承载
+ * （点容器 → 窗口内多页/页签展示，这正是主人要的「一个按钮打开，窗口内分页」）。
+ *
+ * ★ **吸收关系的唯一真相源是 manifest.tabs**（推导见 `kernel/moduleGraph.ts`）：
+ *   容器型模块在 manifest 里声明 `tabs: [{ key, label, entry? }]`，每个 tab 指向的
+ *   子模块即被该容器吸收。本文件**不持有任何「子 id → 容器 id」手写表**
+ *   （旧 `DOCK_MERGE` 已删 —— 它与 SystemApp 的 `DEFAULT_TABS` 各写一遍并已分叉：
+ *   diary 丢入口、habits 双入口）。
+ *   注：Dock 遍历 store 全部模块、**从不读 manifest.slots**（坑谱 #15），
+ *   所以显隐只能在吸收关系里表达，不能靠「摘 desktop.dock 槽」。
+ *
+ * ★ fail-safe：容器模块**不存在或未启用** ⇒ 保留子模块原按钮（绝不因合并丢入口）。
  */
-
-/** ★ 合并映射：子模块 id → 容器模块 id（③ 主人 ⑤⑫ 点名分组）。 */
-const DOCK_MERGE: Record<string, string> = {
-  // ⑫ 能力目录 / MCP / 推送 / 账户与鉴权 / **导出中心**（主人 09-25 追加）→ 系统容器
-  catalog: "system",
-  mcp: "system",
-  push: "system",
-  auth: "system",
-  export: "system",
-  // ★ 主人 09-25「多余的按钮不必留呐」+ MiMo 9959b94 把 query/plugins 并入系统窗 7 页。
-  //   注意：Dock 渲染遍历 store 全部模块，**不看 manifest slots**——MiMo 4c8aace 摘
-  //   desktop.dock 槽不产生隐藏效果；收口必须在 DOCK_MERGE 做（此处即真修法）。
-  query: "system",
-  plugins: "system",
-  // ★ 2026-09-27 主人候办 ⑤「countdown 归口」：countdown 是 `kind:third-party` +
-  //   `entry:""`（**纯 API 插件**，无窗口 UI）→ 若单列在底端栏，点开只有薄壳页。
-  //   归入 system（与 catalog/mcp/push/auth/export/query/plugins 同族）。
-  countdown: "system",
-  // ⑤ 复盘 / 笔记 / 文档 → 知识库容器（三合一）
-  review: "knowledge",
-  notes: "knowledge",
-  docs: "knowledge",
-  diary: "knowledge",
-  // ⑪ 人格 / 健康 → 成长罗盘
-  persona: "growth",
-  health: "growth",
-  // ★ 主人 2026-09-25 令「todo（待办）也该与日程表合并」· 
-  //   日程表 / 待办 → schedule 容器（两页合一）。Dock 显隐唯一杠杆=DOCK_MERGE
-  //（坑谱 #15：manifest.slots 不产生隐藏效果，MiMo 4c8aace 前车之鉴）。
-  calendar: "schedule",
-  todo: "schedule",
-  // ★ 主人 2026-09-27 令「日程待办里加一个分页课程表」：
-  //   course（课程表）作为 schedule 容器的**第 4 页**（[日程表][待办][学业][课程表]）。
-  //   必须在 DOCK_MERGE 收口 —— Dock 渲染遍历 store 全部模块、**从不读 manifest.slots**
-  //（坑谱 #15）。fail-safe：schedule 未启用时自动保留 course 原按钮。
-  course: "schedule",
-  // ★ 主人 2026-09-26 令「替换了吧，宁缺毋滥」：
-  //   ai-chat（AI 对话）已由 pi-agent 接管 —— **必须在 DOCK_MERGE 收口**，
-  //   因为 Dock 渲染遍历 store 全部模块、**从不读 manifest.slots**
-  //（坑谱 #15：摘 desktop.dock 槽永远无效）。fail-safe：pi-agent 未启用时自动保留原按钮。
-  "ai-chat": "pi-agent",
-  // ★ 主人 2026-09-26 追加令「AI 编排也收，并进 pi-agent 当一个 tab」：
-  //   agents（AI 编排）归口到 pi-agent —— 底端栏 AI 类入口**收敛为一个**，
-  //   点开 pi-agent 即见「对话 / 编排」两页签（容器 MultitabFrame 承载）。
-  //   fail-safe：pi-agent 未启用时自动保留 agents 原按钮。
-  agents: "pi-agent",
-};
 
 export function Dock() {
   const modules = useDesktopStore((s) => s.modules);
   const windows = useDesktopStore((s) => s.windows);
   const openIds = new Set(windows.map((w) => w.moduleId));
 
-  /** 某容器是否可用（存在 + 启用）——不可用则不合并，保原按钮。 */
-  const containerReady = (target: string) => Boolean(modules[target]?.enabled);
+  // 纯推导：同一份 manifest 永远推出同一张图（不读 DOM、不存状态）。
+  const graph = useMemo(() => buildModuleGraph(modules), [modules]);
 
-  /** 子模块是否已被容器「吸收」。 */
-  const isMerged = (id: string) => {
-    const target = DOCK_MERGE[id];
-    return Boolean(target) && containerReady(target as string);
-  };
+  /** 某容器是否可用（存在 + 启用）——不可用则不合并，保原按钮。 */
+  const containerReady = (target: string | undefined) =>
+    Boolean(target && modules[target]?.enabled);
+
+  /** 子模块是否已被「可用容器」吸收。 */
+  const isMerged = (id: string) => containerReady(graph.containerOf(id));
 
   return (
     <div className="dock" role="toolbar" aria-label="模块坞">
@@ -80,9 +46,7 @@ export function Dock() {
           const m = reg.manifest;
           const open = openIds.has(m.id);
           // 该容器吸收了几个子模块（用于角标提示，让主人知道"合并入口"里有什么）
-          const absorbed = Object.entries(DOCK_MERGE)
-            .filter(([child, target]) => target === m.id && Boolean(modules[child]))
-            .map(([child]) => child);
+          const absorbed = graph.absorbedBy(m.id).filter((child) => Boolean(modules[child]));
           const cls = [
             "dock__item",
             open ? "dock__item--open" : "",

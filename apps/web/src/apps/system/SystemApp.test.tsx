@@ -1,5 +1,8 @@
 /**
- * 系统窗判据测试（V6·主人⑫）：四页签编排 + 懒挂载 + auth 薄壳语义。
+ * 系统窗判据测试（V6·主人⑫）：七页签编排 + 懒挂载 + auth 薄壳语义。
+ *
+ * ★ 2026-11-09 起页签**只从 manifest.tabs 来**（`DEFAULT_TABS` 已删）：
+ *   夹具直接把 `services/api/modules/system/manifest.json` 的 tabs 抄进来。
  */
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, beforeEach } from "vitest";
@@ -7,12 +10,39 @@ import { describe, expect, it, beforeEach } from "vitest";
 import SystemApp from "./SystemApp";
 import { useDesktopStore } from "@/kernel/store";
 
-describe("SystemApp（V6 系统窗四合一）", () => {
+/** 与 `services/api/modules/system/manifest.json` 的 tabs 同形同序。 */
+const SYSTEM_TABS = [
+  { key: "catalog", label: "能力目录", entry: "catalog" },
+  { key: "mcp", label: "MCP Server", entry: "mcp" },
+  { key: "push", label: "推送", entry: "push" },
+  { key: "export", label: "导出中心", entry: "export" },
+  { key: "query", label: "跨区块查询", entry: "query" },
+  { key: "plugins", label: "插件管理", entry: "plugins" },
+  { key: "auth", label: "账户与鉴权" },
+];
+
+function setSystemTabs(tabs: typeof SYSTEM_TABS): void {
+  useDesktopStore.setState({
+    modules: {
+      system: {
+        manifest: {
+          id: "system",
+          name: "系统",
+          version: "0.1.0",
+          kind: "container",
+          entry: "@/apps/system",
+          tabs,
+        },
+        enabled: true,
+      },
+    } as unknown as ReturnType<typeof useDesktopStore.getState>["modules"],
+  });
+}
+
+describe("SystemApp（V6 系统窗）", () => {
   beforeEach(() => {
-    const { registerModule } = useDesktopStore.getState();
-    // 默认场景：注册表无 system manifest → 组件走默认四页 fallback。
-    useDesktopStore.setState({ modules: {} });
-    void registerModule;
+    // 注册表带 system manifest（页签唯一真相源）；子模块不注册 ⇒ 有 entry 但无 App 页落薄壳。
+    setSystemTabs(SYSTEM_TABS);
     // persistKey 持久化跨用例泄漏防护（每用例从干净 localStorage 起步）
     localStorage.clear();
   });

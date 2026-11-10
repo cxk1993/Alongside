@@ -38,6 +38,8 @@ const KNOWLEDGE = {
     { key: "review", label: "复盘", entry: "review" },
     { key: "notes", label: "笔记", entry: "notes" },
     { key: "docs", label: "文档", entry: "docs" },
+    // 2026-11-10：日记页已写进真实 manifest（补页表连同机制删除），夹具同步
+    { key: "diary", label: "日记", entry: "diary" },
   ],
 };
 
@@ -104,9 +106,93 @@ describe("containerPages · 页装配", () => {
 
   it("③ 容器未进注册表 ⇒ 空容器提示页（不白屏）", () => {
     setModules([]);
-    // 用 growth（无前端补页登记）验证「无 tabs 且无补页」的真·空容器；
-    // knowledge 有 diary 补页，即使 manifest 缺失也会出一页 —— 那是预期行为。
+    // 补页表已删除（2026-11-10）：任何容器「不在注册表 / 没声明 tabs」都落空容器页，
+    // 不存在「前端偷偷补一页」这条后路。
     render(<Host containerId="growth" />);
     expect(screen.getByTestId("container-empty-growth")).toBeTruthy();
+    render(<Host containerId="knowledge" />);
+    expect(screen.getByTestId("container-empty-knowledge")).toBeTruthy();
+  });
+});
+
+/* ─────────────────── ④ 畸形页签兜底（2026-11-10 第三轮 · N3） ─────────────────── */
+
+const CONTAINER_SCHEDULE = {
+  id: "schedule",
+  name: "日程待办",
+  version: "0.1.0",
+  kind: "container",
+  entry: "@/apps/schedule",
+};
+
+const TODO_MOCK = {
+  id: "todo",
+  name: "待办",
+  version: "0.1.0",
+  kind: "builtin",
+  entry: "@mocks/alpha",
+};
+
+describe("containerPages · 畸形页签兜底", () => {
+  it("★ entry 指向未注册模块 ⇒ 薄壳「模块未注册」，不白屏不报错", () => {
+    setModules([
+      {
+        ...CONTAINER_SCHEDULE,
+        tabs: [{ key: "ghost", label: "幽灵页", entry: "ghost" }],
+      },
+    ]);
+    render(<Host containerId="schedule" />);
+    const shell = screen.getByTestId("system-backend-page-ghost");
+    expect(shell.getAttribute("data-page-reason")).toBe("unknown-module");
+    expect(shell.textContent).toContain("未注册");
+    expect(screen.getByRole("tab").textContent).toBe("幽灵页");
+  });
+
+  it("★ key≠entry ⇒ 按 entry 加载真实 App（key 只当页签标识）", async () => {
+    setModules([
+      {
+        ...CONTAINER_SCHEDULE,
+        tabs: [{ key: "study", label: "学业", entry: "todo" }],
+      },
+      TODO_MOCK,
+    ]);
+    render(<Host containerId="schedule" />);
+    // 页签叫「学业」，内容却是 todo 指向的 App —— 这正是 schedule.study 的现状
+    expect(screen.getByRole("tab").textContent).toBe("学业");
+    expect(await screen.findByText("演示模块 · 甲")).toBeTruthy();
+  });
+
+  it("★ entry 指向的 App 文件缺失 ⇒ 薄壳「入口缺失」（不是含糊的「加载失败」）", () => {
+    setModules([
+      {
+        ...CONTAINER_SCHEDULE,
+        tabs: [{ key: "study", label: "学业", entry: "study" }],
+      },
+      // apps/study 只有 StudyApp.tsx，没有 index.tsx ⇒ 目录约定解析不到
+      { id: "study", name: "学业", version: "0.1.0", kind: "builtin", entry: "@/apps/study" },
+    ]);
+    render(<Host containerId="schedule" />);
+    const shell = screen.getByTestId("system-backend-page-study");
+    expect(shell.getAttribute("data-page-reason")).toBe("missing-app");
+    expect(shell.textContent).toContain("入口文件缺失");
+  });
+
+  it("★ manifest 自带的页签顺序即展示顺序（不重排、不补页）", () => {
+    setModules([
+      {
+        id: "knowledge",
+        name: "知识库",
+        version: "0.1.0",
+        kind: "container",
+        entry: "@/apps/knowledge",
+        tabs: [
+          { key: "diary", label: "日记本", entry: "diary" },
+          { key: "review", label: "复盘", entry: "review" },
+        ],
+      },
+      DIARY,
+    ]);
+    render(<Host containerId="knowledge" />);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["日记本", "复盘"]);
   });
 });

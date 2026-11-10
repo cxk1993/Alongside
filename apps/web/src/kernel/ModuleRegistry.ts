@@ -46,13 +46,12 @@ function demoLoader(entry: string): ModLoader | undefined {
 }
 
 /**
- * 把 entry 解析成 loader。
+ * 把 entry 解析成 loader；找不到返回 undefined。
  * 支持约定路径：
  *   `@/apps/<dir>` / `@/apps/<dir>/index.tsx` / `/src/apps/<dir>/index.tsx`
  *   `@mocks/<name>`
- * 找不到时返回 rejected Promise（由窗口错误边界展示）。
  */
-export function resolveLoader(entry: string): ModLoader {
+function findLoader(entry: string): ModLoader | undefined {
   const demo = demoLoader(entry);
   if (demo) return demo;
 
@@ -70,7 +69,24 @@ export function resolveLoader(entry: string): ModLoader {
     if (loader) return loader;
   }
 
+  return undefined;
+}
+
+/**
+ * 把 entry 解析成 loader。找不到时返回 rejected Promise（由窗口错误边界展示）。
+ *
+ * ★ 需要「先判断再渲染」的场景（容器页签装配）用 `canResolveLoader`，
+ *   否则会先渲染一页「加载失败」而不是诚实地说「入口缺失」。
+ */
+export function resolveLoader(entry: string): ModLoader {
+  const loader = findLoader(entry);
+  if (loader) return loader;
   return () => Promise.reject(new Error(`未找到插件入口：${entry}`));
+}
+
+/** 该 entry 是否真有可加载的 App 文件（不执行 import，只看 glob 键）。 */
+export function canResolveLoader(entry: string): boolean {
+  return findLoader(entry) !== undefined;
 }
 
 export interface PluginHost {

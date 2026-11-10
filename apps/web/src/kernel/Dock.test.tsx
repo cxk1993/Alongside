@@ -147,6 +147,7 @@ describe("Dock · 吸收归口（manifest 推导）", () => {
           { key: "review", label: "复盘", entry: "review" },
           { key: "notes", label: "笔记", entry: "notes" },
           { key: "docs", label: "文档", entry: "docs" },
+          { key: "diary", label: "日记", entry: "diary" },
         ],
       },
       { id: "diary", name: "日记" },
@@ -180,7 +181,7 @@ describe("Dock · 吸收归口（manifest 推导）", () => {
       "countdown",
     ];
     setModules([
-      { id: "system", name: "系统", kind: "container", tabs: SYSTEM_TABS },
+      { id: "system", name: "系统", kind: "container", tabs: SYSTEM_TABS, absorbs: ["countdown"] },
       {
         id: "knowledge",
         name: "知识库",
@@ -189,6 +190,7 @@ describe("Dock · 吸收归口（manifest 推导）", () => {
           { key: "review", label: "复盘", entry: "review" },
           { key: "notes", label: "笔记", entry: "notes" },
           { key: "docs", label: "文档", entry: "docs" },
+          { key: "diary", label: "日记", entry: "diary" },
         ],
       },
       {

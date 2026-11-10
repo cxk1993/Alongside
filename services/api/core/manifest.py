@@ -90,7 +90,19 @@ class Manifest(BaseModel):
     #   前端侧（PluginContext 改读模型）**刻意留后**：那是 E5 在制区，改动必撞车。
     entry: str | None = None
     window: dict[str, Any] | None = None
-    lifecycle: dict[str, Any] = Field(default_factory=dict)
+    # ★ 生命周期钩子声明（2026-11-10 裁决 b · 降级为枚举）：
+    #   原先这里是 `dict[str, Any]`，让 manifest 写 `{"onEnable": "on_enable", ...}`
+    #   这类「钩子名映射」。但内核**从来不读它**——`core/plugins/lifecycle.py`
+    #   按固定名取钩子。于是那层映射是纯装饰：写错名字不报错、不生效、也没人知道。
+    #
+    #   判断依据是「允许自定义钩子名有没有价值」：全仓唯一用到它的 pi-agent，
+    #   三个值恰好等于固定名 —— 零信息。自定义名只会多一层间接，并在写错时
+    #   **静默不执行**（fail-open），与本次 emits/consumes 的 fail-closed 相反。
+    #
+    #   ⇒ 字段保留，但降级成声明式枚举：`"hooks"` = 有固定名钩子，`None` = 没有。
+    #     内核据此校验「声明 ↔ 实现」一致（见 `core/plugins/lifecycle.py`），
+    #     不一致会写进 plugin_state.last_error —— 字段从装饰变成契约。
+    lifecycle: str | None = None
 
     # ══════════════════════════════════════════════════════════════
     # 协议新增字段的运行时落点（2026-10-26）

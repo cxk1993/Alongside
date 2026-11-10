@@ -42,10 +42,14 @@
     "dashboard.card"
   ],
   "emits": [
+    "agents.agent.created",
+    "agents.agent.updated",
+    "agents.agent.deleted",
     "agents.task.created",
     "agents.task.updated",
+    "agents.task.deleted",
     "agents.task.dispatched",
-    "agents.task.done"
+    "agents.task.reported"
   ],
   "consumes": [],
   "permissions": [
@@ -54,12 +58,6 @@
   ],
   "migrations": "migrations",
   "settingsSchema": "settings.schema.json",
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  },
   "optionalDependencies": [
     "pi.chat.write"
   ]

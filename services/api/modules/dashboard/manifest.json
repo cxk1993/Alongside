@@ -61,11 +61,5 @@
     "net:out:localhost"
   ],
   "migrations": null,
-  "settingsSchema": null,
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": null
 }

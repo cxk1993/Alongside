@@ -28,11 +28,5 @@
     { "key": "todo", "label": "待办", "entry": "todo" },
     { "key": "study", "label": "学业", "entry": "todo" },
     { "key": "course", "label": "课程表", "entry": "course" }
-  ],
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  ]
 }

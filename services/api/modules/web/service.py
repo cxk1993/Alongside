@@ -32,6 +32,13 @@ from .schema import (
 
 SOURCE = "web_entry"
 
+#: 事件的 `source` = **发布者模块 id**（emit 契约按它查 manifest.emits）。
+#: ★ 与上面的 `SOURCE` 不是一回事：那是 catalog 条目的「来源」展示标签
+#:   （`web_entry` 是给人看的值），事件源必须是模块 id `web`。
+#:   早先两者共用一个常量，于是 web 模块发布的事件 source 是 `web_entry` ——
+#:   与 manifest.id 不一致，按模块查声明会落空。这里把两件事分开写。
+EVENT_SOURCE = "web"
+
 
 class WebEntryService:
     def __init__(self, db: Session) -> None:
@@ -86,7 +93,7 @@ class WebEntryService:
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)
-        event_bus.publish("web.entry.created", self.dump(row), source=SOURCE)
+        event_bus.publish("web.entry.created", self.dump(row), source=EVENT_SOURCE)
         return self.dump(row)
 
     def update(self, entry_id: str, body: WebEntryUpdate) -> dict[str, Any]:
@@ -120,7 +127,7 @@ class WebEntryService:
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)
-        event_bus.publish("web.entry.updated", self.dump(row), source=SOURCE)
+        event_bus.publish("web.entry.updated", self.dump(row), source=EVENT_SOURCE)
         return self.dump(row)
 
     def delete(self, entry_id: str) -> None:
@@ -128,7 +135,7 @@ class WebEntryService:
         snapshot = self.dump(row)
         self.db.delete(row)
         self.db.commit()
-        event_bus.publish("web.entry.deleted", snapshot, source=SOURCE)
+        event_bus.publish("web.entry.deleted", snapshot, source=EVENT_SOURCE)
 
     def touch(self, entry_id: str) -> dict[str, Any]:
         """记一次"打开"。v0.1 只回时间戳（不落库），端点先在，便于以后加使用统计。"""

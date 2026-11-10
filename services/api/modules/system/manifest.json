@@ -23,6 +23,9 @@
     "catalog.read"
   ],
   "permissions": [],
+  "absorbs": [
+    "countdown"
+  ],
   "tabs": [
     { "key": "catalog", "label": "能力目录", "entry": "catalog" },
     { "key": "mcp", "label": "MCP Server", "entry": "mcp" },
@@ -31,11 +34,5 @@
     { "key": "query", "label": "跨区块查询", "entry": "query" },
     { "key": "plugins", "label": "插件管理", "entry": "plugins" },
     { "key": "auth", "label": "账户与鉴权" }
-  ],
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  ]
 }

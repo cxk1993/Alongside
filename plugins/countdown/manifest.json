@@ -36,11 +36,5 @@
     "db:own"
   ],
   "migrations": "api/migrations",
-  "settingsSchema": null,
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": null
 }

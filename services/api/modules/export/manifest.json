@@ -23,6 +23,5 @@
   "consumes": [],
   "permissions": ["db:own"],
   "activates_on": [],
-  "migrations": null,
-  "lifecycle": { "onInstall": null, "onEnable": null, "onDisable": null, "onUninstall": null }
+  "migrations": null
 }

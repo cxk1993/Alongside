@@ -1,13 +1,16 @@
 """ISSUE-007 · todo 消费 health.care.requested（ADR-0002：只订阅事件，不 import health）。
 
-★ 内核 event_bus 只有 SSE subscribe，无主题回调 —— 本模块在 **todo 侧**包装
-  `event_bus.publish`（不改 core/events.py 源文件），命中目标 topic 后建跟进待办。
+★ 内核 event_bus 的事件消费入口是 `subscribe_declared`（声明即订阅）。本模块在
+  **todo 侧**按自己的 `manifest.consumes` 声明订阅 `health.care.requested`，
+  命中后建跟进待办。不 import health 插件本体，也不替整条总线改行为。
 ★ 幂等：`TodoItem.source_path = "health:{idempotency_key}"`，同 key 不重复创建。
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -25,6 +28,9 @@ EVENT_CARE = "health.care.requested"
 SH_TZ = ZoneInfo("Asia/Shanghai")
 DEFAULT_DUE_DAYS = 3
 _installed = False
+
+#: 本模块自己的声明（订阅面**只**从这份 manifest 来 —— 声明即订阅的唯一真相源）。
+_MANIFEST_PATH = Path(__file__).resolve().with_name("manifest.json")
 
 
 def source_path_for(idempotency_key: str) -> str:
@@ -96,39 +102,41 @@ def handle_care_event(event: dict[str, Any]) -> None:
             log.warning("todo 处理 health.care.requested 失败: %s", exc)
 
 
+def _own_manifest() -> dict[str, Any]:
+    """读本模块自己的 manifest（订阅声明的唯一来源）。"""
+    return json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
+
+
 def install_health_link() -> bool:
-    """包装 event_bus.publish；幂等安装。不修改 core/events.py 文件。"""
+    """按 manifest 声明订阅 `health.care.requested`（幂等）。
+
+    ★ 2026-11-10 改造：原先这里是**猴补丁 `event_bus.publish`**（改实例方法），
+      它有两处硬伤，且都是「静默失效」型：
+      ① 包装函数的 `source` 缺省值是 `"kernel"` —— 任何忘了写 `source=` 的发布方
+         都会被当成内核事件，**绕过 emits 声明校验**（fail-closed 形同虚设）；
+      ② 包装函数不透传 `version` / `correlation_id` —— 内核的
+         `publish_kernel_event()` 一调就 `TypeError`（实测已炸，见报告）。
+      现在改走 `subscribe_declared`：订阅面来自 `manifest.consumes`，
+      与其它事件消费者同一条路，不再替整条总线改行为。
+    """
     global _installed
-    if _installed or getattr(event_bus, "_todo_health_link", False):
-        _installed = True
+    if _installed:
         return False
-    original = getattr(event_bus, "_todo_health_link_orig", None) or event_bus.publish
-
-    def publish_hook(topic: str, payload: Any, source: str = "kernel") -> dict[str, Any]:
-        event = original(topic, payload, source=source)
-        if topic == EVENT_CARE:
-            try:
-                handle_care_event(event)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("health_link hook 异常: %s", exc)
-        return event
-
-    event_bus._todo_health_link_orig = original  # type: ignore[attr-defined]
-    event_bus.publish = publish_hook  # type: ignore[method-assign]
-    event_bus._todo_health_link = True  # type: ignore[attr-defined]
+    event_bus.subscribe_declared(_own_manifest(), handle_care_event, topics={EVENT_CARE})
     _installed = True
-    log.info("todo health_link 已安装（订阅 %s）", EVENT_CARE)
+    log.info("todo health_link 已装配（经 manifest.consumes 订阅 %s）", EVENT_CARE)
     return True
 
 
 def uninstall_health_link_for_tests() -> None:
-    """仅测试用：恢复 publish（若曾安装）。"""
+    """仅测试用：摘掉本模块的订阅，恢复「未安装」状态。
+
+    ★ 目前 todo 的声明式订阅只有这一条（consume `health.care.requested`），
+      所以整插件退订是精确的。若以后 todo 增加其它事件订阅，这里需要
+      `unsubscribe_declared(plugin_id, handler=...)` 的按处理器粒度。
+    """
     global _installed
-    original = getattr(event_bus, "_todo_health_link_orig", None)
-    if original is not None:
-        event_bus.publish = original  # type: ignore[method-assign]
-    if hasattr(event_bus, "_todo_health_link"):
-        delattr(event_bus, "_todo_health_link")
+    event_bus.unsubscribe_declared("todo")
     _installed = False
 
 

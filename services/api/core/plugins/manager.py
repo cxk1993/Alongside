@@ -24,10 +24,11 @@ from sqlmodel import select
 
 from core.deps import kernel_session
 from core.errors import ConflictError, ForbiddenError, NotFoundError
+from core.events import event_bus
 from core.kernel import EffectKind, get_kernel
 from core.plugins import discover as discover_mod
 from core.plugins.discover import DiscoveryResult, PluginInfo, mount_plugin
-from core.plugins.lifecycle import run_lifecycle_hook
+from core.plugins.lifecycle import invalidate_lifecycle_cache, run_lifecycle_hook
 from core.plugins.migrations import (
     recorded_versions,
     rollback_migrations,
@@ -522,6 +523,16 @@ class PluginManager:
                     undo=lambda: self._unmount(info, registry),
                 )
 
+                # ★★ 事件订阅随启用**重新装载**（2026-11-10，P0）。
+                #   disable 会摘掉本插件的声明式订阅，而「在 lifecycle 模块顶层
+                #   声明式订阅」是官方鼓励的写法（文档与 push 都是这么写的）。
+                #   模块对象被缓存（不再每次 exec，见 P0-2），所以必须先让缓存失效，
+                #   顶层那句 `subscribe_declared` 才会重新执行、把订阅装回来。
+                #   顺序：先清空（幂等，防上一次 enable 的残留）+ 再让模块重新执行，
+                #   由插件自己（或下面的 on_enable）重新声明订阅。
+                event_bus.unsubscribe_declared(plugin_id)
+                invalidate_lifecycle_cache(plugin_id)
+
                 with kernel_session() as db:
                     err = run_lifecycle_hook(info, "enable", db=db)
         except Exception as exc:  # noqa: BLE001
@@ -652,6 +663,14 @@ class PluginManager:
         # ★ 撤 RUNTIME effect（逆序：路由 → requires → provides）。
         #   路由会被摘掉，能力提供会被撤销，依赖声明会被注销。
         get_kernel().replay_runtime(plugin_id)
+        # ★★ 事件订阅也随停用一起撤销（2026-11-10，P0）。
+        #   `disable` 的语义是「停止对外服务」，而事件联动**绕过了路由层**：
+        #   push 的三路 handler 是模块函数，摘掉路由拦不住它 ——
+        #   实测停用后 `calendar.reminder.fired` 一到照样写库发推送。
+        #   ⇒ 订阅生命周期必须跟上插件的生命周期，不能靠调用方自觉
+        #     （改造前 `unsubscribe_declared` 全仓零调用方）。
+        #   顺序：on_disable 先跑（插件可以自己先退订/收尾），再统一兜底清空。
+        event_bus.unsubscribe_declared(plugin_id)
         self._upsert_state(info, enabled=False, last_error=err)
         # ★ ACTIVE → PAUSED。
         #   PAUSED 的语义 = 「数据保留、停止对外服务」——与 disable 完全一致
@@ -824,6 +843,12 @@ class PluginManager:
         #    历史迁移建的表会留下），那由第 3 步的 rollback_migrations 负责。
         #    ⇒ 两处分工明确：RUNTIME 交给原语，DATA 交给全量回滚。
         get_kernel().replay_runtime(plugin_id)
+        # ★★ 事件订阅与 lifecycle 模块缓存也要清（2026-11-10，P0）。
+        #   订阅不清 ⇒ 目录已被 rmtree 的插件仍被调用（实测：
+        #   `del p; gc.collect()` 后 weakref 仍存活，插件对象根本回收不掉）。
+        #   缓存不清 ⇒ 旧模块对象（含它顶层注册的一切）留在内存里。
+        event_bus.unsubscribe_declared(plugin_id)
+        invalidate_lifecycle_cache(plugin_id)
         # 3) 回滚迁移（删表）
         from db.engine import get_engine
 

@@ -375,6 +375,11 @@ def create_app(
             directory=module_dir,
         )
         app.state.modules[manifest.id] = manifest.as_dict()  # 先注册（全量，零漂移）
+        # ★ 发布端声明随之登记（2026-11-10）：`emits` 与 `consumes` 是同一套
+        #   契约的两端。登记放在**发现**处而不是激活处：注册表回答
+        #   「这个模块声明了什么」，激活表回答「代码在不在跑」——两件事不该混。
+        #   未登记就发布的模块会被 event_bus 当场拒（UndeclaredPublication）。
+        event_bus.declare_publisher(info)
         # 路径 a：container 型无 api——日志行安全取值，防 NoneType.base
         manifest_base = manifest.api.base if manifest.api is not None else None
         if activator.activate_on_startup(info):

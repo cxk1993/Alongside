@@ -25,11 +25,5 @@
     { "key": "habits", "label": "习惯", "entry": "habits" },
     { "key": "persona", "label": "人格体系", "entry": "persona" },
     { "key": "health", "label": "健康", "entry": "health" }
-  ],
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  ]
 }

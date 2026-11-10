@@ -35,18 +35,13 @@
   "requires": [],
   "slots": [],
   "emits": [
-    "review.day.ingested"
+    "review.day.ingested",
+    "review.all.ingested"
   ],
   "consumes": [],
   "permissions": [
     "db:own"
   ],
   "migrations": "migrations",
-  "settingsSchema": "settings.schema.json",
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": "settings.schema.json"
 }

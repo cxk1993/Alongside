@@ -56,10 +56,10 @@
 |---|---|---|
 | **数据作用域（SQLite authorizer）** | ✅ **已接线（2026-11-09）** | 三态：`kernel_session()`=内核特权 / `db_session(id)`=插件边界 / **未声明=deny-all**。`registry.mount(scoped=...)` 只给 `kind=third-party` 挂作用域依赖（内置模块之间本来就有跨模块读，那是误伤不是安全）。`db/engine.py` 挂 `Session.after_begin` + `engine.checkin`。**实测 7/7**：kernel 读写任意表 OK；`db_session("todo")` 读/写 `todo_item` OK、读 `finance_entry` 与 `plugin_state` DENIED；裸 Session DENIED。门禁 `tools/gates/verify_db_scope_wiring.py`（G16）守着它 |
 | 逐次拦截层 / Reactive Coeffect | 机制在（`coeffect.py` / `dependency.py`），按依赖表驱动 | 依赖通知已可用；拦截仍是三合一通道 |
-| `lifecycle` 四钩子 | ✅ 已被内核调用（`run_lifecycle_hook`，**按固定名** `on_enable/on_disable/on_uninstall`） | **manifest 的 `lifecycle` 映射字段不被消费**——pi-agent 曾声明全仓不存在的 `start_pi/stop_pi/cleanup_pi`，已改成与实现一致的固定名。⇒ 协议里应注明「钩子名固定，此字段仅声明位」 |
+| `lifecycle` 四钩子 | ✅ **已接线（2026-11-10）** | 钩子**名字固定**（`on_install/on_enable/on_disable/on_uninstall`），manifest 的 `lifecycle` 从「钩子名映射对象」降级为枚举：`"hooks"` = 有钩子，`null`/缺省 = 没有。内核 `core/plugins/lifecycle.py:declaration_problem()` 校验「声明 ↔ 实现」一致——声明了却没文件、或写了钩子却没声明，都会写进 `plugin_state.last_error`（readyz 可见），但不拦启停（软失败语义不变）。裁决依据：允许自定义钩子名没有真实需求（唯一用过映射的 pi-agent，三个值恰好等于固定名），代价是「写错名=静默不执行」 |
 | `consumes` 声明即订阅 | ✅ **已接线（2026-11-09）** | `subscribe_declared(info, handler, topics=...)` 是插件订阅的**唯一入口**：内核从 `info`（PluginInfo / Manifest / 原始 manifest）读 `consumes`，处理器要的 topic 不在声明内就**当场拒绝注册**（fail-closed），投递时再按声明过滤。push 的三路联动（提醒/待办/上课）已从 `add_listener` 直连改为声明式，并补齐了 manifest。内核自用的挂点改名为 `add_kernel_hook`——名字就是纪律。`check_protocol_consumption` 的未消费表里已摘掉 `consumes` |
-| `absorbs` 吸收机制 | ⚠️ **未建** | 31 份 manifest **全部未声明**该字段；真正的吸收写死在前端 `Dock.tsx` 的 `DOCK_MERGE`（19 条硬编码），且与 `SystemApp.tsx` 的 `DEFAULT_TABS` **已经分叉**（diary/countdown 被吸收却无页签 ⇒ 入口消失；habits 有页签却没被吸收 ⇒ 重复入口） |
-| `emits` / `consumes` 投递 | `consumes` 侧已成立；`emits` 侧未声明 | 订阅端：未声明 topic 不注册、不投递 ✅。发布端仍缺约束：`emits` 有 9 个声明从未发布、6 个发布未声明（agents/packs/plugins/push 最严重）⇒ 作为双向「事件契约」目前只成立一半 |
+| `absorbs` 吸收机制 | ✅ **已接线（2026-11-10）** | 吸收关系只有一处来源：manifest 的 `tabs[].entry`（**有页**的吸收）∪ `absorbs[]`（**无页**归口）。前端 `Dock.tsx` 的 `DOCK_MERGE`（19 条）与 `moduleGraph.ts` 的补表都已**删除**，`moduleGraph.buildModuleGraph()` 直接按 manifest 推导。19 条关系全部在 manifest 中有落点：14 条由 tabs 表达、system 的 `auth` 是无 entry 页、`countdown` 走 system 的 absorbs、`agents`/`ai-chat` 走 pi-agent 的 absorbs、`diary` 是 knowledge 的第 4 页。门禁 `tools/check_manifest_absorbs.py`（G17）判五条一致性（重复声明 / 双容器争抢 / 幽灵目标 / 吸收容器 / 有 UI 却被无页归口） |
+| `emits` / `consumes` 投递 | ✅ **双向契约成立（2026-11-10）** | 订阅端（2026-11-09）：未声明 topic 不注册、不投递。发布端（2026-11-10）：`publish()` 按 `source` 查该模块的 `emits` 声明，未登记/未覆盖 ⇒ 抛 `UndeclaredPublication`，**事件不发出去**（fail-closed）；内核自身事件走 `publish_kernel_event()`，不受模块声明约束。全仓对账后 45 条声明 ↔ 45 种发布一一对应：补了 agents 的 5 条（agent.created/updated/deleted、task.deleted、task.reported）与 review 的 `review.all.ingested`，删了 9 条空承诺（packs 3 / plugins 4 / push.sent / agents.task.done）。`check_protocol_consumption.py` 做双向静态校验（含 `source` 必须等于模块 id —— 顺带抓出 web 曾用 `web_entry` 当事件源） |
 
 > 口径提醒：数据作用域是**纪律边界，不是沙箱**。
 > 插件与内核同进程同权，`import sqlite3; sqlite3.connect(path)` 就绕开了。
@@ -67,8 +67,15 @@
 
 ### 4.1 ★ 内核仍持有业务路由（不是缺陷，但必须写清）
 
-`/api/v1/summary/today`（BFF 聚合）与 `summary` 模块**同前缀** ⇒ FastAPI「先注册先匹配」，
-**模块自己的 `/today` 是死代码**（`modules/summary/router.py` 的注释里也这么写着）。
+`/api/v1/summary/today`（BFF 聚合）与 `summary` 模块**同前缀**。**2026-11-10 已裁决（选项 a）**：
+模块自己的 `/today` **删掉了**（模块只留 `/health`），今日摘要只有内核 BFF 一个实现。
+
+为什么不是「把 BFF 挪到 /api/v1/_bff/today，让模块路由活过来」：summary 模块**没有独立数据源**，
+它读的全是 calendar/todo/diary/review 的 `today-summary`。让模块也持有一份聚合 = 在内核之外
+再放一份聚合逻辑，而「内核只转发不解析」的边界正是靠「聚合只有一处」撑住的。
+
+判据锁在 `services/api/tests_protocol/test_route_shadowing.py`：任何模块路由只要与内核显式路径
+撞上（同 method + 同 path），测试就红 —— 那类路由**永远不会执行**，是最难被当成 bug 报上来的缺陷。
 
 同样在 `core/` 里的还有：`/api/v1/events/*`（事件总线 SSE）、`/api/v1/modules`、
 `/api/docs`（聚合文档）、`/api/{module_id}/openapi.json` 与 `/api/v1/{module_id}/openapi.json`。

@@ -34,12 +34,12 @@
     "desktop.dock",
     "settings.page"
   ],
-  "emits": [
-    "pi.session.started",
-    "pi.session.settled",
-    "pi.tool.called"
-  ],
+  "emits": [],
   "consumes": [],
+  "absorbs": [
+    "agents",
+    "ai-chat"
+  ],
   "permissions": [
     "fs:plugin",
     "net:out:localhost",
@@ -47,10 +47,5 @@
   ],
   "migrations": null,
   "settingsSchema": null,
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": "on_enable",
-    "onDisable": "on_disable",
-    "onUninstall": "on_uninstall"
-  }
+  "lifecycle": "hooks"
 }

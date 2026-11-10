@@ -42,16 +42,12 @@
     "todo.item.completed",
     "todo.item.due"
   ],
-  "consumes": [],
+  "consumes": [
+    "health.care.requested"
+  ],
   "permissions": [
     "db:own"
   ],
   "migrations": "migrations",
-  "settingsSchema": "settings.schema.json",
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": "settings.schema.json"
 }

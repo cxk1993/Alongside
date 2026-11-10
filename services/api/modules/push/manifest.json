@@ -33,9 +33,7 @@
   "slots": [
     "settings.page"
   ],
-  "emits": [
-    "push.sent"
-  ],
+  "emits": [],
   "consumes": [
     "calendar.reminder.fired",
     "todo.item.due",
@@ -46,10 +44,5 @@
   ],
   "migrations": "migrations",
   "settingsSchema": "settings.schema.json",
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "lifecycle": "hooks"
 }

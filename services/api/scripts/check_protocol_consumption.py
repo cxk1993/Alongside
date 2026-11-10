@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import fnmatch
 import json
 import re
 import sys
@@ -53,7 +54,16 @@ _TOOLS_DIR = Path(__file__).resolve().parents[3] / "tools"
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
-from paths import API_PACKS, API_ROOT, CONTRACTS, CORE, MODULES, WEB_SRC, rel  # noqa: E402
+from paths import (  # noqa: E402
+    API_PACKS,
+    API_ROOT,
+    CONTRACTS,
+    CORE,
+    MODULES,
+    PLUGINS,
+    WEB_SRC,
+    rel,
+)
 
 SCHEMA_PATH = CONTRACTS / "plugin.schema.json"
 
@@ -104,10 +114,6 @@ _PACK_LAYER_GENERIC_RECEIVERS = frozenset({"raw", "data", "value", "item"})
 #: ② 半实现：字段有、校验器读它，但运行时不按它行动。
 #:   每条必须写「缺什么行为」——写不出缺什么，说明它其实被消费了，该摘掉。
 KNOWN_FORMAT_ONLY: dict[str, str] = {
-    "absorbs": (
-        "模型层只校验「不能吸收自己 / 不与 tabs[].entry 重复」，"
-        "但容器吸收（把子模块收进自己窗口）未实现"
-    ),
     "concurrency": (
         "校验器查 exclusive / optimisticLock，但 plugin_state 无版本号，"
         "并发写仍后写覆盖先写"
@@ -125,11 +131,7 @@ KNOWN_FORMAT_ONLY: dict[str, str] = {
 #: ③ 机制未建：连校验器都不读。
 KNOWN_UNCONSUMED: dict[str, str] = {
     "author": "仅用于展示，暂无消费点（低优先）",
-    "emits": "事件总线要按 manifest 声明驱动，而不是模块自己 publish",
     "extensions": "留给未来的扩展位，放行不报不拒（暂不实现）",
-    "lifecycle": (
-        "钩子由插件目录下的 api/lifecycle.py 驱动，manifest.lifecycle 声明本身未被读取"
-    ),
     "outputPolicy": "大结果要按策略整形后再进上下文，不能直接塞",
 }
 
@@ -254,6 +256,14 @@ _WEB_PATTERNS = (
 #:   避免把所有叫 `p` 的变量都当成 manifest。
 _WEB_PLUGININFO_PATTERN = r"\bp\s*\??\.\s*({alt})\b"
 
+#: ★ `moduleGraph.ts`（前端唯一的吸收推导层）里，任何 `.<字段>` 都是在读 manifest：
+#:   它就是干这个的。**只在那个文件里**用这条宽松模式，理由有两条：
+#:     ① 不绑定变量名 —— 那个文件反复重构，入参从 `container` 改成 `m`，
+#:        写死变量名的模式会在重构后静默失效（门禁变绿 = 假绿）；
+#:     ② 别的文件里 `.absorbs` 完全可能是业务对象的同名字段，放开就是假阳性。
+#:   即「宽度只在这个文件里给，字段名仍然精确」。
+_WEB_GRAPH_PATTERN = r"\.\s*({alt})\b"
+
 
 def _is_web_source(path: Path) -> bool:
     if path.suffix.lower() not in {".ts", ".tsx"}:
@@ -300,6 +310,12 @@ def scan_web(schema_fields: list[str]) -> tuple[dict[str, list[str]], int]:
                 continue
             has_plugin_info = "PluginInfo" in text
             where = rel(path)
+            # ★ moduleGraph.ts 的推导入参是 `container`（GraphModuleLike），
+            #   它读 `container.absorbs` / `container.tabs` —— 这是 absorbs 的
+            #   **真消费点**（按它折叠 Dock 入口、渲染页签）。只在那个文件里认这个名字：
+            #   全前端放开会把任何叫 container 的对象都算成读 manifest（假绿）。
+            is_graph = path.name == "moduleGraph.ts"
+            graph_re = re.compile(_WEB_GRAPH_PATTERN.format(alt=alt)) if is_graph else None
             for line in text.splitlines():
                 stripped = line.strip()
                 if stripped.startswith(("//", "*", "/*")):
@@ -309,6 +325,8 @@ def scan_web(schema_fields: list[str]) -> tuple[dict[str, list[str]], int]:
                     found.update(rx.findall(line))
                 if has_plugin_info:
                     found.update(pi_re.findall(line))
+                if graph_re is not None:
+                    found.update(graph_re.findall(line))
                 for field in found:
                     if field not in schema_fields:
                         continue
@@ -317,6 +335,148 @@ def scan_web(schema_fields: list[str]) -> tuple[dict[str, list[str]], int]:
                         bucket.append(where)
 
     return hits, scanned
+
+
+# ─────────────────── 发布端（emits）双向校验 ───────────────────
+#
+# ★ 为什么「运行时已经 fail-closed 了还要静态扫一遍」：
+#   运行时只拦得住**跑到的代码**。`emits` 里写了但从来不发的那一条，
+#   运行时永远不会报错（它只是没被执行）；而模块发了别处没声明的话题，
+#   只有真的走到那行才会炸 —— 上线后才发现。静态扫描把两件事都提前到 CI：
+#     · 发布了，没声明  ⇒ 报错（运行时会炸，但不该等到线上）
+#     · 声明了，没发布  ⇒ 报错（空承诺：协议里写着，代码里没有）
+#     · 发布时 source 缺失 / 不等于模块 id ⇒ 报错（否则运行时按错误的名字查声明）
+
+#: 模块自己的「发布」薄包装（如 calendar 的 `_emit(topic, payload)`）。
+#: 它们内部各自带 source，调用点只关心 topic —— 扫到就算一次发布。
+_PUBLISH_WRAPPERS = frozenset({"_emit", "emit_event"})
+
+
+def _module_dirs() -> list[Path]:
+    """全部插件目录（内置 `modules/` + 第三方 `plugins/`，有 manifest.json 的才算）。
+
+    ★ 为什么第三方也要扫：`emits` 是**协议**，不是内置模块的内部约定。
+      第三方插件同样走 `publish()` 的同一条 fail-closed 校验 ——
+      它声明了不发、或发了没声明，运行期一样出问题。只扫内置等于把契约的一半
+      留给「谁写插件谁自觉」，而那正是这一轮要消灭的东西。
+    """
+    out: list[Path] = []
+    for root in (MODULES, PLUGINS):
+        if not root.is_dir():
+            continue
+        out.extend(
+            sorted(p for p in root.iterdir() if p.is_dir() and (p / "manifest.json").is_file())
+        )
+    return out
+
+
+def _string_consts(tree: ast.AST) -> dict[str, str]:
+    """模块里所有 `NAME = "字面量"`（含函数内），用于解析 topic / source 的符号引用。"""
+    out: dict[str, str] = {}
+    for node in ast.walk(tree):
+        targets: list[ast.expr] = []
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            targets, value = [node.targets[0]], node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        if (
+            value is not None
+            and isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+            and isinstance(targets[0], ast.Name)
+        ):
+            out.setdefault(targets[0].id, value.value)
+    return out
+
+
+def _resolve_str(node: ast.expr | None, consts: dict[str, str]) -> tuple[str, bool]:
+    """把表达式解析成字符串。第二项 = 是否静态可知（False ⇒ 动态构造，判不了）。"""
+    if node is None:
+        return "<missing>", False
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value, True
+    if isinstance(node, ast.Name) and node.id in consts:
+        return consts[node.id], True
+    try:
+        return ast.unparse(node), False
+    except Exception:  # noqa: BLE001 —— 解析失败当成动态，不臆造结论
+        return "<unparse-failed>", False
+
+
+def scan_publishers() -> dict[str, Any]:
+    """逐个模块扫真实发布点，与 `manifest.emits` 双向对账。"""
+    modules: dict[str, dict[str, Any]] = {}
+    scanned = 0
+    for mdir in _module_dirs():
+        mid = mdir.name
+        try:
+            raw_manifest = json.loads((mdir / "manifest.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            modules[mid] = {"error": f"manifest 读不出来：{exc}"}
+            continue
+        declared = [str(t) for t in (raw_manifest.get("emits") or [])]
+        info: dict[str, Any] = {
+            "declared": declared,
+            "published": {},
+            "undeclared": [],
+            "unpublished": [],
+            "sourceErrors": [],
+            "dynamic": [],
+        }
+        for path in _iter_py(mdir):
+            scanned += 1
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            except (SyntaxError, UnicodeDecodeError, OSError):
+                continue
+            consts = _string_consts(tree)
+            where = rel(path)
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                is_publish = isinstance(func, ast.Attribute) and func.attr == "publish"
+                is_wrapper = isinstance(func, ast.Name) and func.id in _PUBLISH_WRAPPERS
+                if not (is_publish or is_wrapper):
+                    continue
+                topic_node = node.args[0] if node.args else None
+                for kw in node.keywords:
+                    if kw.arg == "topic":
+                        topic_node = kw.value
+                topic, topic_static = _resolve_str(topic_node, consts)
+                if not topic_static:
+                    info["dynamic"].append(f"{where}:{node.lineno} topic={topic}")
+                    continue
+                if is_wrapper:
+                    info["published"].setdefault(topic, []).append(f"{where}:{node.lineno}")
+                    continue
+                src_node = next((kw.value for kw in node.keywords if kw.arg == "source"), None)
+                if src_node is None:
+                    info["sourceErrors"].append(
+                        f"{where}:{node.lineno} 发布 {topic!r} 未显式写 source=<模块 id>"
+                        "（缺省 = 内核源，模块不许用）"
+                    )
+                else:
+                    src, src_static = _resolve_str(src_node, consts)
+                    if not src_static:
+                        info["sourceErrors"].append(
+                            f"{where}:{node.lineno} 发布 {topic!r} 的 source 是动态表达式 {src}，判不了"
+                        )
+                    elif src != mid:
+                        info["sourceErrors"].append(
+                            f"{where}:{node.lineno} 发布 {topic!r} 的 source={src!r}"
+                            f" ≠ 模块 id {mid!r}（运行时按 source 查 manifest.emits）"
+                        )
+                info["published"].setdefault(topic, []).append(f"{where}:{node.lineno}")
+
+        declared_set = set(declared)
+        info["undeclared"] = sorted(t for t in info["published"] if t not in declared_set)
+        for t in declared:
+            if not any(p == t or fnmatch.fnmatchcase(p, t) for p in info["published"]):
+                info["unpublished"].append(t)
+        modules[mid] = info
+    return {"modules": modules, "scannedFiles": scanned}
 
 
 # ─────────────────────────── 判定 ───────────────────────────
@@ -345,6 +505,47 @@ def _validator_corruption() -> list[str]:
     except OSError as exc:  # noqa: BLE001
         return [f"读不到内核校验器 {rel(_VALIDATOR)}：{exc}"]
     return [f"{rel(_VALIDATOR)}：{why}" for needle, why in _INJECTED_MARKERS if needle in src]
+
+
+def _emit_problems(pubs: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """发布端双向契约的**判定**（与扫描分离，便于反向自检注入假数据）。
+
+    返回 `(violations, warnings)`：
+      · violations —— 契约不成立（门禁报红）：发布了没声明 / 声明了不发布 / source 不对；
+      · warnings   —— 静态判不了的情况（模块里有动态构造的 topic），只提示。
+    """
+    violations: list[str] = []
+    warnings: list[str] = []
+    if pubs["scannedFiles"] == 0:
+        violations.append("发布端扫描一个模块文件都没读到 —— 发布端契约的门禁等于没上线")
+    for mid, entry in sorted(pubs["modules"].items()):
+        if "error" in entry:
+            violations.append(f"模块 {mid}：{entry['error']}")
+            continue
+        for err in entry["sourceErrors"]:
+            violations.append(f"[emits] 模块 {mid}：{err}")
+        for topic in entry["undeclared"]:
+            sites = entry["published"][topic][:2]
+            violations.append(
+                f"[emits] 模块 {mid} 发布了未声明的 topic {topic!r}（{sites}）"
+                " ⇒ 补进 manifest.emits，或删掉这次发布（运行时同样会拒）"
+            )
+        for topic in entry["unpublished"]:
+            if entry["dynamic"]:
+                warnings.append(
+                    f"[emits] 模块 {mid} 声明了 {topic!r} 但静态扫描没看到发布点；"
+                    f"该模块有动态 topic 发布（{entry['dynamic'][0]}），无法静态判定"
+                )
+            else:
+                violations.append(
+                    f"[emits] 模块 {mid} 声明了 {topic!r} 却从不发布"
+                    " ⇒ 删掉这条空承诺，或补上真实发布"
+                )
+        if entry["dynamic"] and not entry["declared"]:
+            warnings.append(
+                f"[emits] 模块 {mid} 有动态 topic 发布点但没有 emits 声明（{entry['dynamic'][:2]}）"
+            )
+    return violations, warnings
 
 
 def evaluate() -> dict[str, Any]:
@@ -411,6 +612,11 @@ def evaluate() -> dict[str, Any]:
                 "登记进 KNOWN_FORMAT_ONLY（并写清缺什么行为）"
             )
 
+    # ③ 发布端（emits）双向契约
+    pubs = scan_publishers()
+    emit_violations, pub_warnings = _emit_problems(pubs)
+    violations.extend(emit_violations)
+
     return {
         "schema": rel(SCHEMA_PATH),
         "fieldCount": len(fields),
@@ -426,6 +632,18 @@ def evaluate() -> dict[str, Any]:
             "formatOnly": len(only_format),
             "unconsumed": len(unconsumed),
         },
+        "emits": {
+            "moduleCount": len(pubs["modules"]),
+            "scannedFiles": pubs["scannedFiles"],
+            "declared": sum(len(e.get("declared") or []) for e in pubs["modules"].values()),
+            "published": sum(len(e.get("published") or {}) for e in pubs["modules"].values()),
+            "problems": sum(
+                len(e.get("undeclared") or []) + len(e.get("unpublished") or [])
+                + len(e.get("sourceErrors") or [])
+                for e in pubs["modules"].values()
+            ),
+        },
+        "warnings": pub_warnings,
         "violations": violations,
         "ok": not violations,
     }
@@ -433,6 +651,7 @@ def evaluate() -> dict[str, Any]:
 
 def _render(result: dict[str, Any], *, show_sites: bool) -> None:
     counts = result["counts"]
+    emits = result["emits"]
     print(
         f"协议字段消费门禁（G13）· {result['fieldCount']} 字段 / 扫 {result['scannedFiles']} 个文件"
     )
@@ -440,12 +659,21 @@ def _render(result: dict[str, Any], *, show_sites: bool) -> None:
         f"  被消费 {counts['consumed']} · 仅格式 {counts['formatOnly']}"
         f" · 未消费 {counts['unconsumed']}"
     )
+    print(
+        f"  发布端（emits）· {emits['moduleCount']} 模块 / {emits['scannedFiles']} 个模块文件"
+        f" · 声明 {emits['declared']} 条 / 发布 {emits['published']} 种 · 问题 {emits['problems']}"
+    )
     print()
 
     for field, sites in sorted(result["formatOnly"].items()):
         print(f"  △ {field:16s} 仅格式  {sites[0]}")
     for field in result["unconsumed"]:
         print(f"  ✗ {field:16s} 未消费  —")
+
+    if result["warnings"]:
+        print()
+        for w in result["warnings"]:
+            print(f"  △ {w}")
 
     if show_sites and result["consumers"]:
         print("\n消费点明细（可复核启发式判定）：")
@@ -514,6 +742,36 @@ def selfcheck() -> int:
         )
     finally:
         SCAN_ROOTS, WEB_SCAN_ROOTS = saved_roots, saved_web
+
+    # ④ 发布端：声明了却从不发布 ⇒ 判定必须报红
+    def _pubs(**entry: Any) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "declared": [],
+            "published": {},
+            "undeclared": [],
+            "unpublished": [],
+            "sourceErrors": [],
+            "dynamic": [],
+        }
+        base.update(entry)
+        return {"modules": {"demo": base}, "scannedFiles": 1}
+
+    v, _w = _emit_problems(_pubs(declared=["demo.ping"], unpublished=["demo.ping"]))
+    checks.append(("发布端：注入「声明了不发布」应报红", any("demo.ping" in x for x in v)))
+
+    # ⑤ 发布端：发布了却没声明 ⇒ 判定必须报红
+    v, _w = _emit_problems(
+        _pubs(published={"demo.pong": ["x.py:1"]}, undeclared=["demo.pong"])
+    )
+    checks.append(("发布端：注入「发布了没声明」应报红", any("demo.pong" in x for x in v)))
+
+    # ⑥ 发布端：source 不是模块 id ⇒ 判定必须报红（运行时按 source 查声明）
+    v, _w = _emit_problems(_pubs(sourceErrors=["x.py:1 source='other'"]))
+    checks.append(("发布端：注入「source 不对」应报红", any("source" in x for x in v)))
+
+    # ⑦ 发布端：零文件扫描 ⇒ 必须报红（门禁没上线）
+    v, _w = _emit_problems({"modules": {}, "scannedFiles": 0})
+    checks.append(("发布端：空扫描应报红", any("零个" in x or "一个模块文件" in x for x in v)))
 
     print("门禁自检（反向验证）")
     for label, ok in checks:

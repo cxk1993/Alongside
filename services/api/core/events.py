@@ -50,6 +50,32 @@
   而插件自己知道自己的 manifest。
   ⇒ 传进来是**单向依赖**（插件 → 内核），内核不反向依赖插件。
 
+## 声明也是发布的唯一入口（2026-11-10）
+
+★ `manifest.emits` 与 `manifest.consumes` 是**同一套契约的两端**：
+  订阅端「未声明不许订阅」，发布端「未声明不许发布」。
+  早先只有订阅端有约束，而 emits 完全没人读 —— 于是出现过
+  「9 个模块声明了却从不发布、6 个发布了却没声明」，
+  事件契约只成立一半（写着的没人执行，执行着的没人写）。
+
+⇒ 现在的规矩：
+  ① 模块**只能**用 `publish(topic, payload, source=<模块 id>)` 发布；
+  ② 发布前内核按 `source` 查该模块登记过的 `emits` 声明，
+     未登记 / 未覆盖该 topic ⇒ 抛 `UndeclaredPublication`（fail-closed，**不发出去**）；
+  ③ 声明由发现层调用 `declare_publisher(info)` 登记（见 `create_app` 与 `mount_plugin`）；
+  ④ 内核自己的系统事件（SSE 补发、激活器观测等）走 `publish_kernel_event()`：
+     它固定 `source="kernel"`，**不**受模块声明体系约束 ——
+     内核不是插件，没有 manifest，也不该为了发一条事件去编一份声明。
+
+★ 为什么发布端要 fail-closed 而不是「记个警告继续发」：
+  发布端是**契约的供给方**。没人声明的话题被发出去，订阅端要么收不到（契约漏了），
+  要么靠通配符偷听（契约被绕过）——两种都让「事件契约」退化成注释。
+  在发布点炸，问题会出现在**写错的那一行**；只警告，问题会出现在三个月后的排障现场。
+
+★ 为什么要静态门禁再扫一遍：运行时只拦得住「跑到的代码」。
+  `scripts/check_protocol_consumption.py` 会把「声明了不发布 / 发布了没声明」
+  在**不开服务**的情况下判出来（双向），并强制模块发布时必须显式写 `source=<自身 id>`。
+
 ## 投递保证
 
 ★ 进程内总线是 **at-most-once**：发布即投，不重试、不持久化。
@@ -70,6 +96,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import fnmatch
+import inspect
 import json
 import uuid
 from collections import deque
@@ -85,6 +112,14 @@ from core.logging import get_logger, trace_id_var
 log = get_logger("kernel.events")
 
 _BUS_MAXLEN = 100
+
+#: 内核自身的**事件源**标识。
+#:
+#: ★ 这是一个受信值：`publish(source="kernel")` 跳过模块 emits 校验。
+#:   所以**模块代码不许用它**（静态门禁会拦：模块里的发布必须显式写 source=<自身 id>）。
+#:   内核要发系统事件，请走 `publish_kernel_event()` —— 名字即纪律，
+#:   与 `add_kernel_hook` 同款思路：让越界写在 review 里一眼可见。
+KERNEL_SOURCE = "kernel"
 
 #: 主题的当前版本。破坏性变更时 bump。
 DEFAULT_TOPIC_VERSION = "1"
@@ -103,6 +138,11 @@ class EventBus:
         #   一个插件可以有多个处理器（push 就同时挂提醒/待办/上课三路），
         #   但每一路都必须落在 manifest.consumes 声明之内。
         self._declared: dict[str, list[tuple[frozenset[str], Callable[[dict[str, Any]], None]]]] = {}
+        # ★ 发布端声明：插件 id → manifest.emits 声明的 topic 集合。
+        #   与 `_declared`（订阅端）对称：登记即声明，publish 时按它 fail-closed。
+        #   由发现层在**发现时**登记（不是激活时）：注册表回答的是
+        #   「这个模块声明了什么」，而「代码在不在跑」由激活表回答，两者不该混。
+        self._declared_emits: dict[str, frozenset[str]] = {}
         self._seq = 0
         self._seq_lock = __import__("threading").Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -116,17 +156,28 @@ class EventBus:
         self,
         topic: str,
         payload: Any,
-        source: str = "kernel",
+        source: str = KERNEL_SOURCE,
         *,
         version: str = DEFAULT_TOPIC_VERSION,
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
         """发布事件（同步、线程安全）。返回事件对象。
 
+        ★ `source` 必须写**发布者自己的模块 id**（模块代码里不许省略）。
+          省略 = 走内核源，静态门禁会把它当越界。内核自己请用 `publish_kernel_event()`。
+
+        ★ 模块发布者 fail-closed（2026-11-10）：`source` 不是内核时，
+          先按该模块登记过的 `manifest.emits` 校验 topic；
+          没登记 / 没覆盖 ⇒ 抛 `UndeclaredPublication`，**事件不会发出去**。
+          与 `subscribe_declared` 是同一套语义的两端：
+          订阅端「未声明不许订阅」，发布端「未声明不许发布」。
+
         ★ `trace_id` 从 `trace_id_var` 取（中间件已设好），
           没有请求上下文时为空串——**不编造**。
           编一个假 trace_id 会让排障时去查一条不存在的链路。
         """
+        if source != KERNEL_SOURCE:
+            self._assert_publish_declared(source, topic)
         event = {
             "id": self._next_id(),
             "eid": uuid.uuid4().hex,
@@ -162,10 +213,114 @@ class EventBus:
                         "声明式订阅者异常（已忽略，不影响广播）",
                         extra={"topic": topic, "plugin": plugin_id, "error": str(exc)},
                     )
+                except BaseException as exc:  # noqa: BLE001
+                    # ★ `except Exception` 兜不住 SystemExit / KeyboardInterrupt /
+                    #   asyncio.CancelledError（3.8+ 属 BaseException）。它们会**打断
+                    #   整条广播**，而原来的写法连一行日志都不留 —— 后面几个插件
+                    #   静默漏事件，排障时什么都看不到。
+                    #   这里不上抛也不吞：先留痕，再按原语义继续上抛（取消信号必须
+                    #   抵达调用方，这是控制流，不是错误）。
+                    log.warning(
+                        "声明式订阅者抛 BaseException，广播中止",
+                        extra={
+                            "topic": topic,
+                            "plugin": plugin_id,
+                            "type": type(exc).__name__,
+                            "error": str(exc),
+                        },
+                    )
+                    raise
         if self._subscribers and self._loop is not None:
             for q in list(self._subscribers):
-                self._loop.call_soon_threadsafe(q.put_nowait, event)
+                try:
+                    self._loop.call_soon_threadsafe(q.put_nowait, event)
+                except RuntimeError as exc:
+                    # ★ loop 已关闭（`asyncio.run` 结束、uvicorn worker 重载、
+                    #   优雅退出窗口）。此时**业务副作用已经发生**（上面各 handler
+                    #   都跑完了），如果让 RuntimeError 冒给 publish 的调用方，
+                    #   调用方会当成失败重试 ⇒ 同一条业务写两遍。
+                    #   ⇒ 订阅者已死，摘掉它，降级为 warn。
+                    log.warning(
+                        "SSE 订阅者的 loop 已关闭，已摘除该订阅者",
+                        extra={"topic": topic, "error": str(exc)},
+                    )
+                    with contextlib.suppress(ValueError):
+                        self._subscribers.remove(q)
         return event
+
+    def publish_kernel_event(
+        self,
+        topic: str,
+        payload: Any,
+        *,
+        version: str = DEFAULT_TOPIC_VERSION,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """发布**内核自身**的系统事件（不受任何模块的 emits 声明约束）。
+
+        ★ 为什么要有独立入口，而不是让内核也写 `publish(source="kernel")`：
+          两者行为一样，但名字回答了一个问题——「这条事件是谁发的」。
+          内核发的事件不该看起来像某个模块发的（`source` 必须是 `kernel`），
+          也不该为了合规去编一份 manifest。名字即纪律（同 `add_kernel_hook`）。
+        """
+        return self.publish(
+            topic,
+            payload,
+            source=KERNEL_SOURCE,
+            version=version,
+            correlation_id=correlation_id,
+        )
+
+    # ── 发布端声明（emits 契约的执行点）────────────────────────────
+
+    def declare_publisher(self, info: Any) -> frozenset[str]:
+        """登记某插件的 `manifest.emits` 声明（发布端的唯一登记入口，幂等）。
+
+        `info` 与 `subscribe_declared` 同形：`PluginInfo` / `Manifest` 模型 / 原始 manifest dict。
+
+        ★ 重复登记同一份声明是幂等的（发现层与挂载入口都会调一次）。
+          两次声明**不一致**时不抛错、只告警：那说明同一个 id 有两份 manifest，
+          根因在发现层（它已经保证 id == 目录名），不该由总线替它裁决；
+          但必须留下痕迹，否则「两份真相」会静默并存。
+        """
+        plugin_id, declared = _declaration_of(info, field="emits")
+        existing = self._declared_emits.get(plugin_id)
+        if existing is not None and existing != declared:
+            log.warning(
+                "插件 %s 的 emits 声明被重复登记且内容不同（后一份生效）",
+                plugin_id,
+                extra={"before": sorted(existing), "after": sorted(declared)},
+            )
+        self._declared_emits[plugin_id] = declared
+        return declared
+
+    def withdraw_publisher(self, plugin_id: str) -> None:
+        """撤销某插件的 emits 声明（幂等）。仅测试与诊断用。"""
+        self._declared_emits.pop(plugin_id, None)
+
+    def declared_emits(self, plugin_id: str) -> frozenset[str] | None:
+        """某插件登记的 emits 声明；`None` = 从未登记（≠ 空声明）。"""
+        return self._declared_emits.get(plugin_id)
+
+    def publishers(self) -> dict[str, frozenset[str]]:
+        """当前全部发布端声明快照（诊断用）。"""
+        return dict(self._declared_emits)
+
+    def _assert_publish_declared(self, source: str, topic: str) -> None:
+        """`source` 是否有权发布 `topic`（fail-closed）。"""
+        declared = self._declared_emits.get(source)
+        if declared is None:
+            raise UndeclaredPublication(
+                f"发布者 {source!r} 没有登记 emits 声明：内核不知道它会发什么事件。"
+                "模块必须在 manifest.emits 里声明，并由发现层调用 declare_publisher 登记；"
+                "内核自身的事件请用 publish_kernel_event()。"
+            )
+        if not _declared_covers(declared, topic):
+            raise UndeclaredPublication(
+                f"模块 {source!r} 试图发布未声明的 topic {topic!r}；"
+                f"manifest.emits = {sorted(declared)}。"
+                "声明是发布的唯一入口——要发布，先把 topic 写进 manifest.emits。"
+            )
 
     def add_kernel_hook(self, callback: Callable[[dict[str, Any]], None]) -> None:
         """注册**内核自身**的回调挂点（激活器等；重复注册同一回调会被去重）。
@@ -213,6 +368,17 @@ class EventBus:
         plugin_id, declared = _declaration_of(info)
         if not callable(handler):
             raise TypeError(f"插件 {plugin_id!r} 的事件处理器必须可调用，收到 {type(handler)!r}")
+        if inspect.iscoroutinefunction(handler):
+            # ★ 注册期就拒，而不是运行期静默丢弃：总线是**同步投递**，
+            #   `async def` 处理器只会产出一个没人 await 的 coroutine
+            #   （实测：注册成功、publish 不报错、handler 一次没跑，
+            #     只在日志里留一句 "coroutine ... was never awaited"）。
+            #   这正是 fail-closed 要消灭的失败模式 —— 启动时炸，别上线后静默。
+            raise TypeError(
+                f"插件 {plugin_id!r} 的事件处理器不能是 async def："
+                "事件总线是同步投递，async 处理器会被静默丢弃（永不执行）。"
+                "请在 handler 内部自行调度到事件循环（如 asyncio.run_coroutine_threadsafe）。"
+            )
         wanted = frozenset(declared if topics is None else _as_topics(topics))
 
         undeclared = sorted(t for t in wanted if not _declared_covers(declared, t))
@@ -229,9 +395,15 @@ class EventBus:
             return wanted
 
         entries = self._declared.setdefault(plugin_id, [])
-        entry = (wanted, handler)
-        if entry not in entries:
-            entries.append(entry)
+        # ★ 同一个 handler 对象重复注册（比如先声明 `todo.*` 后来又补一条
+        #   `todo.item.due`，或模块重载前的那份引用）**合并 topic**，
+        #   而不是追加第二条 —— 追加会让同一条事件投递两次（实测 S2b）。
+        #   插件只表达了一次「我要处理这个函数」，就不该被调用两次。
+        for idx, (topics_i, handler_i) in enumerate(entries):
+            if handler_i == handler:
+                entries[idx] = (topics_i | wanted, handler_i)
+                return wanted
+        entries.append((wanted, handler))
         return wanted
 
     def unsubscribe_declared(self, plugin_id: str) -> None:
@@ -295,14 +467,29 @@ def _topic_matches(topics: frozenset[str], topic: str) -> bool:
 
     ★ 支持 `fnmatch` 通配（`todo.*`）——声明可以写「我要所有 todo 事件」。
       精确匹配优先，但通配让「一个插件关心一个域的所有事件」不必逐条列。
+
+    ★ 必须用 `fnmatchcase`（大小写敏感）而不是 `fnmatch`：
+      `fnmatch` 在 Windows 上会先 `os.path.normcase`（两边转小写），
+      与注册期 `_declared_covers`（用 `fnmatchcase`）语义不一致 ——
+      实测声明写 `TODO.*`、topic 是 `todo.item.due` 时，
+      Windows 投递、Linux 不投递。topic 是标识符，本就该大小写敏感。
     """
     if topic in topics:
         return True
-    return any(fnmatch.fnmatch(topic, p) for p in topics)
+    return any(fnmatch.fnmatchcase(topic, p) for p in topics)
 
 
 class UndeclaredSubscription(ValueError):
     """插件试图订阅 `manifest.consumes` 之外的 topic（fail-closed）。"""
+
+
+class UndeclaredPublication(ValueError):
+    """插件试图发布 `manifest.emits` 之外的 topic（fail-closed，事件不发出去）。
+
+    ★ 与 `UndeclaredSubscription` 是同一套语义的两端：
+      订阅端在**注册时**炸，发布端在**发布时**炸；
+      两边都是「声明是唯一入口」这句话的执行点，不是可选的 lint。
+    """
 
 
 def _as_topics(topics: Any) -> frozenset[str]:
@@ -330,27 +517,39 @@ def _declared_covers(declared: frozenset[str], wanted: str) -> bool:
     return any(fnmatch.fnmatchcase(wanted, p) for p in declared)
 
 
-def _declaration_of(info: Any) -> tuple[str, frozenset[str]]:
-    """从 PluginInfo / Manifest 模型 / 原始 manifest dict 里取 `(插件 id, consumes)`。
+#: 声明字段的读取器。★ 每个字段**各写一句**，刻意不写成 `manifest.get(field)`：
+#: 协议字段的消费点必须能被 `check_protocol_consumption.py` 的 AST 扫描看见；
+#: 用变量当键，扫描器看不到 —— 那会让 emits / consumes 被判成「没人读」，
+#: 于是门禁的绿灯建立在「扫描器瞎了」上（正是那道门禁最怕的失效方式）。
+_FIELD_READERS: dict[str, Callable[[Any], Any]] = {
+    "consumes": lambda m: m.get("consumes") if isinstance(m, Mapping) else getattr(m, "consumes", None),
+    "emits": lambda m: m.get("emits") if isinstance(m, Mapping) else getattr(m, "emits", None),
+}
 
-    三种形态都只读 `id` 与 `consumes`——内核不认识插件的目录结构，
-    manifest 是调用方（插件自己或发现层）递进来的。
+
+def _declaration_of(info: Any, field: str = "consumes") -> tuple[str, frozenset[str]]:
+    """从 PluginInfo / Manifest 模型 / 原始 manifest dict 里取 `(插件 id, <field> 声明)`。
+
+    三种形态都只读 `id` 与 `field`（默认 `consumes`；发布端传 `emits`）——
+    内核不认识插件的目录结构，manifest 是调用方（插件自己或发现层）递进来的。
     """
+    reader = _FIELD_READERS.get(field)
+    if reader is None:
+        raise ValueError(f"未知的声明字段：{field!r}（只认 {sorted(_FIELD_READERS)}）")
     manifest = getattr(info, "manifest", None)
     if manifest is None:
         manifest = info
     if isinstance(manifest, Mapping):
         plugin_id = getattr(info, "id", None) or manifest.get("id")
-        raw = manifest.get("consumes")
     else:
         plugin_id = getattr(info, "id", None) or getattr(manifest, "id", None)
-        raw = getattr(manifest, "consumes", None)
+    raw = reader(manifest)
     if not plugin_id:
-        raise ValueError("声明式订阅缺少插件 id：info 应带 id，或 manifest 里必须有 id")
+        raise ValueError("声明式订阅/发布缺少插件 id：info 应带 id，或 manifest 里必须有 id")
     if raw is None:
         raw = ()
     if isinstance(raw, str):
-        raise TypeError(f"插件 {plugin_id!r} 的 manifest.consumes 必须是 topic 列表，收到字符串")
+        raise TypeError(f"插件 {plugin_id!r} 的 manifest.{field} 必须是 topic 列表，收到字符串")
     return str(plugin_id), frozenset(str(t) for t in raw)
 
 

@@ -6,7 +6,7 @@
   "minKernel": "0.1.0",
   "kernelApi": "^1",
   "icon": "book-open",
-  "description": "知识库窗：复盘 / 笔记 / 文档 三合一入口，一窗多页（主人⑤ · 多页化展示 · 容器型模块）",
+  "description": "知识库窗：复盘 / 笔记 / 文档 / 日记 四合一入口，一窗多页（主人⑤ · 多页化展示 · 容器型模块）",
   "author": "astrbot",
   "window": {
     "w": 1000,
@@ -24,12 +24,7 @@
   "tabs": [
     { "key": "review", "label": "复盘", "entry": "review" },
     { "key": "notes", "label": "笔记", "entry": "notes" },
-    { "key": "docs", "label": "文档", "entry": "docs" }
-  ],
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+    { "key": "docs", "label": "文档", "entry": "docs" },
+    { "key": "diary", "label": "日记", "entry": "diary" }
+  ]
 }

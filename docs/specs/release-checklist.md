@@ -99,9 +99,9 @@ git tag -a v1.0.0 -m "初版" && git push origin main --tags
 | # | 判据 | 怎么核 |
 |---|---|---|
 | M1 | **对外口径与 A/B/C 分档一致**：A 档说「已绿」，B 档说「声明位，运行时未建」，C 档**不提** | 对照 `reports/initial-version-scope.md` §5 的「对外怎么说」，逐句核 README / 宣发稿 |
-| M2 | **experimental 标注到位**：B1 `consumes`、B2 `absorbs`、B3 `lifecycle` 自定义钩子、B4 container 页签分叉 | 在协议文档与 `docs/specs` 搜索这四个词，确认都带「未建/预留/分叉」字样 |
-| M3 | **不承诺前端「一切皆插件」**：C1 未完成，容器吸收仍是硬编码 | 检查对外材料里没有「全部由插件长出来」这类无限定的表述 |
-| M4 | **死文档改掉**：`summary` 模块的 `/today` 是死代码（BFF 同前缀先匹配），文档必须写明走 BFF | `docs/specs/today-summary数据源规范-v1.md` 有没有这句 |
+| M2 | **协议四字段已接线（2026-11-10）**：`consumes` 声明即订阅、`emits` 声明即许可、`absorbs` 单一真相源、`lifecycle` 降级为枚举 `"hooks"` 且做声明↔实现校验 | 跑 `scripts/check_protocol_consumption.py` 与 `tools/check_manifest_absorbs.py`，两者都必须 exit 0；文档里不再出现「未建/预留」这类描述这四字段的字样 |
+| M3 | **前端不再持有吸收关系**：`Dock.tsx` 的 `DOCK_MERGE` 与 `moduleGraph.ts` 的补表都已删除 | `grep -rn "DOCK_MERGE\|ABSORB_SUPPLEMENTS\|TAB_SUPPLEMENTS" apps/web/src` 应为空（或只剩注释里的历史说明） |
+| M4 | **死端点已裁决**：`summary` 模块不再实现 `/today`（今日摘要只有内核 BFF 一处） | `modules/summary/router.py` 只有 `/health`；`tests_protocol/test_route_shadowing.py` 必须绿 |
 | M5 | **仓库干净**：无 `_probe_*.py`、无 `tmp_*.db` 被跟踪、无 `.bak` | `git ls-files \| grep -E "_probe_|tmp_.*\.db\|\.bak$"` 应为空（当前 tmp db 均已被 gitignore） |
 | M6 | **法律面**：`LICENSE`(Apache-2.0) + `NOTICE` 齐全，第三方许可已在 NOTICE 列明 | `ls LICENSE NOTICE`；新增依赖的许可是否补进 NOTICE |
 | M7 | **版本号一致**：`apps/web/package.json` 与后端 `pyproject.toml` 的主版本，且与 tag 一致 | 三处对齐 |

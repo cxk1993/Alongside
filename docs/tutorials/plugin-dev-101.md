@@ -81,15 +81,14 @@ apps/web/src/apps/myplugin/
   "consumes": [],
   "permissions": [],
    "migrations": null,
-  "settingsSchema": null,
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": null
 }
 ```
+
+★ `lifecycle` 字段**只在插件真有钩子时才写**，且只有一个值 `"hooks"`
+（= `api/lifecycle.py` 里有固定名 `on_install/on_enable/on_disable/on_uninstall`）。
+没有钩子就别写这个字段 —— 写了 `"hooks"` 却找不到文件，启停时会写进 `plugin_state.last_error`。
+钩子名**不支持自定义映射**（2026-11-10 裁决）。
 
 ### 1.4 起服务验证
 
@@ -147,15 +146,14 @@ node node_modules/vite/bin/vite.js build                         # 构建
   "consumes": [],
   "permissions": [],
    "migrations": null,
-  "settingsSchema": null,
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": null
 }
 ```
+
+★ `lifecycle` 字段**只在插件真有钩子时才写**，且只有一个值 `"hooks"`
+（= `api/lifecycle.py` 里有固定名 `on_install/on_enable/on_disable/on_uninstall`）。
+没有钩子就别写这个字段 —— 写了 `"hooks"` 却找不到文件，启停时会写进 `plugin_state.last_error`。
+钩子名**不支持自定义映射**（2026-11-10 裁决）。
 
 ### 2.3 薄壳后端：极薄 router
 

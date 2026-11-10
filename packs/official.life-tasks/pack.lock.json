@@ -1,13 +1,13 @@
 {
   "packId": "official.life-tasks",
   "packVersion": "1.0.0",
-  "generatedAt": "2026-11-09T15:56:20.594598+00:00",
+  "generatedAt": "2026-11-10T07:04:45.248391+00:00",
   "selfDigest": "sha256:b5a019c4081d2e85aea547d35aca119f7378b2eea9cb5520f5743b595ff57560",
   "members": [
     {
       "id": "finance",
       "version": "0.2.0",
-      "digest": "sha256:d8704626676732ee1805e076c80c1b574691579764fdb4c7b0842b79f9c04bf6",
+      "digest": "sha256:1b837840a3a7254e064b1c8a1ad75aeb9dd4b51760bff29e6b58a5aa0d9891f3",
       "fromPacks": [
         "official.life-tasks"
       ]
@@ -15,7 +15,7 @@
     {
       "id": "todo",
       "version": "0.1.0",
-      "digest": "sha256:f97b6859679cffbbafceda0515e8b189a88c72e187eb3d47a59f3d91dc2fb20d",
+      "digest": "sha256:dae766b12a9ac229b5411a400791591e8c2a17d9034f36308f52d1a35dabb648",
       "fromPacks": [
         "official.life-tasks"
       ]
@@ -23,7 +23,7 @@
     {
       "id": "calendar",
       "version": "0.1.0",
-      "digest": "sha256:492630aa4b13674621c48695ca844ed7b03b50d139bb33de5abcbe8f11716859",
+      "digest": "sha256:735e4b9427511155f1d1fa7eea387734f5ab5c4f52cb47b2c32628aa30b5cf52",
       "fromPacks": [
         "official.life-tasks"
       ]
@@ -31,7 +31,7 @@
     {
       "id": "review",
       "version": "0.1.0",
-      "digest": "sha256:57ee624ed07a3a5cec7c7f89aa8f7d37f3e11aeb1bdb8fc4cd242689dde6fe35",
+      "digest": "sha256:d0715f6d2b9b5fc6a3f04ccc481e1a373f1803644e26df81ed45187c588aceb8",
       "fromPacks": [
         "official.life-tasks"
       ]
@@ -39,7 +39,7 @@
     {
       "id": "push",
       "version": "0.1.0",
-      "digest": "sha256:34f45f4ba2198a996bbf1da0b785070de9c1e44956f10bb17887e2eb1a64c767",
+      "digest": "sha256:44b45e22ba778d5b264a844aa385849e0536a0bb41759e568bf519e9b1f27f81",
       "fromPacks": [
         "official.life-tasks"
       ]

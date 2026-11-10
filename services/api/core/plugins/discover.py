@@ -234,3 +234,9 @@ def mount_plugin(info: PluginInfo, registry: Any) -> None:
         prefix=info.manifest["api"]["base"],
         scoped=(info.kind == "third-party"),
     )
+    # ★ 挂载即登记发布端声明（2026-11-10）：运行期 enable / install 的第三方插件
+    #   走这条路径进系统，它们的 `emits` 必须在这时进总线注册表，
+    #   否则第一条事件就会撞上 UndeclaredPublication。幂等。
+    from core.events import event_bus  # 局部 import：避免 discover ⇄ events 的导入期循环
+
+    event_bus.declare_publisher(info)

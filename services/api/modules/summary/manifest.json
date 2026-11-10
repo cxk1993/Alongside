@@ -6,7 +6,7 @@
   "minKernel": "0.1.0",
   "kernelApi": "^1",
   "icon": "dashboard",
-  "description": "U2 小日历聚合：并发请求 calendar/todo/diary/review 的 today-summary 端点，缺一不塌",
+  "description": "薄壳：今日摘要由内核 BFF（GET /api/v1/summary/today，只转发不解析）提供；本模块只保留 /health，不再自己实现 /today（同路径会遮蔽成死代码）。",
   "author": "yunxi",
   "window": {
     "w": 360,
@@ -29,11 +29,5 @@
   "consumes": [],
   "permissions": ["net:out:localhost"],
   "activates_on": [],
-  "migrations": null,
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "migrations": null
 }

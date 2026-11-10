@@ -147,5 +147,26 @@ def install_push_link() -> bool:
     return True
 
 
+def uninstall_push_link() -> bool:
+    """摘掉三路事件联动（停用/卸载时用，幂等）。
+
+    ★ 为什么必须有它：push 是 `builtin`，用户**可以**在设置页停用它
+      （`manager.disable` 只拦 `kind == "core"`）。而三路联动是在 import 期
+      （`router.py` 导入本模块时）注册的，走的是模块函数、不经过路由 ——
+      只摘路由拦不住它：停用后 `calendar.reminder.fired` 一到，
+      照样写库并 `send_broadcast()`。
+      ⇒ 停用必须显式摘订阅；启用时 `install_push_link()` 再装回来。
+    """
+    global _installed
+    if not _installed:
+        # 仍然清一次：防止 `_installed` 与实际注册状态不同步（如热重载后）。
+        event_bus.unsubscribe_declared("push")
+        return False
+    event_bus.unsubscribe_declared("push")
+    _installed = False
+    log.info("push 事件联动已卸载（%s / %s / %s 不再触发推送）", EVENT_REMINDER, EVENT_TODO_DUE, EVENT_COURSE_DUE)
+    return True
+
+
 # router.py 被内核挂载时即装载（health_link 由 todo/router import 触发，同款时序）。
 install_push_link()

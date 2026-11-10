@@ -35,19 +35,9 @@
   ],
   "requires": [],
   "slots": [],
-  "emits": [
-    "pack.registered",
-    "pack.assembled",
-    "pack.unregistered"
-  ],
+  "emits": [],
   "consumes": [],
   "permissions": [],
   "migrations": null,
-  "settingsSchema": null,
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": null
 }

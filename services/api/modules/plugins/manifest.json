@@ -32,20 +32,9 @@
   ],
   "requires": [],
   "slots": [],
-  "emits": [
-    "plugin.installed",
-    "plugin.enabled",
-    "plugin.disabled",
-    "plugin.uninstalled"
-  ],
+  "emits": [],
   "consumes": [],
   "permissions": [],
   "migrations": null,
-  "settingsSchema": null,
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": null
 }

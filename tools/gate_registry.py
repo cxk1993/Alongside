@@ -152,11 +152,25 @@ GATES: tuple[Gate, ...] = (
         id="protocol-consumption",
         path="services/api/scripts/check_protocol_consumption.py",
         description=(
-            "G13 · 协议字段的运行时消费门禁：Schema 里的字段有没有代码按它行动。"
-            "自带反向自证 --selfcheck（摘登记 / 幽灵字段 / 空扫描根，三种都必须报红）。"
+            "G13 · 协议字段的运行时消费门禁：Schema 里的字段有没有代码按它行动；"
+            "外加发布端（emits）双向契约——声明了不发布 / 发布了没声明 / source 不是模块 id。"
+            "自带反向自证 --selfcheck（摘登记 / 幽灵字段 / 空扫描根 / 三种发布端失效，都必须报红）。"
         ),
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_emits_contract.py",
+    ),
+    Gate(
+        id="manifest-absorbs",
+        path="tools/check_manifest_absorbs.py",
+        description=(
+            "G17 · 容器吸收关系一致性：absorbs ↔ tabs[].entry 不得重复、不得被两个容器争抢、"
+            "不得指向不存在的模块、不得吸收容器、有 UI 的模块不得被无页归口。"
+            "自带反向自证 --selfcheck。"
+        ),
+        blocking=True,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_manifest_absorbs.py",
     ),
     Gate(
         id="db-scope-wiring",

@@ -18,11 +18,5 @@
   "slots": [],
   "emits": ["auth.login", "auth.logout"],
   "consumes": [],
-  "permissions": ["db:own"],
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "permissions": ["db:own"]
 }

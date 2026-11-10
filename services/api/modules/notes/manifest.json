@@ -39,11 +39,5 @@
     "bridge:read"
   ],
   "migrations": "migrations",
-  "settingsSchema": "settings.schema.json",
-  "lifecycle": {
-    "onInstall": null,
-    "onEnable": null,
-    "onDisable": null,
-    "onUninstall": null
-  }
+  "settingsSchema": "settings.schema.json"
 }

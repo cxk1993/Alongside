@@ -307,35 +307,15 @@
       "description": "设置 JSON Schema 路径；无设置则写 null。"
     },
     "lifecycle": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "onInstall": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "onEnable": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "onDisable": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "onUninstall": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "description": "四个生命周期钩子（onInstall/onEnable/onDisable/onUninstall）。⚠️ 钩子抛异常是软失败：effect 已生效、不回滚，只写 last_error 供 readyz 目击。只有迁移失败或路由加载失败才触发补偿。★ 需要「要么全成、要么全不成」的初始化应放在**迁移**里（迁移失败会补偿），而不是放在 onInstall 钩子里（钩子失败不回滚）。"
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "hooks",
+        null
+      ],
+      "description": "可选：本插件是否提供生命周期钩子。只有两个合法值 —— \"hooks\" 表示 api/lifecycle.py 里定义了**固定名**钩子（on_install / on_enable / on_disable / on_uninstall，签名 (db=None)）；null 或缺省表示不提供。★ 钩子名固定，不支持自定义映射（2026-11-10 裁决 b）：允许改名没有真实需求，只会多一层间接、并在写错名字时静默不执行。★ 声明与实现必须一致：声明了 hooks 却找不到文件，或写了钩子却没声明，启停时都会写进 plugin_state.last_error（readyz 可见）。钩子抛异常仍是软失败（effect 已生效、不回滚）；需要「要么全成、要么全不成」的初始化请放迁移（迁移失败会补偿）。"
     },
     "defines": {
       "type": "array",

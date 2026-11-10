@@ -59,6 +59,11 @@ CODE_FILES: tuple[tuple[str, str, str], ...] = (
     ("⑦ 校验器的外部裁判", "tools/crosscheck_validator.py", "python"),
     ("⑧ 调研对齐核查器", "tools/check_research_alignment.py", "python"),
     ("⑨ 质量门禁的自检测试", "services/api/tests_protocol/test_protocol_quality_gates.py", "python"),
+    # ★ 2026-11-10 补：`emits` / `consumes` 的**执行点**从前只在总纲里描述，
+    #   文档里没有一行真代码。协议里最容易被写成「字段存在＝机制存在」的正是这一段，
+    #   所以把事件总线本体嵌进来 —— 读者能直接看到 fail-closed 在哪一行。
+    ("⑩ 事件契约执行点（声明即订阅 / 声明即许可）", "services/api/core/events.py", "python"),
+    ("⑪ 生命周期宣告契约（固定名钩子 + 声明校验）", "services/api/core/plugins/lifecycle.py", "python"),
 )
 
 

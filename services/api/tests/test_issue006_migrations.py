@@ -117,12 +117,6 @@ def _manifest() -> str:
         "permissions": [],
         "migrations": None,
         "settingsSchema": None,
-        "lifecycle": {
-            "onInstall": None,
-            "onEnable": None,
-            "onDisable": None,
-            "onUninstall": None,
-        },
     }
     return json.dumps(base, ensure_ascii=False)
 

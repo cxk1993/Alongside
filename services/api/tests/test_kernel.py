@@ -73,7 +73,6 @@ def _manifest(**over: object) -> str:
         "permissions": [],
         "migrations": None,
         "settingsSchema": None,
-        "lifecycle": {"onInstall": None, "onEnable": None, "onDisable": None, "onUninstall": None},
     }
     base.update(over)
     return json.dumps(base, ensure_ascii=False)

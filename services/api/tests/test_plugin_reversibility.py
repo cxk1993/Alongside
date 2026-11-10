@@ -70,12 +70,6 @@ PLUGIN_JSON_BASE = {
     "consumes": [],
     "permissions": ["db:own"],
     "settingsSchema": "api/settings.schema.json",
-    "lifecycle": {
-        "onInstall": None,
-        "onEnable": None,
-        "onDisable": None,
-        "onUninstall": None,
-    },
 }
 
 

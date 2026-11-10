@@ -72,12 +72,6 @@ def _write_demo_plugin(root: Path, *, kernel_api: str = "^1") -> None:
                 "permissions": ["db:own"],
                 "migrations": "api/migrations",
                 "settingsSchema": "api/settings.schema.json",
-                "lifecycle": {
-                    "onInstall": None,
-                    "onEnable": None,
-                    "onDisable": None,
-                    "onUninstall": None,
-                },
             },
             ensure_ascii=False,
         ),

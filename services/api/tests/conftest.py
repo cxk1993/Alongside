@@ -117,3 +117,27 @@ def _clean_leftover_probe_modules() -> Iterator[None]:
     _clean_tmp_dbs()
     yield
     _clean_leftovers()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _declare_module_publishers() -> Iterator[None]:
+    """把各模块 manifest 的 `emits` 声明登记进全局事件总线（等价 create_app 的启动步骤）。
+
+    ★ 为什么需要（2026-11-10）：
+      `emits` 接了 fail-closed 之后，`declare_publisher` 由 `create_app` / `mount_plugin`
+      调用 —— 也就是「模块的声明进内核」这一步只发生在**建应用**时。
+      而不建 app 的测试（直接 import 模块代码、自己调 service 再发布）从没跑过这一步，
+      于是第一发布就撞 `UndeclaredPublication`：**单跑红、全量绿**
+      （全量时前面某个模块建过 app，把声明顺手登记了）。
+      这不是测试写错，是内核的登记步骤在测试里缺位 ⇒ 在这里补上，让两者语义一致。
+
+    ★ 不放宽 fail-closed：登记的是各模块**自己的** manifest.emits；
+      发布了声明之外的 topic 照样当场被拒（`test_event_published.py` 守着这条）。
+    """
+    from core.events import event_bus
+    from core.plugins.discover import discover_plugins
+
+    with suppress(Exception):
+        for info in discover_plugins().plugins:
+            event_bus.declare_publisher(info)
+    yield

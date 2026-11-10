@@ -37,7 +37,9 @@
     "push.sent"
   ],
   "consumes": [
-    "calendar.reminder.fired"
+    "calendar.reminder.fired",
+    "todo.item.due",
+    "course.session.due"
   ],
   "permissions": [
     "db:own"

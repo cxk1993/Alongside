@@ -125,9 +125,6 @@ KNOWN_FORMAT_ONLY: dict[str, str] = {
 #: ③ 机制未建：连校验器都不读。
 KNOWN_UNCONSUMED: dict[str, str] = {
     "author": "仅用于展示，暂无消费点（低优先）",
-    "consumes": (
-        "事件契约（consumes）无运行时落点：事件总线尚未按声明授权/路由，与 emits 同一机制"
-    ),
     "emits": "事件总线要按 manifest 声明驱动，而不是模块自己 publish",
     "extensions": "留给未来的扩展位，放行不报不拒（暂不实现）",
     "lifecycle": (
@@ -262,6 +259,14 @@ def _is_web_source(path: Path) -> bool:
     if path.suffix.lower() not in {".ts", ".tsx"}:
         return False
     if ".test." in path.name or ".spec." in path.name:
+        return False
+    # ★ 映射层不算消费方：`PluginRegistry.manifestToModule` 的职责是把后端 manifest
+    #   **搬进**前端类型（36 字段逐个透传）。它读每个字段是为了搬运，不是为了使用。
+    #   若把它算作消费点，`absorbs` / `emits` / `lifecycle` 会被误判成「已消费」，
+    #   从而让真正的「未建机制」从诚实登记表里消失 —— 那是把诚实性打掉。
+    #   真正的消费方是拿字段做决策的地方：moduleGraph（tabs 推导吸收）、
+    #   containerPages（按 tabs 渲染页签）、Dock（按 absorbs 折叠入口）。
+    if path.name == "PluginRegistry.ts" and "plugins" in path.parts:
         return False
     return not any(part in {"node_modules", "__tests__", "dist"} for part in path.parts)
 

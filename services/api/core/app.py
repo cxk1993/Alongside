@@ -147,8 +147,8 @@ def create_app(
             #   **读不到声明** ⇒ 「按声明解析」只在第三方安装路径上成立，
             #   而启动对账恰恰是**唯一**会跑内置插件迁移的路径。
             [(m.id, d, m.model_dump() if hasattr(m, "model_dump") else dict(m)) for m, d in discovered],
-            on_started=lambda: event_bus.add_listener(activator_listener),
-            on_stopping=lambda: event_bus.remove_listener(activator_listener),
+            on_started=lambda: event_bus.add_kernel_hook(activator_listener),
+            on_stopping=lambda: event_bus.remove_kernel_hook(activator_listener),
         ),
     )
 

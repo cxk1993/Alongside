@@ -1,7 +1,7 @@
 {
   "packId": "official.life-tasks",
   "packVersion": "1.0.0",
-  "generatedAt": "2026-11-09T15:20:07.398276+00:00",
+  "generatedAt": "2026-11-09T15:56:20.594598+00:00",
   "selfDigest": "sha256:b5a019c4081d2e85aea547d35aca119f7378b2eea9cb5520f5743b595ff57560",
   "members": [
     {
@@ -39,7 +39,7 @@
     {
       "id": "push",
       "version": "0.1.0",
-      "digest": "sha256:68a7d1119f8937fb79b3577f3cdd92d4adc40f5b0825e664a21add4f795c2273",
+      "digest": "sha256:34f45f4ba2198a996bbf1da0b785070de9c1e44956f10bb17887e2eb1a64c767",
       "fromPacks": [
         "official.life-tasks"
       ]

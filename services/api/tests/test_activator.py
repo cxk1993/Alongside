@@ -138,7 +138,7 @@ def test_event_trigger_lazy_activation(make_probe: Callable[..., None]) -> None:
     assert app.state.activator.is_registered_pending(PROBE_ID)
 
     # 模拟生产 lifespan 接线（测试不进 lifespan，手动挂摘）
-    event_bus.add_listener(app.state.activator.on_event)
+    event_bus.add_kernel_hook(app.state.activator.on_event)
     try:
         # 未命中 topic：保持未激活
         event_bus.publish("demo.other", {"n": 1})
@@ -152,7 +152,7 @@ def test_event_trigger_lazy_activation(make_probe: Callable[..., None]) -> None:
         # 激活后不再是 pending
         assert not app.state.activator.is_registered_pending(PROBE_ID)
     finally:
-        event_bus.remove_listener(app.state.activator.on_event)
+        event_bus.remove_kernel_hook(app.state.activator.on_event)
 
 
 # ─────────────── 4. 监听未挂时事件发布零影响 ───────────────
@@ -179,13 +179,13 @@ def test_disable_clears_pending_blocks_event_activation(
     # 幂等：再清无登记可移除
     assert activator.clear_pending(PROBE_ID) is False
 
-    event_bus.add_listener(activator.on_event)
+    event_bus.add_kernel_hook(activator.on_event)
     try:
         event_bus.publish("demo.ping", {"n": 3})
         # pending 已清：事件命中也不再激活（disable 语义不被击穿）
         assert client.get(f"{PROBE_BASE}/ping").status_code == 404
     finally:
-        event_bus.remove_listener(activator.on_event)
+        event_bus.remove_kernel_hook(activator.on_event)
 
 
 # ─────────────── 6. 非法条目 → fail-fast ───────────────

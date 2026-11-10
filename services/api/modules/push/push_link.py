@@ -7,7 +7,9 @@
 """
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from core.deps import kernel_session
@@ -23,6 +25,9 @@ EVENT_TODO_DUE = "todo.item.due"
 # ★ 主人 2026-09-27「课程表保留推送能力」：上课前提醒 → web push（同构第三路）
 EVENT_COURSE_DUE = "course.session.due"
 _installed = False
+
+#: 本插件自己的声明。订阅面**只**从这份 manifest 来——那是「声明即订阅」的唯一真相源。
+_MANIFEST_PATH = Path(__file__).resolve().with_name("manifest.json")
 
 
 def handle_course_due_event(event: dict[str, Any]) -> None:
@@ -106,17 +111,35 @@ def handle_reminder_event(event: dict[str, Any]) -> None:
             log.warning("reminder push 联动失败: %s", exc)
 
 
+def _own_manifest() -> dict[str, Any]:
+    """读本插件自己的 manifest（订阅声明的唯一来源）。
+
+    ★ 插件自己知道自己的 manifest，内核不替它读（单向依赖：插件 → 内核）。
+      这份 `consumes` 会被 `subscribe_declared` 用来做覆盖校验：
+      某一个处理器要的 topic 不在声明里，注册当场被拒。
+    """
+    return json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
+
+
 def install_push_link() -> bool:
-    """注册事件监听（幂等）。"""
+    """按 manifest 声明注册事件联动（幂等）。
+
+    ★ 三条订阅都必须出现在 `modules/push/manifest.json` 的 `consumes` 里。
+      少一条，`subscribe_declared` 会在导入期抛 `UndeclaredSubscription`
+      （fail-closed）——这是「声明即订阅」的执行点，不允许绕过。
+    """
     global _installed
     if _installed:
         return False
-    event_bus.add_listener(handle_reminder_event)
-    event_bus.add_listener(handle_todo_due_event)  # ★ 主人 09-25：待办到期通道
-    event_bus.add_listener(handle_course_due_event)  # ★ 主人 09-27：上课提醒通道
+    manifest = _own_manifest()
+    event_bus.subscribe_declared(manifest, handle_reminder_event, topics={EVENT_REMINDER})
+    # ★ 主人 09-25：待办到期通道
+    event_bus.subscribe_declared(manifest, handle_todo_due_event, topics={EVENT_TODO_DUE})
+    # ★ 主人 09-27：上课提醒通道
+    event_bus.subscribe_declared(manifest, handle_course_due_event, topics={EVENT_COURSE_DUE})
     _installed = True
     log.info(
-        "push 事件联动已装载（%s / %s / %s → web push）",
+        "push 事件联动已装载（%s / %s / %s → web push，均经 manifest.consumes 授权）",
         EVENT_REMINDER,
         EVENT_TODO_DUE,
         EVENT_COURSE_DUE,

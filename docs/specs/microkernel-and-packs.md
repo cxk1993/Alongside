@@ -57,9 +57,9 @@
 | **数据作用域（SQLite authorizer）** | ✅ **已接线（2026-11-09）** | 三态：`kernel_session()`=内核特权 / `db_session(id)`=插件边界 / **未声明=deny-all**。`registry.mount(scoped=...)` 只给 `kind=third-party` 挂作用域依赖（内置模块之间本来就有跨模块读，那是误伤不是安全）。`db/engine.py` 挂 `Session.after_begin` + `engine.checkin`。**实测 7/7**：kernel 读写任意表 OK；`db_session("todo")` 读/写 `todo_item` OK、读 `finance_entry` 与 `plugin_state` DENIED；裸 Session DENIED。门禁 `tools/gates/verify_db_scope_wiring.py`（G16）守着它 |
 | 逐次拦截层 / Reactive Coeffect | 机制在（`coeffect.py` / `dependency.py`），按依赖表驱动 | 依赖通知已可用；拦截仍是三合一通道 |
 | `lifecycle` 四钩子 | ✅ 已被内核调用（`run_lifecycle_hook`，**按固定名** `on_enable/on_disable/on_uninstall`） | **manifest 的 `lifecycle` 映射字段不被消费**——pi-agent 曾声明全仓不存在的 `start_pi/stop_pi/cleanup_pi`，已改成与实现一致的固定名。⇒ 协议里应注明「钩子名固定，此字段仅声明位」 |
-| `consumes` 声明即订阅 | ⚠️ **未建** | `core/events.py:177 subscribe_declared()` **全仓零调用**；push 模块反而用被明令禁止的 `add_listener` 直连（`modules/push/push_link.py:114`）。已登记在 `check_protocol_consumption` 的未消费表里 |
+| `consumes` 声明即订阅 | ✅ **已接线（2026-11-09）** | `subscribe_declared(info, handler, topics=...)` 是插件订阅的**唯一入口**：内核从 `info`（PluginInfo / Manifest / 原始 manifest）读 `consumes`，处理器要的 topic 不在声明内就**当场拒绝注册**（fail-closed），投递时再按声明过滤。push 的三路联动（提醒/待办/上课）已从 `add_listener` 直连改为声明式，并补齐了 manifest。内核自用的挂点改名为 `add_kernel_hook`——名字就是纪律。`check_protocol_consumption` 的未消费表里已摘掉 `consumes` |
 | `absorbs` 吸收机制 | ⚠️ **未建** | 31 份 manifest **全部未声明**该字段；真正的吸收写死在前端 `Dock.tsx` 的 `DOCK_MERGE`（19 条硬编码），且与 `SystemApp.tsx` 的 `DEFAULT_TABS` **已经分叉**（diary/countdown 被吸收却无页签 ⇒ 入口消失；habits 有页签却没被吸收 ⇒ 重复入口） |
-| `emits` / `consumes` 投递 | 未声明 topic 一律不投递 ✅ | 但 `emits` 有 9 个声明从未发布、6 个发布未声明（agents/packs/plugins/push 最严重）⇒ 作为「事件契约」目前不成立 |
+| `emits` / `consumes` 投递 | `consumes` 侧已成立；`emits` 侧未声明 | 订阅端：未声明 topic 不注册、不投递 ✅。发布端仍缺约束：`emits` 有 9 个声明从未发布、6 个发布未声明（agents/packs/plugins/push 最严重）⇒ 作为双向「事件契约」目前只成立一半 |
 
 > 口径提醒：数据作用域是**纪律边界，不是沙箱**。
 > 插件与内核同进程同权，`import sqlite3; sqlite3.connect(path)` 就绕开了。

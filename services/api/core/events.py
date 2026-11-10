@@ -31,18 +31,21 @@
 ## 声明是订阅的唯一入口
 
 ★ `manifest.consumes` **必须**是订阅的唯一入口。
-  早先订阅是插件直接 `event_bus.add_listener(handler)`，
+  早先订阅是插件直接往总线上挂回调（旧的 `add_listener`），
   声明完全不参与——于是出现过「插件实际监听了 3 个主题、manifest 只声明 1 个」。
   ⇒ **声明 ↔ 实际**可能不一致，而不一致**没有任何报错**。
 
 ⇒ 现在的规矩：
-  ① 插件**不许**直接 `add_listener` 消费别人的事件；
-  ② 必须走 `event_bus.subscribe_declared(plugin_id, handler, topics=manifest.consumes)`：
-     内核按该插件 manifest 的 `consumes` 过滤，**未声明的 topic 一律不投递**。
+  ① 插件**不许**直接挂总线回调；那个挂点已改名为 `add_kernel_hook`
+     （名字就是纪律：只给内核自己用，如激活器）；
+  ② 插件必须走 `event_bus.subscribe_declared(info, handler, topics=...)`：
+     内核从 `info`（PluginInfo / Manifest / 原始 manifest）读 `consumes`，
+     处理器要的每个 topic 都必须落在声明内，**否则当场拒绝注册**；
+     投递时再按声明过滤，**未声明的 topic 一律不投递**。
   ③ 于是「声明 ↔ 实际」的不一致在**结构上不可能发生**——
-     这比写一道事后对账门禁更彻底。
+     声明少了会在启动时炸（fail-closed），不会拖到线上才表现为「没收到事件」。
 
-★ 为什么 topics 由调用方传入而不由内核去读 manifest：
+★ 为什么 info 由调用方传入而不由内核去读 manifest：
   内核不该为了「读一份插件的声明」而认识插件的目录结构；
   而插件自己知道自己的 manifest。
   ⇒ 传进来是**单向依赖**（插件 → 内核），内核不反向依赖插件。
@@ -70,7 +73,7 @@ import fnmatch
 import json
 import uuid
 from collections import deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -96,8 +99,10 @@ class EventBus:
         self._history: deque[dict[str, Any]] = deque(maxlen=maxlen)
         self._subscribers: list[asyncio.Queue[dict[str, Any]]] = []
         self._listeners: list[Callable[[dict[str, Any]], None]] = []
-        # ★ 声明式订阅：插件 id → (允许的 topic 集合, 处理器)
-        self._declared: dict[str, tuple[frozenset[str], Callable[[dict[str, Any]], None]]] = {}
+        # ★ 声明式订阅：插件 id → [(该处理器被允许的 topic 集合, 处理器), ...]
+        #   一个插件可以有多个处理器（push 就同时挂提醒/待办/上课三路），
+        #   但每一路都必须落在 manifest.consumes 声明之内。
+        self._declared: dict[str, list[tuple[frozenset[str], Callable[[dict[str, Any]], None]]]] = {}
         self._seq = 0
         self._seq_lock = __import__("threading").Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -144,72 +149,99 @@ class EventBus:
                     "事件回调监听器异常（已忽略，不影响广播）",
                     extra={"topic": topic, "error": str(exc)},
                 )
-        # ★ 声明式订阅：只投给**声明过**该 topic 的插件。
+        # ★ 声明式订阅：只投给**声明过**该 topic 的处理器。
         #   未声明的 topic 一律不投——这是「声明是唯一入口」的执行点。
-        for plugin_id, (topics, handler) in list(self._declared.items()):
-            if not _topic_matches(topics, topic):
-                continue
-            try:
-                handler(event)
-            except Exception as exc:  # noqa: BLE001
-                log.error(
-                    "声明式订阅者异常（已忽略，不影响广播）",
-                    extra={"topic": topic, "plugin": plugin_id, "error": str(exc)},
-                )
+        for plugin_id, entries in list(self._declared.items()):
+            for topics, handler in list(entries):
+                if not _topic_matches(topics, topic):
+                    continue
+                try:
+                    handler(event)
+                except Exception as exc:  # noqa: BLE001
+                    log.error(
+                        "声明式订阅者异常（已忽略，不影响广播）",
+                        extra={"topic": topic, "plugin": plugin_id, "error": str(exc)},
+                    )
         if self._subscribers and self._loop is not None:
             for q in list(self._subscribers):
                 self._loop.call_soon_threadsafe(q.put_nowait, event)
         return event
 
-    def add_listener(self, callback: Callable[[dict[str, Any]], None]) -> None:
-        """注册回调监听器（重复注册同一回调无副作用地被去重）。
+    def add_kernel_hook(self, callback: Callable[[dict[str, Any]], None]) -> None:
+        """注册**内核自身**的回调挂点（激活器等；重复注册同一回调会被去重）。
 
-        ★ 这是**内核自己**用的挂点（激活器等），**不是**插件消费事件的方式。
-          插件消费事件必须走 `subscribe_declared`。
+        ★ 名字里的 `kernel` 是纪律，不是装饰：插件消费事件**只能**走
+          `subscribe_declared`——插件的订阅面必须等于 manifest.consumes 声明面。
+          这里挂的回调**不受 consumes 过滤**（内核不是插件，没有 manifest）。
+          早先它叫 `add_listener`，名字看不出来「谁可以调」，于是 push 模块
+          直接用它绕过了声明。改名的目的就是让越界写在 code review 里一眼可见。
         """
         if callback not in self._listeners:
             self._listeners.append(callback)
 
-    def remove_listener(self, callback: Callable[[dict[str, Any]], None]) -> None:
+    def remove_kernel_hook(self, callback: Callable[[dict[str, Any]], None]) -> None:
         with contextlib.suppress(ValueError):
             self._listeners.remove(callback)
 
     def subscribe_declared(
         self,
-        plugin_id: str,
+        info: Any,
         handler: Callable[[dict[str, Any]], None],
         topics: frozenset[str] | set[str] | list[str] | tuple[str, ...] | None = None,
-    ) -> None:
-        """★ 插件订阅事件的**唯一入口**。
+    ) -> frozenset[str]:
+        """★ 插件订阅事件的**唯一入口**：声明即订阅，未声明即拒绝。
 
-        `topics`：该插件 manifest 的 `consumes`（由调用方从 manifest 读出传入）。
-        为 None 时**拒绝注册**——「没声明就不许订阅」是这条纪律的关键。
+        `info`：插件的身份 + 声明。接受三种形态（都只读 `id` 与 `consumes`）：
+          · `PluginInfo`（发现层产出，`info.manifest` 是原始 manifest dict）
+          · `Manifest` 模型（`core/manifest.py`，`consumes` 是属性）
+          · 原始 manifest dict（插件自己从目录里读出来的那份）
 
-        ★ 为什么 topics 由调用方传入而不由内核去读 manifest：
+        `topics`：这个**处理器**要订阅的 topic。缺省 = 订阅声明里的全部 topic。
+        每一路都必须落在 `manifest.consumes` 之内：声明写 `todo.*` 可以覆盖
+        `todo.item.due`；但处理器**不能发明**声明里没有的 topic，也不能拿通配
+        去套一份只写了精确 topic 的声明。
+
+        ★ 不满足就**拒绝注册并抛错**（fail-closed）——与「未声明 topic 不投递」
+          是同一套语义的两端：投递端静默丢弃，注册端当场炸。区别在于后者能让人
+          在启动时就发现自己漏写了声明，而不是上线后「怎么没收到事件」。
+
+        ★ 为什么 `info` 由调用方传入而不由内核去读 manifest：
           内核不该为了「读一份插件的声明」而认识插件的目录结构；
           而插件自己知道自己的 manifest。
           ⇒ 传进来是**单向依赖**（插件 → 内核），内核不反向依赖插件。
         """
-        if topics is None:
-            raise ValueError(
-                f"插件 {plugin_id!r} 订阅事件时必须给出 manifest.consumes 声明——"
-                "没声明就不许订阅（否则「声明 ↔ 实际」会不一致，而不一致没有报错）。"
+        plugin_id, declared = _declaration_of(info)
+        if not callable(handler):
+            raise TypeError(f"插件 {plugin_id!r} 的事件处理器必须可调用，收到 {type(handler)!r}")
+        wanted = frozenset(declared if topics is None else _as_topics(topics))
+
+        undeclared = sorted(t for t in wanted if not _declared_covers(declared, t))
+        if undeclared:
+            raise UndeclaredSubscription(
+                f"插件 {plugin_id!r} 试图订阅未声明的 topic：{undeclared}；"
+                f"manifest.consumes = {sorted(declared)}。"
+                "声明是订阅的唯一入口——要订阅，先把 topic 写进 manifest.consumes。"
             )
-        allowed = frozenset(str(t) for t in topics)
-        if not allowed:
-            # 声明为空 = 不订阅任何事件。注册一个空集合的处理器是合法的
-            # （插件可能后来才填声明），但**不投任何东西**。
-            log.debug("插件 %s 声明的 consumes 为空，不订阅任何事件。", plugin_id)
-        self._declared[plugin_id] = (allowed, handler)
+        if not wanted:
+            # 声明为空 = 不订阅任何事件。注册一个空处理器没有意义，
+            # 但也不该报错（插件可能还没声明要消费什么）。
+            log.debug("插件 %s 的 consumes 为空，不注册任何事件订阅。", plugin_id)
+            return wanted
+
+        entries = self._declared.setdefault(plugin_id, [])
+        entry = (wanted, handler)
+        if entry not in entries:
+            entries.append(entry)
+        return wanted
 
     def unsubscribe_declared(self, plugin_id: str) -> None:
-        """撤销某插件的声明式订阅（插件停用时用）。"""
+        """撤销某插件的**全部**声明式订阅（插件停用时用，幂等）。"""
         self._declared.pop(plugin_id, None)
 
     def declared_topics(self, plugin_id: str) -> frozenset[str]:
-        """某插件当前声明订阅的 topic（供诊断与测试）。"""
-        entry = self._declared.get(plugin_id)
-        return entry[0] if entry else frozenset()
+        """某插件当前所有处理器声明订阅的 topic 并集（供诊断与测试）。"""
+        entries = self._declared.get(plugin_id, [])
+        return frozenset().union(*(topics for topics, _h in entries)) if entries else frozenset()
 
     def subscribe(self) -> tuple[asyncio.Queue[dict[str, Any]], list[dict[str, Any]]]:
         """注册订阅者（必须在事件循环内调用）。"""
@@ -267,6 +299,59 @@ def _topic_matches(topics: frozenset[str], topic: str) -> bool:
     if topic in topics:
         return True
     return any(fnmatch.fnmatch(topic, p) for p in topics)
+
+
+class UndeclaredSubscription(ValueError):
+    """插件试图订阅 `manifest.consumes` 之外的 topic（fail-closed）。"""
+
+
+def _as_topics(topics: Any) -> frozenset[str]:
+    """把 set/list/tuple/单个字符串归一成 topic 集合。
+
+    ★ 单个字符串要当成**一个** topic——`for t in "todo.item.due"` 会按字符拆。
+    """
+    if isinstance(topics, str):
+        return frozenset({topics})
+    return frozenset(str(t) for t in topics)
+
+
+def _declared_covers(declared: frozenset[str], wanted: str) -> bool:
+    """声明 `declared` 是否覆盖处理器想要的 `wanted`。
+
+    · 声明里的通配（`todo.*`）可以覆盖具体 topic（`todo.item.due`）；
+    · 处理器**不能**发明声明里没有的通配——`wanted` 带通配字符时必须
+      与声明的某一条**原样相等**（否则「处理器要一整个域」而声明只给了一个 topic，
+      两者的差集无法在注册期判定，只能在投递期静默漏掉——那正是要消灭的失败模式）。
+    """
+    if wanted in declared:
+        return True
+    if any(ch in wanted for ch in "*?["):
+        return False
+    return any(fnmatch.fnmatchcase(wanted, p) for p in declared)
+
+
+def _declaration_of(info: Any) -> tuple[str, frozenset[str]]:
+    """从 PluginInfo / Manifest 模型 / 原始 manifest dict 里取 `(插件 id, consumes)`。
+
+    三种形态都只读 `id` 与 `consumes`——内核不认识插件的目录结构，
+    manifest 是调用方（插件自己或发现层）递进来的。
+    """
+    manifest = getattr(info, "manifest", None)
+    if manifest is None:
+        manifest = info
+    if isinstance(manifest, Mapping):
+        plugin_id = getattr(info, "id", None) or manifest.get("id")
+        raw = manifest.get("consumes")
+    else:
+        plugin_id = getattr(info, "id", None) or getattr(manifest, "id", None)
+        raw = getattr(manifest, "consumes", None)
+    if not plugin_id:
+        raise ValueError("声明式订阅缺少插件 id：info 应带 id，或 manifest 里必须有 id")
+    if raw is None:
+        raw = ()
+    if isinstance(raw, str):
+        raise TypeError(f"插件 {plugin_id!r} 的 manifest.consumes 必须是 topic 列表，收到字符串")
+    return str(plugin_id), frozenset(str(t) for t in raw)
 
 
 def _match(topic: str, patterns: list[str]) -> bool:

@@ -23,11 +23,11 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
 
+from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from alembic import command
-from alembic.config import Config
 from db.engine import init_engine
 
 _API_ROOT = Path(__file__).resolve().parent.parent  # services/api/

@@ -143,14 +143,15 @@ def _manifest(plugin_id: str, name: str, kind: str) -> dict[str, object]:
         # 新对象格式（{"filesystem": false, ...}）schema 已放行，但内核仍只收 list[str]
         # 待内核升级（B 路径）后再切对象格式，此处回退数组格式避免启动 fail
         "permissions": [],
-        "migrations": "api/migrations",
-        "settingsSchema": "api/settings.schema.json",
-        "lifecycle": {
-            "onInstall": None,
-            "onEnable": None,
-            "onDisable": None,
-            "onUninstall": None,
-        },
+        # ★ 2026-11-12 修复（实测：生成内置插件后内核直接 ManifestError，整个 app 起不来）：
+        #   ① 内置插件的迁移/设置在**模块根**（modules/<id>/migrations、settings.schema.json），
+        #      只有第三方插件才在 api/ 下；
+        #   ② lifecycle 契约只允许 "hooks" 或 null，写成 {onInstall: null, ...} 是非法类型。
+        "migrations": "api/migrations" if kind == "third-party" else "migrations",
+        "settingsSchema": (
+            "api/settings.schema.json" if kind == "third-party" else "settings.schema.json"
+        ),
+        "lifecycle": None,
     }
 
 
@@ -161,7 +162,8 @@ HTTP 契约（全项目统一，不许自创）：
   失败 → 由内核统一转成 RFC7807 application/problem+json
 
 ★ 加数据库路由时，照 `docs/示例/calendar_event_示例.py` 的写法；
-  内置插件的 models.py / router.py 由内核**按包导入**（`importlib.import_module("modules.<id>.router")`，
+  内置插件的 models.py / router.py 由内核**按包导入**
+  （`importlib.import_module("modules.<id>.router")`，
   见 core/plugins/discover.py），两者之间**可以正常用 `from .models import ...` 相对导入**
   （现有全部内置插件皆如此）。
   ★「按文件路径加载、不能用相对导入」的只有两处：**迁移文件**与**第三方插件**。

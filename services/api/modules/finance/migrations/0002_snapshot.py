@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_MODEL_MODULE = "finance_models_0002"
+_MODEL_MODULE = "finance_models"
 
 
 def _load_models() -> Any:

@@ -54,7 +54,6 @@ vi.mock("../todo/api", () => ({
   },
 }));
 
-// eslint-disable-next-line import/first
 import { todoApi } from "../todo/api";
 
 function makeClient() {

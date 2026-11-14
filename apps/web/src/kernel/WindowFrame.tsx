@@ -31,19 +31,29 @@ function ModulePlaceholder({
 }: {
   moduleId: string;
   reason?: string;
-  variant?: "missing" | "backend";
+  variant?: "missing" | "backend" | "disabled";
 }) {
   // ★（2026-09-25）：文案改「已接入（后端服务）」—— 主人 ⑬ 的原话是
   //   「该模块尚未接入」误报；薄壳/后端模块应表达为「已接入」而非「未接入」。
-  const title = variant === "backend" ? "已接入（后端服务）" : "该模块尚未接入";
+  // ★ r5：新增 disabled 态 —— 运行时停用的模块，其界面资产已停止服务，
+  //   窗口必须诚实说明，而不是留一张过期界面（N4 判据「禁用 → 诚实消失/报错」）。
+  const title =
+    variant === "backend"
+      ? "已接入（后端服务）"
+      : variant === "disabled"
+        ? "该模块已停用"
+        : "该模块尚未接入";
   const fallbackText =
     variant === "backend"
       ? "该模块已接入：提供后端 API 服务，无桌面窗口界面。"
-      : "模块入口缺失或加载失败。";
+      : variant === "disabled"
+        ? "该模块当前已停用：界面代码已停止对外服务。"
+        : "模块入口缺失或加载失败。";
+  const icon = variant === "backend" ? "⚙" : variant === "disabled" ? "⏸" : "⚠";
   return (
     <div className="win__placeholder" role="alert">
       <div className="win__placeholder-icon" aria-hidden="true">
-        {variant === "backend" ? "⚙" : "⚠"}
+        {icon}
       </div>
       <div className="win__placeholder-title">{title}</div>
       <div className="win__placeholder-text">{reason ?? fallbackText}</div>
@@ -115,7 +125,15 @@ export function WindowFrame({ instanceId }: Props) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
 
   const elRef = useRef<HTMLDivElement>(null);
-  const manifest = win ? useDesktopStore.getState().modules[win.moduleId]?.manifest : undefined;
+  // ★ r5-P0（G3）：manifest 必须**响应式**读 —— 旧写法用 getState() 是一次性快照，
+  //   运行时同步/热插拔覆盖同 id 的 manifest（换 entry）不会触发本窗重渲染，
+  //   「装上没生效」会变成查不出的悬案。改成订阅 store，manifest 一变就重渲染。
+  const manifest = useDesktopStore((s) =>
+    win ? s.modules[win.moduleId]?.manifest : undefined,
+  );
+  // ★ r5：启用态也**响应式**读 —— 运行时停用一个插件后本窗必须诚实反映
+  //   （资产端点已 404、界面代码停止服务），不留一张过期界面在屏幕上。
+  const enabled = useDesktopStore((s) => (win ? s.modules[win.moduleId]?.enabled : undefined));
 
   // ★ T22：钉住时**干净地不挂**拖拽/缩放 ——
   //   hook 收到 enabled=false 会在任何副作用（preventDefault / setPointerCapture / 挂监听）**之前**返回；
@@ -126,6 +144,20 @@ export function WindowFrame({ instanceId }: Props) {
 
   const entry = manifest?.entry ?? "";
   const Lazy = useMemo(() => {
+    // ★ r5：模块被运行时停用 ⇒ 诚实占位（不渲染过期组件、不白屏）。
+    if (enabled === false) {
+      return lazy(() =>
+        Promise.resolve({
+          default: () => (
+            <ModulePlaceholder
+              moduleId={win?.moduleId ?? ""}
+              variant="disabled"
+              reason="该模块已被停用：界面代码已停止对外服务（重新启用即恢复，无需重启）。"
+            />
+          ),
+        }),
+      );
+    }
     if (!entry) {
       // V5：有 API 无 UI = 后端模块（薄壳≠未接入）——类型安全取 api.base
       const apiBase = (manifest?.api as { base?: string } | undefined)?.base;
@@ -151,7 +183,7 @@ export function WindowFrame({ instanceId }: Props) {
         return { default: pm.Component };
       }),
     );
-  }, [entry, win?.moduleId]);
+  }, [entry, win?.moduleId, enabled]);
 
   if (!win) return null;
   if (win.minimized) return null;
@@ -249,7 +281,10 @@ export function WindowFrame({ instanceId }: Props) {
       </div>
 
       <div className="win__body">
-        <ModuleErrorBoundary moduleId={win.moduleId}>
+        {/* ★ r5-P0（G3）：边界按 entry 加 key —— React.lazy 会缓存首次的 promise（含 reject），
+            同一个边界实例不会重试。entry 变更（运行时换入口/装完生效）时让边界整体重挂载，
+            才能清掉旧的失败态、重新加载新入口。否则「装上没生效」成悬案。 */}
+        <ModuleErrorBoundary key={entry} moduleId={win.moduleId}>
           <Suspense
             fallback={
               <div className="win__loading">

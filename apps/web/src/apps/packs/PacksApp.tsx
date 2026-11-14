@@ -14,9 +14,10 @@
  *   试装回答「会装成什么样」，装配回答「现在就装」。
  *   合成一个，用户就永远拿不到「先看看再决定」这个选项。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/shared/api/client";
+import { requestPluginListRefresh } from "@/kernel/plugins/pluginListSignal";
 
 interface PackRow {
   id: string;
@@ -84,6 +85,13 @@ export default function PacksApp() {
   const qc = useQueryClient();
   const [report, setReport] = useState<{ kind: "dry" | "real"; pack: PackReport } | null>(null);
 
+  // ★ r5：打开 packs 窗口即重取一次插件清单 —— 覆盖「在别处（CLI / 上传端点）装好，
+  //   打开本窗要立刻在桌面坞看到」这条路径（工单「打开 packs 窗口触发重取」）。
+  //   廉价通道、无定时器：挂载一次，不轮询。
+  useEffect(() => {
+    requestPluginListRefresh();
+  }, []);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["packs", "list"],
     queryFn: () => api.get<PackListResponse>("/api/v1/packs"),
@@ -95,6 +103,9 @@ export default function PacksApp() {
     setReport({ kind, pack: res.pack });
     // 装配会改成员启用态 ⇒ 列表的 installed 要重算。
     void qc.invalidateQueries({ queryKey: ["packs"] });
+    // ★ r5：真装配改了成员插件的启用态 ⇒ 桌面清单也要重取（不刷新页面即生效）。
+    //   试装不改任何插件，不 poke（避免无谓重取）。
+    if (kind === "real") requestPluginListRefresh();
   };
 
   const dryRun = useMutation({
@@ -114,6 +125,8 @@ export default function PacksApp() {
     onSuccess: () => {
       setReport(null);
       void qc.invalidateQueries({ queryKey: ["packs"] });
+      // ★ r5：卸包会停用成员插件 ⇒ 桌面清单重取。
+      requestPluginListRefresh();
     },
     onError: (e) => alert(errText(e)),
   });

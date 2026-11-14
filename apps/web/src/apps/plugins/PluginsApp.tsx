@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/shared/api/client";
+import { requestPluginListRefresh } from "@/kernel/plugins/pluginListSignal";
 
 interface PluginRow {
   id: string;
@@ -33,14 +34,29 @@ export default function PluginsApp() {
   const toggle = useMutation({
     mutationFn: ({ id, enable }: { id: string; enable: boolean }) =>
       api.post(`/api/v1/plugins/${id}/${enable ? "enable" : "disable"}`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["plugins"] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["plugins"] });
+      // ★ r5：启停也改桌面清单（Dock 出现/置灰）—— poke 内核，不刷新页面即生效。
+      requestPluginListRefresh();
+    },
     onError: (e) => alert(errText(e)),
   });
+
+  /** 手动刷新：覆盖「在别处（CLI/上传端点）装好、本页要立刻看见」的场景。 */
+  const refreshAll = () => {
+    void qc.invalidateQueries({ queryKey: ["plugins"] });
+    requestPluginListRefresh();
+  };
 
   return (
     <div className="plugins-root">
       <div className="plugins-hint tiny">
-        启用 / 停用即时生效。安装卸载不在此页（安全线）。
+        启用 / 停用即时生效（不刷新页面即同步到桌面坞）。安装卸载不在此页（安全线）。
+      </div>
+      <div className="plugins-actions">
+        <button type="button" className="btn" onClick={refreshAll}>
+          刷新清单
+        </button>
       </div>
       {isLoading ? (
         <div className="empty__text">加载中…</div>

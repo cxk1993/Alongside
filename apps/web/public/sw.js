@@ -10,7 +10,7 @@
 //   ① 不 bump → 旧 hash 的 /assets/* 会永远留在同一个 cache 里（cache-first 只增不减）
 //   ② 浏览器对 sw.js 只做**字节比较** → 不 bump 等于"没有新版本"，用户永远收不到更新
 //   参考：bump the cache name every deploy and delete old caches on activate。
-const CACHE = "alongside-shell-v2";
+const CACHE = "alongside-shell-v3";
 const SHELL = ["/", "/login.html", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -49,6 +49,9 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/") || url.pathname === "/healthz") return; // 数据永远走网络
+  // ★ r5：插件 UI 资产（/plugin-assets/…）绝不接管 —— 直连网络（带 Authorization 头），
+  //   且前缀刻意避开 /assets/（那里是 cache-first，会把插件的更新钉死）。
+  if (url.pathname.startsWith("/plugin-assets/")) return;
 
   if (url.pathname.startsWith("/assets/")) {
     e.respondWith(

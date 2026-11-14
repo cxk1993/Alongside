@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import PluginsApp from "./PluginsApp";
+import { onPluginListRefresh } from "@/kernel/plugins/pluginListSignal";
 
 vi.mock("@/shared/api/client", () => {
   return {
@@ -51,5 +52,19 @@ describe("PluginsApp", () => {
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith("/api/v1/plugins/query/enable", {});
     });
+  });
+
+  // ★ r5：启停成功要 poke 内核清单刷新信号 —— 这是「装/卸/启停后不刷新页面即同步到桌面坞」
+  //   的前端触发点；缺了它，Dock 要等下次重渲染才变（会是查不出的悬案）。
+  it("启停成功后 poke 清单刷新信号（桌面坞无需刷新页面）", async () => {
+    let pokes = 0;
+    const off = onPluginListRefresh(() => {
+      pokes += 1;
+    });
+    render(<PluginsApp />, { wrapper: wrap() });
+    await waitFor(() => expect(screen.getByRole("button", { name: "启用 query" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "启用 query" }));
+    await waitFor(() => expect(pokes).toBeGreaterThan(0));
+    off();
   });
 });

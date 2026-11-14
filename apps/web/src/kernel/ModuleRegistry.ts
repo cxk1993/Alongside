@@ -1,5 +1,6 @@
 import { useDesktopStore } from "./store";
 import type { ModuleManifest, PluginModule } from "./types";
+import { isRemoteEntry, loadRemoteModule } from "./plugins/runtimeLoader";
 
 /**
  * 模块注册表（T02 实现 · T14 洁癖约束）。
@@ -46,10 +47,27 @@ function demoLoader(entry: string): ModLoader | undefined {
 }
 
 /**
+ * ★ r5 运行时 loader 注册口（供测试与未来扩展，**不引入任何业务名**）。
+ * 键是 entry 说明符本身（通常是后端改写出的资产 URL）。注册后 findLoader 优先命中它，
+ * 便于测试注入替身、或未来以非 URL 形态扩展运行时通道。内置 glob 分支不受影响。
+ */
+const runtimeLoaders = new Map<string, ModLoader>();
+
+export function registerRuntimeLoader(entry: string, loader: ModLoader): void {
+  runtimeLoaders.set(entry, loader);
+}
+
+export function unregisterRuntimeLoader(entry: string): void {
+  runtimeLoaders.delete(entry);
+}
+
+/**
  * 把 entry 解析成 loader；找不到返回 undefined。
  * 支持约定路径：
  *   `@/apps/<dir>` / `@/apps/<dir>/index.tsx` / `/src/apps/<dir>/index.tsx`
  *   `@mocks/<name>`
+ * ★ r5 新增运行时通道（内置分支**零变化**，只在其后追加）：
+ *   注册过的运行时 loader → URL 形状 entry（绝对/协议相对/根相对）交 loadRemoteModule。
  */
 function findLoader(entry: string): ModLoader | undefined {
   const demo = demoLoader(entry);
@@ -69,6 +87,15 @@ function findLoader(entry: string): ModLoader | undefined {
     if (loader) return loader;
   }
 
+  // ── r5 运行时通道（构建期 glob 未命中时才走到这里）──────────────────
+  const registered = runtimeLoaders.get(entry);
+  if (registered) return registered;
+
+  if (isRemoteEntry(entry)) {
+    // 第三方插件：entry 是后端服务出来的资产 URL，运行时 fetch→Blob→import。
+    return () => loadRemoteModule(entry);
+  }
+
   return undefined;
 }
 
@@ -84,7 +111,13 @@ export function resolveLoader(entry: string): ModLoader {
   return () => Promise.reject(new Error(`未找到插件入口：${entry}`));
 }
 
-/** 该 entry 是否真有可加载的 App 文件（不执行 import，只看 glob 键）。 */
+/**
+ * 该 entry 是否有可加载的通道（不执行 import）。
+ * ★ r5 语义：内置 entry 看 glob 键是否真实存在；**远程 URL entry 乐观为真** ——
+ *   构建期无法断言远端资产此刻存在/启用，故只要 URL 形状合法就返回 true，
+ *   把「资产 404 / 未启用 / 加载失败」交给 WindowFrame 错误边界诚实呈现（不白屏）。
+ *   若此处对远程返回 false，容器页签会误报「入口文件缺失」，把可热插的插件挡在门外。
+ */
 export function canResolveLoader(entry: string): boolean {
   return findLoader(entry) !== undefined;
 }

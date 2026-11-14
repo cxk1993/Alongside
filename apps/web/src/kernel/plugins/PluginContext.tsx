@@ -11,6 +11,7 @@ import {
 
 import { api } from "@/shared/api/client";
 import { resolveLoader } from "../ModuleRegistry";
+import { onPluginListRefresh } from "./pluginListSignal";
 import {
   contributionsForSlot,
   registerContributions,
@@ -107,6 +108,25 @@ export function PluginProvider({
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  // ★ r5：外部安装/卸载（CLI、上传端点、另一标签页）也要能**不刷新页面**可见 ——
+  //   订阅内核刷新信号（管理面变更后主动 poke；见 pluginListSignal）。
+  useEffect(() => onPluginListRefresh(() => void refresh()), [refresh]);
+
+  // ★ r5：回到页面时重取一次（带 30s 节流）——覆盖「在别处装好、切回来要看见」。
+  //   廉价通道，绝不轮询：只有 visibilitychange 且距上次刷新 ≥30s 才发一次请求。
+  useEffect(() => {
+    let last = 0;
+    const onVisible = () => {
+      if (typeof document === "undefined" || document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - last < 30_000) return;
+      last = now;
+      void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [refresh]);
 
   const enable = useCallback(

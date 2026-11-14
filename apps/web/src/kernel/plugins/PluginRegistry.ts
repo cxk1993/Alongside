@@ -159,13 +159,23 @@ export function manifestToModule(p: PluginInfo): ModuleManifest {
 }
 
 /**
- * 把后端插件清单同步进桌面模块注册表，并按启用态开/关。
+ * ★ r5：上一轮由**后端清单**提供过的模块 id。
+ * 用途：`卸载` 之后后端清单里不再出现该插件 ⇒ 从 store 注销（Dock 图标随之消失）。
+ * ★ 为什么不拿「store 里全部模块」做差集：store 里还装着 `modules.json`（构建期静态）
+ *   登记的内置模块，那批不归后端清单管 —— 按全量差集会把内置模块一起误删。
+ *   只注销「上一轮由后端带来、本轮消失」的 id，是唯一的正确边界。
+ */
+let lastBackendModuleIds: ReadonlySet<string> = new Set<string>();
+
+/**
+ * 把后端插件清单同步进桌面模块注册表，并按启用态开/关；本轮消失的（卸载）注销。
  *
  * ISSUE-012 防御：后端 `list_plugins()` 曾漏掉 `manifest` 字段（已由令55 修），
  * 契约测试断言前，前端先做到「manifest 缺失不崩」——
  * 无 manifest 项跳过（记 warning，不进 store），其余项照常注册。
  */
 export function syncPluginsToStore(plugins: PluginInfo[]): void {
+  const incoming = new Set<string>();
   for (const p of plugins) {
     if (!p.manifest) {
       // ★ 数据异常保护：缺 manifest 的项不能进 store（Dock 会渲染出无入口的幽灵模块），
@@ -175,6 +185,7 @@ export function syncPluginsToStore(plugins: PluginInfo[]): void {
       );
       continue;
     }
+    incoming.add(p.id);
     pluginHost.register(manifestToModule(p));
     if (p.enabled) {
       pluginHost.enable(p.id);
@@ -182,4 +193,16 @@ export function syncPluginsToStore(plugins: PluginInfo[]): void {
       pluginHost.disable(p.id);
     }
   }
+
+  // ★ r5「卸载 ⇒ Dock 消失」：上一轮由后端提供、本轮消失的模块，注销并从桌面移除
+  //   （unregisterModule 会连带关掉它的窗口）。禁用不算消失——禁用项仍在清单里（enabled=false）。
+  for (const id of lastBackendModuleIds) {
+    if (!incoming.has(id)) pluginHost.unregister(id);
+  }
+  lastBackendModuleIds = incoming;
+}
+
+/** 测试用：清空「后端来源 id」追踪（避免模块级状态跨用例泄漏）。 */
+export function __resetPluginSyncTracking(): void {
+  lastBackendModuleIds = new Set<string>();
 }

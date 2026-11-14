@@ -12,6 +12,11 @@
 .plugins-hint {
   color: var(--txt-faint);
 }
+.plugins-actions {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
 .plugins-table {
   width: 100%;
   border-collapse: collapse;

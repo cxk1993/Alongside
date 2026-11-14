@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 
 import { SlotHost } from "../slots/SlotHost";
@@ -10,7 +10,8 @@ import {
   unregisterContributions,
 } from "../slots/contributions";
 import { PluginProvider } from "./PluginContext";
-import { manifestToModule, syncPluginsToStore } from "./PluginRegistry";
+import { manifestToModule, syncPluginsToStore, __resetPluginSyncTracking } from "./PluginRegistry";
+import { requestPluginListRefresh } from "./pluginListSignal";
 import { makeWorkspace, useDesktopStore } from "../store";
 import type { PluginInfo, SlotName } from "./types";
 
@@ -282,5 +283,65 @@ describe("前端插件框架（T14）", () => {
     expect(useDesktopStore.getState().modules["demo"]).toBeTruthy();
     // 幽灵项被跳过、不进 store
     expect(useDesktopStore.getState().modules["ghost"]).toBeUndefined();
+  });
+
+  // ── r5：「安装/卸载后不刷新页面可见」的触发通道 ──────────────────────────
+  // 后端当前不发插件生命周期事件（emits=[]），故走内核刷新信号：管理面变更后 poke，
+  // PluginProvider 订阅到就重取清单 → store 同步 → Dock 出现/置灰，全程不刷新页面。
+
+  it("★ r5：内核刷新信号驱动 PluginProvider 重取清单（不刷新页面）", async () => {
+    const fakeClient = {
+      get: vi.fn(async () => ({ plugins: [] })),
+      post: vi.fn(async () => ({ ok: true })),
+    };
+    render(
+      <PluginProvider client={fakeClient as never} loadEntry={async () => ({ default: {} })}>
+        <div />
+      </PluginProvider>,
+    );
+    await waitFor(() => expect(fakeClient.get).toHaveBeenCalledTimes(1));
+
+    // 模拟管理面（plugins/packs 页）在装/卸/启停成功后请求重取
+    await act(async () => {
+      requestPluginListRefresh();
+    });
+    await waitFor(() => expect(fakeClient.get).toHaveBeenCalledTimes(2));
+    expect(fakeClient.get).toHaveBeenCalledWith("/api/v1/plugins");
+  });
+
+  it("刷新信号无订阅者时静默 no-op（管理页可独立渲染，不依赖 provider）", () => {
+    expect(() => requestPluginListRefresh()).not.toThrow();
+  });
+
+  it("★ r5：卸载（清单里消失）⇒ 从 store 注销并关掉它的窗口（Dock 图标消失）", () => {
+    __resetPluginSyncTracking();
+    const mk = (id: string): PluginInfo => ({
+      id,
+      name: id,
+      version: "0.1.0",
+      kind: "third-party",
+      enabled: true,
+      source: "third-party",
+      manifest: {
+        id,
+        name: id,
+        version: "0.1.0",
+        kind: "third-party",
+        entry: `/plugin-assets/${id}/index.js`,
+        window: { w: 400, h: 300 },
+        slots: [],
+      },
+    });
+    syncPluginsToStore([mk("keep"), mk("gone")]);
+    expect(useDesktopStore.getState().modules["gone"]).toBeTruthy();
+    useDesktopStore.getState().openWindow("gone");
+    expect(useDesktopStore.getState().windows.some((w) => w.moduleId === "gone")).toBe(true);
+
+    // 卸载：后端清单里不再有 gone（仍在清单里的 keep 不受影响）
+    syncPluginsToStore([mk("keep")]);
+    expect(useDesktopStore.getState().modules["gone"]).toBeUndefined();
+    expect(useDesktopStore.getState().windows.some((w) => w.moduleId === "gone")).toBe(false);
+    expect(useDesktopStore.getState().modules["keep"]).toBeTruthy();
+    __resetPluginSyncTracking();
   });
 });

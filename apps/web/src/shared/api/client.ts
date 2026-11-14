@@ -64,6 +64,16 @@ export function hasToken(): boolean {
 }
 
 /**
+ * ★ r5：取当前 access token。
+ * 运行时加载第三方插件 UI 资产（/plugin-assets/…）需要带 Authorization 头，
+ * 而浏览器原生 `import(url)` 携带不了自定义头 —— 故运行时加载器先 fetch（带此 token）
+ * 再 Blob import。token 来源与 api client 完全一致（同一个 tokenGetter），不另造鉴权。
+ */
+export function getAuthToken(): string | null {
+  return tokenGetter();
+}
+
+/**
  * ★ T30：401（token 过期）时的统一出口。
  * AuthGate 注册「切回登录页」；其余模块不用各自处理 401。
  */

@@ -1,0 +1,55 @@
+{
+  "id": "isdu",
+  "name": "i山大",
+  "version": "0.6.0",
+  "kind": "builtin",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "课",
+  "description": "iSDU 接入：公告（公开）+ 课表/成绩/考试（CASTGC 换 token，凭证只在进程内存）。课表可幂等写入 course。",
+  "author": "alongside",
+  "window": {
+    "w": 900,
+    "h": 640,
+    "minW": 560,
+    "minH": 420,
+    "singleton": true
+  },
+  "entry": "@/apps/isdu",
+  "api": {
+    "base": "/api/v1/isdu",
+    "openapi": "/api/v1/isdu/openapi.json",
+    "health": "/api/v1/isdu/health",
+    "tools": {
+      "notice": "/notices"
+    }
+  },
+  "provides": [
+    "isdu.notice.read",
+    "isdu.timetable.read"
+  ],
+  "requires": [],
+  "optionalDependencies": [
+    "course.item.write",
+    "course.item.patch"
+  ],
+  "slots": [
+    "desktop.dock"
+  ],
+  "emits": [
+    "isdu.timetable.synced"
+  ],
+  "consumes": [],
+  "permissions": [
+    "db:own",
+    "net:out:i.sdu.edu.cn",
+    "net:out:www.sd114.sdu.edu.cn",
+    "net:out:xxbdeploy.sdu.edu.cn"
+  ],
+  "migrations": "migrations",
+  "settingsSchema": "settings.schema.json",
+  "lifecycle": null,
+  "activates_on": [
+    "startup:always"
+  ]
+}

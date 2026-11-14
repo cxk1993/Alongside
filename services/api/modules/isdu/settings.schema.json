@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "i山大 设置",
+  "type": "object",
+  "properties": {
+    "sync_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "是否允许后台定时同步（关闭后只能手动点「同步」）"
+    },
+    "sync_interval_minutes": {
+      "type": "integer",
+      "minimum": 15,
+      "maximum": 1440,
+      "default": 60,
+      "description": "自动同步间隔（分钟），最小 15"
+    },
+    "cache_ttl_minutes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1440,
+      "default": 10,
+      "description": "只读接口的内存缓存时长；0 = 不缓存"
+    },
+    "retain_days": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3650,
+      "default": 30,
+      "description": "本地留存天数：成绩/流水等历史数据超过该天数即清理；0 = 永久保留"
+    },
+    "show_dashboard_card": {
+      "type": "boolean",
+      "default": true,
+      "description": "是否在「今日总览」挂 i山大 卡片（今日课程 / 近期考试）"
+    }
+  },
+  "additionalProperties": false
+}

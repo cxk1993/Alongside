@@ -102,6 +102,7 @@ class ModuleRegistry:
             raise
         added = self._app.routes[before:]
         self._mounted[plugin_id] = added
+        self._invalidate_openapi()
 
     def unmount(self, plugin_id: str) -> None:
         if self._app is None:
@@ -113,9 +114,62 @@ class ModuleRegistry:
         # 摘掉该模块产生的路由（用对象身份，不影响其它模块）。
         # 注意：Starlette 的 `app.routes` 是只读 property，要改必须落到 `app.router.routes`。
         self._app.router.routes = [r for r in self._app.router.routes if id(r) not in owned]
+        self._invalidate_openapi()
+
+    def _invalidate_openapi(self) -> None:
+        """路由表变了 ⇒ 让 OpenAPI 快照失效（r5 热插拔 · 层3.3）。
+
+        ★ `FastAPI.openapi()` 首次调用后把结果缓存在 `app.openapi_schema`，
+          之后**不再看路由表**。而热插拔会在运行期改 `app.router.routes` ⇒
+          `/openapi.json`、`/api/docs`、`/api/v1/<id>/openapi.json` 全是旧快照：
+          新装的插件在文档里不存在，卸载的插件还挂在文档上。
+        ★ 放在注册表这一处（而不是 manager 的各个调用点）：
+          路由表的**唯一写入者**就是本类，挂/摘两条路都经过这里 ⇒
+          结构上不可能漏掉某条生命周期路径。
+        """
+        if self._app is not None:
+            self._app.openapi_schema = None
 
     def mounted(self) -> list[str]:
         return list(self._mounted.keys())
+
+    # ── 注册表同步（r5 热插拔 · 层3.4）──────────────────────────────
+    def register_module(self, plugin_id: str, manifest: dict[str, Any]) -> None:
+        """把模块登记进 `app.state.modules`（`/api/v1/modules` 的数据源）。
+
+        ★ 为什么需要它：`app.state.modules` 原先**只在 create_app 里写**
+          （内置全量登记 + 第三方启动恢复），运行期 enable/install 的插件
+          进不去 ⇒ `GET /api/v1/modules` 看不到它（前端点不亮图标），
+          `/api/v1/<id>/openapi.json` 直接 404（那里查的就是这张表）。
+          于是 `/plugins` 说「它在跑」、`/modules` 说「没有这个模块」——
+          两个对外端点口径不一致，而前端两边都在读。
+
+        ★ 为什么放在注册表而不是 manager：注册表已经持有 app 引用，
+          且它本来就是「挂载表」的宿主。让 manager 去摸 `app.state`
+          等于把 FastAPI 的知识扩散到编排层。这里只暴露两个窄动作。
+        ★ 幂等：重复登记同一 id 覆盖为最新 manifest（版本可能变了）。
+        """
+        if self._app is None:
+            return
+        modules = getattr(self._app.state, "modules", None)
+        if modules is None:
+            modules = {}
+            self._app.state.modules = modules
+        modules[plugin_id] = manifest
+
+    def unregister_module(self, plugin_id: str) -> None:
+        """从 `app.state.modules` 摘掉模块（disable / uninstall 时）。
+
+        ★ 与 `unmount` 分开两个动作，而不是合并：
+          「路由在不在」与「清单里有没有」是两件事 ——
+          事件激活型插件可能已登记但尚未挂路由。合并会让那种状态无法表达。
+        ★ 幂等：不存在时静默返回。
+        """
+        if self._app is None:
+            return
+        modules = getattr(self._app.state, "modules", None)
+        if isinstance(modules, dict):
+            modules.pop(plugin_id, None)
 
     # 兼容 Protocol 命名（也允许属性访问）
     def __call__(self) -> ModuleRegistry:

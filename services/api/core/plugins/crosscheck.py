@@ -39,12 +39,12 @@
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from core.errors import ManifestError
+from core.logging import get_logger
 
-log = logging.getLogger("kernel.manifest")
+log = get_logger("kernel.manifest")
 
 
 def _defines_of(manifest: dict[str, Any]) -> list[str]:
@@ -62,6 +62,11 @@ def crosscheck_manifests(
 ) -> list[str]:
     """跨插件一致性校验。返回违规描述列表（空列表 = 全部通过）。
 
+    ★ 这是 `crosscheck_detailed` 的「只要人话」视图（存量调用方与协议测试
+      都按 list[str] 断言，签名与语义保持不变）。需要**归因到插件**的调用方
+      （发现层要把违规落成某个插件的错误项，而不是让全局炸掉）请用
+      `crosscheck_detailed`——不要反过来解析这里的字符串。
+
     ★ 规则 12 / 13 的判定依赖「全局是否有插件写了 defines」：
       - 全系统**没有任何**插件写 defines → 兼容模式（provides 隐含 defines）
       - 一旦有任一插件写了 defines → 全系统切严格模式
@@ -76,7 +81,28 @@ def crosscheck_manifests(
       从而使规则 13 不必在启动期就判死。
       ★ 它**不改变**规则 13 的判定逻辑，只多一个「已被显式选定」的出口。
     """
-    violations: list[str] = []
+    return [msg for _ids, msg in crosscheck_detailed(manifests, selection=selection)]
+
+
+def crosscheck_detailed(
+    manifests: list[dict[str, Any]],
+    *,
+    selection: dict[str, str] | None = None,
+) -> list[tuple[tuple[str, ...], str]]:
+    """跨插件一致性校验的**结构化**出口：`[(涉事插件 id 元组, 人话描述)]`。
+
+    ★ 为什么要有它（r5 热插拔 · 层0.1）：
+      发现层此前把违规直接 `raise`，于是「用户往 plugins/ 丢一个坏插件」
+      会让 `GET /plugins`、`/slots`、enable/disable/install **全部 500** ——
+      单插件故障被放大成整个管理面瘫痪。热插拔的前提是「插件坏了只坏它自己」，
+      而要做到这一点，发现层必须知道**这条违规该记在谁头上**：
+      解析人话字符串去猜插件名是不可接受的（措辞一改就静默错归因）。
+      ⇒ 归因信息在这里一次算准，随违规一起交出去。
+
+    ★ 判定逻辑与 `crosscheck_manifests` 完全同源（后者就是本函数的字符串视图），
+      不存在第二套规则。
+    """
+    violations: list[tuple[tuple[str, ...], str]] = []
 
     # ── 收集 defines / provides ──
     definer_of: dict[str, str] = {}  # 能力 → 定义者插件 id
@@ -88,9 +114,13 @@ def crosscheck_manifests(
         for cap in _defines_of(mf):
             strict_mode = True
             if cap in definer_of:
+                other = definer_of[cap]
                 violations.append(
-                    f"能力 {cap!r} 被两个插件 defines（{definer_of[cap]} 与 {pid}）："
-                    "一个能力最多一个 defines"
+                    (
+                        (other, pid),
+                        f"能力 {cap!r} 被两个插件 defines（{other} 与 {pid}）："
+                        "一个能力最多一个 defines",
+                    )
                 )
             else:
                 definer_of[cap] = pid
@@ -108,8 +138,11 @@ def crosscheck_manifests(
     for cap, pids in sorted(providers_of.items()):
         if cap not in definer_of:
             violations.append(
-                f"插件 {pids[0]} provides 了能力 {cap!r}，但没有任何插件 defines 它"
-                "（严格模式：能力必须有明确的所有者）"
+                (
+                    tuple(pids),
+                    f"插件 {pids[0]} provides 了能力 {cap!r}，但没有任何插件 defines 它"
+                    "（严格模式：能力必须有明确的所有者）",
+                )
             )
 
     # ── 规则 13：同一能力被多个插件 provides（登记待裁决，不阻断启动）──

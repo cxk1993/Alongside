@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Request
+from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi import Path as FPath
 from typing import Annotated
 
@@ -33,6 +33,26 @@ from core.security import User
 router = APIRouter()
 
 MGR = get_plugin_manager()
+
+
+def _plugins_data_root() -> Any:
+    """运行时安装的插件落点：`data_dir/plugins`（r5 热插拔 · 层1.1）。
+
+    ★ 路径解析只有一处（发现层的 `default_data_plugins_root`），
+      这里直接复用 —— 上传落到 A、发现扫 B 是最难查的一类错
+      （「装成功了但列表里没有」）。
+    ★ 回退：发现层可能还没实现该函数（并行开发期）⇒ 用 db 路径推数据根。
+      宁可退回一个确定的约定，也不要让端点整个 500。
+    """
+    from core.plugins import discover as _discover
+
+    fn = getattr(_discover, "default_data_plugins_root", None)
+    if callable(fn):
+        return fn()
+    from core.config import get_settings
+    from packs.boot import resolve_data_dir
+
+    return resolve_data_dir(get_settings().db_path) / "plugins"
 
 
 def _registry(request: Request) -> Any:
@@ -103,6 +123,55 @@ def install_plugin(
     return MGR.install(plugin_id, _registry(request))
 
 
+@router.post("/upload")
+async def upload_plugin(
+    request: Request,
+    file: Annotated[UploadFile, File(description="插件 zip 包（含 manifest.json）")],
+    _user: User = Depends(get_current_user),  # noqa: B008
+    activate: bool = Query(
+        default=False,
+        description="落地后是否立即 install+enable（默认 false：只落地，等显式 /install）",
+    ),
+) -> dict[str, Any]:
+    """上传并落地一个第三方插件包（zip）→ 返回解析出的 id。
+
+    ★ 分两步（upload 只落地、install 才激活）**不是**多余的仪式：
+      「文件到了磁盘」与「代码开始在这个进程里跑」是两件风险完全不同的事。
+      分开放，管理员能在激活前先看一眼包内容（`GET /plugins` 会列出未启用的它）。
+      `?activate=true` 是给「我知道我在装什么」的场景留的一条快捷路径。
+
+    ★ 鉴权：`get_current_user`（单用户系统即 admin）。这是**明示信任**的入口 ——
+      装一个插件等价于允许它的 JS 以管理员身份跑（见 core/plugins/assets.py 的信任模型）。
+
+    ★ 校验链全在 `core/plugins/package.py`（尺寸/形状/契约/落地四道闸），
+      本端点只负责：收字节 → 交给它 → 按结果回话。校验逻辑放路由层会长在这里，
+      而它需要被测试单独调用（不起 app）。
+    """
+    from core.plugins.package import unpack_plugin_zip
+
+    archive = await file.read()
+    data_root = _plugins_data_root()
+    result = unpack_plugin_zip(archive, data_root)
+
+    payload: dict[str, Any] = {
+        "id": result.plugin_id,
+        "directory": str(result.directory),
+        "installed": False,
+        "enabled": False,
+    }
+    if activate:
+        # ★ 激活失败要**留住落地结果**：包已经在磁盘上、清单可见，
+        #   只是没跑起来 —— 这条信息（installed=true, enabled=false, error=…）
+        #   比「整个请求失败、但包其实已经在磁盘上」诚实得多。
+        try:
+            MGR.install(result.plugin_id, _registry(request))
+            payload["installed"] = True
+            payload["enabled"] = True
+        except Exception as exc:  # noqa: BLE001
+            payload["error"] = f"{type(exc).__name__}: {exc}"
+    return payload
+
+
 @router.post("/{plugin_id}/uninstall")
 def uninstall_plugin(
     plugin_id: Annotated[str, FPath(description="插件 id（目录名，如 calendar / pi-agent）—— 从 GET /plugins 列表里取")],
@@ -147,9 +216,21 @@ def slot_contributions(
         str, FPath(description="插槽名（如 dashboard / sidebar）—— 前端按插槽组装一屏")
     ],
     _user: User = Depends(get_current_user),
+    include_disabled: bool = Query(
+        default=False,
+        description="是否包含已停用的贡献（管理界面用；渲染路径不要开）",
+    ),
 ) -> dict[str, Any]:
-    """列出挂在某个**插槽（slot）**上的全部贡献 —— 前端据此组装一屏。"""
-    return {"slot": slot_name, "contributions": MGR.slots(slot_name)}
+    """列出挂在某个**插槽（slot）**上的全部贡献 —— 前端据此组装一屏。
+
+    ★ 默认**只返回启用中的插件**（r5 · 层0.4）：停用插件的 API 已 404，
+      把它列进插槽只会渲染出「点了没反应」的空卡片。
+      `include_disabled=true` 给管理界面留全量视图。
+    """
+    return {
+        "slot": slot_name,
+        "contributions": MGR.slots(slot_name, include_disabled=include_disabled),
+    }
 
 
 @router.post("/reload")

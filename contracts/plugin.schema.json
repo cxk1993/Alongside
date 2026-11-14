@@ -121,7 +121,8 @@
     },
     "entry": {
       "type": "string",
-      "description": "前端入口（内置插件约定 @/apps/<id>；内核按此动态加载窗口组件）。"
+      "pattern": "^(?:|@/apps/[a-z][a-z0-9-]*|/plugin-assets/[a-z][a-z0-9-]*/(?!\\.\\.(?:/|$))(?!.*/\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*|https?://[^\\s]+|//[^/\\s][^\\s]*)$",
+      "description": "前端入口，三种语义：① 空串 = 纯后端插件，没有前端 UI（ai-chat / summary / auth / countdown 等）；② 构建期别名 @/apps/<id> = UI 已编进前端树，Vite 在构建期按 glob 解析（存量 22 个内置模块与 plugins/pi-agent 都走这条，无需构建期收录之外的任何声明）；③ 运行时资产 URL = 第三方插件把 UI 产物放在插件目录的 web/dist/ 下，由后端资产端点 GET /plugin-assets/{id}/{path} 运行时服务，入口文件为 web/dist/index.js。③ 允许两种写法：根相对 /plugin-assets/<id>/index.js，或绝对/协议相对的 http(s) URL（https://... 或 //host/...）。★ 后端在组装 GET /api/v1/plugins 清单时会对第三方插件做 entry 规范化：只要插件目录下存在 web/dist/index.js，就把该项 entry 改写成 /plugin-assets/<id>/index.js —— 因此第三方插件写不写这段都可以，但写了就必须能对得上（路径里不得含 .. 段，见 pattern）。★ 前端拿到的是已规范化的值，直接 import()/动态加载，不会二次解释 @/apps 别名；非 http(s) 的 scheme（javascript: / data: / file: 等）一律拒绝 —— entry 是 import() 的入参，scheme 白名单是注入面的第一道闸。"
     },
     "api": {
       "type": "object",

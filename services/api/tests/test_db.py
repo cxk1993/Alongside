@@ -158,7 +158,17 @@ def test_migration_full_cycle(tmp_path, monkeypatch) -> None:
     engine = M.init_engine(f"sqlite:///{db_file.as_posix()}")
     assert str(engine.url).endswith("m.db"), f"必须命中 tmp 库，而不是 {engine.url}"
 
-    M._upgrade_head()  # 空库一次建成
+    # ★ r5 修正：显式传一个**空模块目录**。
+    #   层0.3 修好 `discover_plugin_migrations` 的目录口径后，内置插件的 19 条
+    #   迁移会真的跑起来（此前命中 0，静默空转）。本用例的意图是验「内核建库 +
+    #   干净回滚」这条循环，故把插件面隔离到空目录；否则 `_downgrade_base(fake)`
+    #   只回滚 fake 插件，而 calendar/todo/finance 等 27 张内置表留在库里，
+    #   末条 `names == {"alembic_version"}` 必然误红。
+    #   （内置迁移真跑这件事由 tests/test_migrate_plugin_dirs.py 的
+    #     test_real_modules_discover_builtin_migrations 单独守着。）
+    empty_modules = tmp_path / "no_plugins"
+    empty_modules.mkdir()
+    M._upgrade_head(empty_modules)  # 空库一次建成（内核 + 0 个插件）
     from sqlalchemy import text as stext
 
     with engine.connect() as c:

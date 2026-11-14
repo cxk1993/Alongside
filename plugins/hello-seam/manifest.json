@@ -1,0 +1,29 @@
+{
+  "id": "hello-seam",
+  "name": "接缝示例",
+  "version": "0.1.0",
+  "kind": "third-party",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "star",
+  "description": "最小第三方插件示例：一条 API + 一个运行时加载的 UI，用来验证热插拔全链路。",
+  "author": "alongside-core",
+  "window": {
+    "w": 480,
+    "h": 320
+  },
+  "entry": "/plugin-assets/hello-seam/index.js",
+  "api": {
+    "base": "/api/v1/hello-seam",
+    "openapi": "/api/v1/hello-seam/openapi.json",
+    "health": "/api/v1/hello-seam/health"
+  },
+  "provides": [],
+  "requires": [],
+  "slots": [],
+  "emits": [],
+  "consumes": [],
+  "permissions": [],
+  "migrations": null,
+  "settingsSchema": null
+}

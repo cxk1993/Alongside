@@ -21,14 +21,43 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.logging import get_logger
 from core.errors import ManifestError
 from core.manifest import load_router
-from core.plugins.crosscheck import crosscheck_manifests
+from core.plugins.crosscheck import crosscheck_detailed
 from core.plugins.validate import validate_manifest
+
+log = get_logger("kernel.plugins.discover")
 
 _API_ROOT = Path(__file__).resolve().parents[2]  # services/api/
 _DEFAULT_MODULES_DIR = _API_ROOT / "modules"
 _DEFAULT_PLUGINS_DIR = _API_ROOT.parent.parent / "plugins"  # 项目根/plugins
+
+#: 用户数据里的插件根子目录名（相对数据目录）。
+#: ★ 与包层 `packs/roots.py` 的 `DATA_DIRNAME="packs"` 对称：
+#:   发行版自带的东西在仓库里（只读），用户自己装的东西在数据目录里（可写）。
+#:   容器部署只挂 `./data`，装进仓库根的东西重启即丢 —— 这条对称不是美学，
+#:   是「装上去的插件能活过重启」的前提。
+DATA_DIRNAME = "plugins"
+
+
+def data_plugins_root(data_dir: Path) -> Path:
+    """用户数据里的插件根（`<data_dir>/plugins/`）——运行时安装的落点。"""
+    return Path(data_dir) / DATA_DIRNAME
+
+
+def default_data_plugins_root() -> Path:
+    """默认数据插件根：数据根 = 数据库所在目录（与包层同一真相源）。
+
+    ★ 为什么不新增 `PLUGINS_DIR` 配置项：`packs.boot.resolve_data_dir` 的
+      理由同样适用 —— 数据库/备份/日志/包/插件本来就在同一个 `data/` 下，
+      各配各的迟早分叉（改了 DB_PATH 忘了改插件目录 ⇒ 插件在一个地方、
+      状态在另一个地方）。⇒ 一个真相源。
+    """
+    from core.config import get_settings
+    from packs.boot import resolve_data_dir
+
+    return data_plugins_root(resolve_data_dir(get_settings().db_path))
 
 
 @dataclass(frozen=True)
@@ -89,6 +118,20 @@ def _read_manifest(manifest_path: Path, source: str) -> tuple[dict[str, Any], Pl
             f"manifest.id={pid!r} 必须等于目录名 {dir_name!r}",
         )
 
+    # ★ kind ↔ 来源一致性（r5 热插拔 · 层1.5）
+    #   此前内核不校验这两者是否自洽：把一个 `kind=builtin` 的目录丢进
+    #   plugins/ 下，`source` 仍是 third-party，但 install()/uninstall()
+    #   都按 kind 拒掉它 ⇒ **既装不了也卸不掉**，只能靠 enable 挂上，
+    #   成为一条没人管的缝。热插拔必须堵住它：外来目录只许自称 third-party。
+    #   （container 允许：容器型是纯前端编排，放在用户目录里同样合法。）
+    if source == "third-party" and raw["kind"] in ("core", "builtin"):
+        return raw, PluginError(
+            manifest_path.parent, source,
+            f"第三方插件目录里的 manifest.kind={raw['kind']!r} 不合法："
+            "core/builtin 随系统发布，只能住在 services/api/modules/；"
+            "放在插件根下的插件必须声明 kind='third-party'（或 container）",
+        )
+
     # ★ G1：minKernel 校验（内核版本不满足时降级，不拒绝）
     min_kernel = raw.get("minKernel")
     if min_kernel:
@@ -144,6 +187,8 @@ def _scan(root: Path, source: str) -> tuple[list[PluginInfo], list[PluginError]]
 def discover_plugins(
     modules_dir: Path | None = None,
     plugins_dir: Path | None = None,
+    *,
+    data_plugins_dir: Path | None = None,
 ) -> DiscoveryResult:
     """扫描内置与第三方插件，返回通过校验的插件列表 + 失败清单。
 
@@ -153,24 +198,78 @@ def discover_plugins(
       ③ 跨插件一致性 —— core/plugins/crosscheck.py（需全量插件，故在此处统一跑）
     ★ ③ 必须等全量扫描结束才能判：「这个能力有没有人 provides / defines」
       的答案可能出现在扫描顺序的后面。
+
+    ★★ 三根发现（r5 热插拔 · 层1.1）：
+      | 根 | source | 可写性 | 用途 |
+      |---|---|---|---|
+      | `services/api/modules/` | builtin | 只读（随系统发布） | 内置模块 |
+      | `<data_dir>/plugins/` | third-party | **可写** | 运行时安装的落点 |
+      | 仓库根 `plugins/` | third-party | 只读兼容 | 发行版自带 / 开发者手放 |
+      数据根**优先**：同一个 id 在两处都有时，用户自己装的那份赢
+      （与 `packs.roots.resolve_pack_dir` 同口径）。仓库根那份被跳过并
+      留一条 info 日志 —— 静默丢弃会让「我明明放了却没生效」变成悬案。
+
+    ★★ ③ 的违规**不再 raise**（r5 热插拔 · 层0.1）：
+      旧实现在这里直接抛 ManifestError，而 `PluginManager.discover()` /
+      `_require()` 全部裸调它 ⇒ 用户往插件根丢一个坏插件，
+      `GET /plugins`、`/slots`、enable/disable/install **全部 500**。
+      单插件故障被放大成整个管理面瘫痪，这与热插拔的前提正好相反。
+      现在违规按**涉事插件**落成 `errors` 项（归因由 crosscheck_detailed
+      结构化给出，不解析人话字符串），涉事插件被剔出 plugins 列表，
+      其余插件照常工作。⇒ 「插件坏了只坏它自己」。
+      ★ 为什么不选「保留插件但标 degraded」：规则 12/13 的违规是
+        **能力归属不明**，让它继续挂载等于让一个没有主人的能力对外服务，
+        调用方会拿到看似成功实则无主的结果。剔出 + 明示错误更诚实。
     """
     root = Path(modules_dir) if modules_dir else _DEFAULT_MODULES_DIR
     plug = Path(plugins_dir) if plugins_dir else _DEFAULT_PLUGINS_DIR
+    data_root = (
+        Path(data_plugins_dir)
+        if data_plugins_dir is not None
+        else default_data_plugins_root()
+    )
     builtins, b_errs = _scan(root, "builtin")
-    third_party, t_errs = _scan(plug, "third-party")
+    # 数据根优先扫；仓库根里与它同 id 的目录让位（见 docstring）。
+    data_party, d_errs = _scan(data_root, "third-party")
+    bundled_party, p_errs = _scan(plug, "third-party")
+    taken = {p.id for p in data_party}
+    third_party: list[PluginInfo] = list(data_party)
+    for p in bundled_party:
+        if p.id in taken:
+            log.info(
+                "插件 %s 在数据根与发行根各有一份，采用数据根那份（用户安装的优先）",
+                p.id,
+                extra={"module": p.id, "shadowed": str(p.directory)},
+            )
+            continue
+        third_party.append(p)
     plugins = builtins + third_party
 
     # ── ③ 跨插件一致性（规则 12 / 13）──
-    #   ★ 违反时不丢弃任何插件：能力重复/无定义是**系统级**问题，
-    #   把出错的那个插件单独剔掉会让系统静默地少一块能力，比报错更糟。
+    #   违规按涉事插件归因，落成错误项而不是全局抛（层0.1）。
+    errors = b_errs + d_errs + p_errs
     if plugins:
-        violations = crosscheck_manifests([p.manifest for p in plugins])
-        if violations:
-            raise ManifestError(
-                "跨插件一致性校验失败：\n  - " + "\n  - ".join(violations)
-            )
+        detailed = crosscheck_detailed([p.manifest for p in plugins])
+        if detailed:
+            by_id = {p.id: p for p in plugins}
+            blamed: set[str] = set()
+            for ids, message in detailed:
+                # 归因到具体插件；找不到对应目录时（理论上不该发生）
+                # 仍要留下痕迹，绝不静默吞掉违规。
+                hit = [by_id[i] for i in ids if i in by_id]
+                if not hit:
+                    errors.append(
+                        PluginError(root, "builtin", f"跨插件一致性：{message}")
+                    )
+                    continue
+                for info in hit:
+                    blamed.add(info.id)
+                    errors.append(
+                        PluginError(info.directory, info.source, f"跨插件一致性：{message}")
+                    )
+            plugins = [p for p in plugins if p.id not in blamed]
 
-    return DiscoveryResult(plugins=plugins, errors=b_errs + t_errs)
+    return DiscoveryResult(plugins=plugins, errors=errors)
 
 
 def load_python_module_from_file(path: Path, module_name: str) -> Any:
@@ -193,19 +292,95 @@ def load_python_module_from_file(path: Path, module_name: str) -> Any:
     return mod
 
 
+def thirdparty_package_name(plugin_id: str) -> str:
+    """第三方插件的**包名**（`api/` 目录作为一个包）。
+
+    ★ 连字符保留原样：包名只被 importlib 的字符串运算使用（相对导入解析
+      走 `__package__` 字符串），不经 `import` 语句的词法分析，故 `pi-agent`
+      这类 id 可以安全做包名。换成下划线反而会与「id == 目录名」的口径分叉。
+    """
+    return f"plugin_thirdparty_{plugin_id}"
+
+
+def _ensure_thirdparty_package(info: PluginInfo) -> str:
+    """把插件的 `api/` 目录注册成一个**包**，返回包名（幂等）。
+
+    ★ 为什么必须这么做（r5 热插拔 · 层3.6）：
+      旧实现用 `spec_from_file_location(name, router.py)` 加载路由，
+      **没有给 submodule_search_locations** ⇒ 模块不属于任何包 ⇒
+      `from .models import X` 抛「attempted relative import with no known
+      parent package」。于是第三方插件作者被迫手写路径加载
+      （`plugins/countdown/api/router.py` 把这条写成红线给下一个人抄），
+      而**多文件插件根本写不出来** —— 学长的 sdu-feeds 就是多文件的。
+      ⇒ 热插拔要正经起来，必须让第三方与内置一样能用相对导入。
+
+    ★ 做法：先造一个父包模块（`__path__` 指向 api/），再让 router 以
+      `<pkg>.router` 的身份加载。这样相对导入由 importlib 正常解析，
+      兄弟模块（models/schema/service）各自只加载一次并进 sys.modules ——
+      SQLAlchemy 的 Table 也因此只有一份（重复定义会炸）。
+    """
+    pkg_name = thirdparty_package_name(info.id)
+    api_dir = info.directory / "api"
+    existing = sys.modules.get(pkg_name)
+    if existing is not None and getattr(existing, "__path__", None) == [str(api_dir)]:
+        return pkg_name
+    spec = importlib.util.spec_from_file_location(
+        pkg_name,
+        api_dir / "__init__.py",
+        submodule_search_locations=[str(api_dir)],
+    )
+    if spec is None or spec.loader is None:
+        # 没有 __init__.py 也能成包：spec_from_file_location 对不存在的
+        # __init__ 仍会给出带 search_locations 的 spec；真拿不到才报错。
+        raise ManifestError(f"插件「{info.id}」无法把 {api_dir} 注册为包")
+    pkg = importlib.util.module_from_spec(spec)
+    pkg.__path__ = [str(api_dir)]  # type: ignore[attr-defined]
+    pkg.__package__ = pkg_name
+    sys.modules[pkg_name] = pkg
+    init_py = api_dir / "__init__.py"
+    if init_py.is_file():
+        try:
+            spec.loader.exec_module(pkg)
+        except Exception as exc:  # noqa: BLE001
+            sys.modules.pop(pkg_name, None)
+            raise ManifestError(
+                f"插件包初始化失败：{init_py}（{type(exc).__name__}: {exc}）"
+            ) from exc
+    return pkg_name
+
+
+def unload_thirdparty_modules(plugin_id: str) -> None:
+    """把某第三方插件在 sys.modules 里的包与子模块清掉（幂等）。
+
+    ★ 为什么卸载必须清（r5 · 层3.5）：目录已被 rmtree，但模块对象还在
+      sys.modules 里 —— 旧代码仍可被调用，且同 id 重装时会拿到**上一版的
+      兄弟模块**（router 每次重新 exec，models 却复用缓存）⇒ 新路由配旧表模型，
+      是最难查的一类不一致。清掉之后重装是一次干净的新加载。
+    """
+    pkg_name = thirdparty_package_name(plugin_id)
+    prefix = pkg_name + "."
+    for name in [n for n in sys.modules if n == pkg_name or n.startswith(prefix)]:
+        sys.modules.pop(name, None)
+    # 旧命名（层3.6 之前）留下的条目也一并清，避免升级后残留。
+    sys.modules.pop(f"{pkg_name}_router", None)
+
+
 def load_plugin_router(info: PluginInfo) -> Any:
     """加载某插件的 APIRouter。
 
     builtin/core：走内核的包 import（modules.<id>.router）。
-    third-party：按文件路径加载（plugins/<id>/api/router.py）。
+    third-party：把 `api/` 注册成包后加载 `<pkg>.router`（层3.6）——
+      于是 `from .models import X` 可用，多文件第三方插件写得出来。
     """
     if info.source == "third-party":
         router_path = info.directory / "api" / "router.py"
         if not router_path.is_file():
             raise ManifestError(f"插件「{info.id}」缺少 api/router.py")
-        mod = load_python_module_from_file(
-            router_path, f"plugin_thirdparty_{info.id}_router"
-        )
+        pkg_name = _ensure_thirdparty_package(info)
+        mod = load_python_module_from_file(router_path, f"{pkg_name}.router")
+        # 旧模块名保留一个别名：存量插件里有按 `plugin_thirdparty_<id>_router`
+        # 取 sys.modules 的写法（countdown/pi-agent 的注释即以它为约定）。
+        sys.modules[f"{pkg_name}_router"] = mod
         router = getattr(mod, "router", None)
         if router is None:
             raise ManifestError(f"插件「{info.id}」router.py 未定义 router = APIRouter()")

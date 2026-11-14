@@ -50,6 +50,13 @@ _SCHEDULE_SELECTORS = (
 # parallelSafe 只允许只读操作
 _READ_ONLY_OPS = {"read", "list"}
 
+# 运行时资产端点前缀：GET /plugin-assets/{id}/{path}（第三方插件 UI 由后端运行时服务）
+_PLUGIN_ASSET_PREFIX = "/plugin-assets/"
+
+# entry 允许的 URL scheme。★ 用白名单而不是黑名单：entry 会被前端 import()，
+# 未知 scheme 的默认处置只能是拒绝，列黑名单永远漏一个。
+_ALLOWED_ENTRY_SCHEMES = ("http", "https")
+
 
 def _type_name(value: Any) -> str:
     if value is None:
@@ -377,6 +384,44 @@ def _check_consistency(raw: dict[str, Any]) -> list[str]:
             "manifest.schedule.every_seconds = 86400 不能替代 daily："
             "固定间隔对齐创建时刻，daily 对齐墙上时间，是两种语义"
         )
+
+    # 规则 15：entry 指向 /plugin-assets/<id>/... 时，<id> 必须等于 manifest.id
+    # ★ 第三方插件的 UI 由后端资产端点 GET /plugin-assets/{id}/{path} 运行时服务，
+    #   路径里的 {id} 决定读哪个插件目录下的 web/dist。若允许指向别人的 id，
+    #   A 插件就能把自己的界面挂到 B 插件已发布的资产上 —— 既越权读取对方的产物，
+    #   又让用户看到的界面来源无法辨别（以为是 B，其实由 A 触发加载）。
+    entry = raw.get("entry")
+    if isinstance(entry, str) and entry.startswith(_PLUGIN_ASSET_PREFIX):
+        asset_id = entry[len(_PLUGIN_ASSET_PREFIX):].split("/", 1)[0]
+        owner = raw.get("id")
+        if asset_id != owner:
+            errors.append(
+                f"manifest.entry 指向 {_PLUGIN_ASSET_PREFIX}{asset_id}/... "
+                f"但 manifest.id = {owner!r}：插件只能引用自己 id 下的运行时资产"
+                "（指向别人的 id 等于越权读取对方 web/dist，来源也不可辨）"
+            )
+
+    # 规则 16：entry 若是 URL，scheme 只能是 http / https
+    # ★ entry 会被前端直接 import()/动态加载，scheme 白名单是注入面的第一道闸：
+    #   javascript: 是可执行注入、data: 可内联任意脚本、file: 能读本地文件。
+    #   schema 的 pattern 已经拦下这些形状，这条是**纵深防御** ——
+    #   将来若为兼容而放宽 pattern，这条规则不会跟着失效。
+    if isinstance(entry, str) and entry:
+        if entry.startswith("//"):
+            # 协议相对 URL：继承页面 scheme，实际只可能是 http(s)；但没有主机名就是空指向
+            if not entry[2:].split("/", 1)[0]:
+                errors.append(
+                    f"manifest.entry = {entry!r} 是协议相对 URL 却缺少主机名"
+                    "（应形如 //cdn.example.com/ui/index.js）"
+                )
+        else:
+            scheme_match = re.match(r"^([A-Za-z][A-Za-z0-9+.\-]*):", entry)
+            if scheme_match and scheme_match.group(1).lower() not in _ALLOWED_ENTRY_SCHEMES:
+                errors.append(
+                    f"manifest.entry 的 URL scheme 为 {scheme_match.group(1).lower()!r}，"
+                    "只允许 http / https：entry 会被前端 import()，"
+                    "javascript: / data: / file: 等 scheme 属于代码注入面"
+                )
 
     return errors
 

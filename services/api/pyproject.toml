@@ -21,6 +21,12 @@ dependencies = [
   "fastapi==0.115.6",
   "uvicorn[standard]==0.34.0",
   "pydantic-settings==2.7.0",
+  # ★ python-multipart（r5 热插拔）：FastAPI 处理 multipart/form-data 的官方配套，
+  #   插件上传端点 `POST /api/v1/plugins/upload` 用它收 zip。
+  #   缺了它在**导入期**就炸（FastAPI 的 UploadFile/File 依赖会 raise），
+  #   而报错文案指向「Form data requires python-multipart」—— 必须锁进依赖，
+  #   否则「本机能跑、新机器起不来」，且失败发生在最不容易联想到依赖的地方。
+  "python-multipart==0.0.20",
 
   # ── 数据层（总纲 §1.1：SQLModel + SQLite WAL；迁移用 alembic）──
   "sqlmodel==0.0.22",

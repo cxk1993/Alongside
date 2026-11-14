@@ -18,10 +18,12 @@ import json
 import logging
 import shutil
 import threading
+from pathlib import Path
 from typing import Any
 
 from sqlmodel import select
 
+from core.logging import get_logger
 from core.deps import kernel_session
 from core.errors import ConflictError, ForbiddenError, NotFoundError
 from core.events import event_bus
@@ -40,7 +42,7 @@ from core.plugins.phase import Phase, PhaseReason
 from core.plugins.settings import read_settings, write_settings
 from db.models.system import PluginSetting, PluginState
 
-log = logging.getLogger("kernel.plugins")
+log = get_logger("kernel.plugins")
 
 # ★ ADR-0005（2026-10-03）· 启动恢复的退避上限。
 #   严守「卡档缓行纪律」：达上限后**不自动禁用、不改 enabled、不摘路由** ——
@@ -133,6 +135,25 @@ def _withdraw_provides(plugin_id: str) -> None:
                 "能力提供撤除失败（已记，不阻断）",
                 extra={"module": plugin_id, "capability": cap, "error": str(exc)},
             )
+
+
+def _sync_module_entry(registry: Any, info: PluginInfo) -> None:
+    """把插件登记进 `/api/v1/modules` 的清单（r5 热插拔 · 层3.4）。
+
+    ★ 注册表可能没实现这两个窄动作（测试里的桩、旧版 RouterHost）——
+      用 getattr 探测后静默跳过，而不是抛：清单同步是**增强**，
+      不该让「装插件」这件正事因为它失败。
+    """
+    fn = getattr(registry, "register_module", None)
+    if callable(fn):
+        fn(info.id, info.manifest)
+
+
+def _drop_module_entry(registry: Any, plugin_id: str) -> None:
+    """从 `/api/v1/modules` 的清单里摘掉插件（disable / uninstall / 回放）。"""
+    fn = getattr(registry, "unregister_module", None)
+    if callable(fn):
+        fn(plugin_id)
 
 
 def _notify_dependencies(registry: Any) -> dict[str, list[str]]:
@@ -308,7 +329,10 @@ class PluginManager:
                     # ★ ISSUE-012（2026-09-23 hermes）：清单必须携带完整 manifest，
                     #   否则前端 `p.manifest.entry/window/slots` 必崩，插件扩展点贡献
                     #   结构化无法挂载（E5 sidecar / D1 dashboard.card / DEG-01 软依赖角标）。
-                    "manifest": p.manifest,
+                    # ★ r5 层2.3：第三方插件的 entry 在下发前**规范化成运行时资产 URL**
+                    #   （见 _normalize_entry）。磁盘上的 manifest 不改 —— 改写只发生在
+                    #   「组装对外清单」这一步，作者写什么仍是磁盘上那份。
+                    "manifest": self._manifest_for_client(p),
                 }
             )
         # 也列出校验失败但目录存在的插件（让用户知道为什么没起来）
@@ -329,17 +353,84 @@ class PluginManager:
                 return item
         raise NotFoundError(f"插件不存在：{plugin_id!r}")
 
-    def slots(self, slot_name: str) -> list[dict[str, Any]]:
+    # ───────────────────────── 对外 manifest 组装 ─────────────────────────
+    @staticmethod
+    def _manifest_for_client(p: PluginInfo) -> dict[str, Any]:
+        """下发给前端的 manifest —— 第三方插件的 `entry` 规范化成运行时资产 URL。
+
+        ★ 为什么由后端改写而不是让前端拼（r5 契约 v1 · 层2.3）
+        ------------------------------------------------------
+        前端内核只认 **URL 形状**，不认插件 id：`entry` 是什么它就 `import()` 什么。
+        若让前端按 id 拼 URL，内核就得知道「插件资产端点长什么样」——
+        那是业务知识，内核洁癖当场破掉。⇒ 拼装留在后端这一处。
+
+        ★ 改写的判据是**磁盘上真有产物**，不是 manifest 怎么写
+        ------------------------------------------------------
+        只要 `<插件目录>/web/dist/index.js` 存在，就改写成
+        `/plugin-assets/<id>/index.js`。理由：
+          - 作者写了 `entry` 但产物没构建 ⇒ 不改写（前端拿到空/别名，不会去加载 404）；
+          - 作者没写 `entry` 但产物在 ⇒ 改写（装上前端构建产物就该能用，
+            不该因为漏填一个字段而整个 UI 不亮）。
+        「磁盘是唯一真相」与发现层同口径。
+
+        ★ 不动磁盘、不动 `p.manifest` 本体
+        ----------------------------------
+        `PluginInfo.manifest` 是发现层的产物，会被 crosscheck / 迁移解析 /
+        生命周期钩子共用。就地改它等于让「作者声明」与「对外视图」混成一件事，
+        下次 discover 又覆盖回去 —— 故这里**浅拷贝后改副本**。
+        （只改顶层 `entry` 一个键，浅拷贝足够；嵌套结构原样共享、只读。）
+        """
+        manifest = p.manifest
+        if p.source != "third-party":
+            return manifest
+        try:
+            entry_file = Path(p.directory) / "web" / "dist" / "index.js"
+            if not entry_file.is_file():
+                return manifest
+        except OSError:
+            # 目录不可读（权限/竞态删除）⇒ 不改写，保持作者原值。
+            return manifest
+        out = dict(manifest)
+        # ★ 前缀取自 assets.ASSETS_PREFIX（单一真相源）：
+        #   这个字符串同时出现在后端两个模块与 nginx 配置里，任何一处手写
+        #   都有分叉风险（改了端点前缀、另一端还在拼旧串 ⇒ 所有第三方 UI 白屏）。
+        #   后端内部这两处必须同源。
+        from core.plugins.assets import ASSETS_PREFIX
+
+        out["entry"] = f"{ASSETS_PREFIX}/{p.id}/index.js"
+        return out
+
+    def slots(
+        self, slot_name: str, *, include_disabled: bool = False
+    ) -> list[dict[str, Any]]:
+        """某扩展点的贡献列表。
+
+        ★ 默认**只返回启用中的插件**（r5 热插拔 · 层0.4）。
+          旧实现把 `enabled` 算出来放进每一项，却不按它过滤 —— 于是一个被停用
+          （PAUSED）的插件照样出现在插槽里，前端照单渲染，而它的 API 已经 404：
+          用户看到的是「点了没反应」的空卡片。`slots` 是 UI 组装的入口，
+          「拔掉插件」这一半必须在这里生效，否则 disable 只拔掉了一半。
+
+        ★ `include_disabled=True` 保留**全量视图**（管理界面要能看见
+          「这里本来有个卡片，但它停用了」）。默认值取 False 是因为
+          渲染路径的调用方远多于管理路径 —— 默认必须是安全的那一个。
+        """
         out: list[dict[str, Any]] = []
         for p in self.discover().plugins:
-            if slot_name in p.manifest.get("slots", []):
-                out.append(
-                    {
-                        "plugin_id": p.id,
-                        "name": p.manifest.get("name"),
-                        "enabled": self._enabled(p.id, default_enabled=p.source != "third-party"),
-                    }
-                )
+            if slot_name not in p.manifest.get("slots", []):
+                continue
+            enabled = self._enabled(
+                p.id, default_enabled=p.source != "third-party"
+            )
+            if not enabled and not include_disabled:
+                continue
+            out.append(
+                {
+                    "plugin_id": p.id,
+                    "name": p.manifest.get("name"),
+                    "enabled": enabled,
+                }
+            )
         return out
 
     def _enabled(self, plugin_id: str, *, default_enabled: bool = True) -> bool:
@@ -522,6 +613,14 @@ class PluginManager:
                     do=lambda: mount_plugin(info, registry),
                     undo=lambda: self._unmount(info, registry),
                 )
+                # ── 6. 模块清单同步（RUNTIME，r5 层3.4）────────────────
+                # `/api/v1/modules` 与 `/api/v1/<id>/openapi.json` 读的是
+                # app.state.modules；不同步的话运行期启用的插件在那两处不存在。
+                # 带逆：失败回放时清单也回到调用前。
+                eff.add(
+                    do=lambda: _sync_module_entry(registry, info),
+                    undo=lambda: _drop_module_entry(registry, plugin_id),
+                )
 
                 # ★★ 事件订阅随启用**重新装载**（2026-11-10，P0）。
                 #   disable 会摘掉本插件的声明式订阅，而「在 lifecycle 模块顶层
@@ -663,6 +762,10 @@ class PluginManager:
         # ★ 撤 RUNTIME effect（逆序：路由 → requires → provides）。
         #   路由会被摘掉，能力提供会被撤销，依赖声明会被注销。
         get_kernel().replay_runtime(plugin_id)
+        # ★ 模块清单同步（r5 层3.4）：`/api/v1/modules` 不该再列出它。
+        #   不走 effect —— disable 的语义是「停用」，与 effect 的「回到之前」
+        #   不是一回事（见 enable 的说明）；这里显式摘。
+        _drop_module_entry(registry, plugin_id)
         # ★★ 事件订阅也随停用一起撤销（2026-11-10，P0）。
         #   `disable` 的语义是「停止对外服务」，而事件联动**绕过了路由层**：
         #   push 的三路 handler 是模块函数，摘掉路由拦不住它 ——
@@ -780,6 +883,16 @@ class PluginManager:
                     do=lambda: self._upsert_state(info, enabled=True, last_error=None),
                     undo=lambda: self._restore_state(plugin_id, prev_state),
                 )
+                # ★ 进入 LOADING（r5 热插拔 · 层0.2）。
+                #   旧实现 install 全程**不做任何阶段转移**，而 plugin_state.phase
+                #   的列默认值是 PENDING ⇒ 装完之后「路由已挂、迁移已跑、enabled=True，
+                #   但 phase 仍是 PENDING」。phase 是对外可见的唯一真相
+                #   （list_plugins 直接下发它），启动对账也读它决定要不要重试 ——
+                #   于是界面显示「等待前置条件」而实际已在服务，自动化建在假数据上。
+                #   ⇒ 与 enable() 同口径：LOADING 起手，成功 ACTIVE，失败 FAILED。
+                #   ★ 必须放在状态行写入**之后**：apply_transition 要求行已存在，
+                #     行不存在时它只告警跳过（不凭空建行）。
+                _transition(plugin_id, Phase.LOADING, PhaseReason.STARTUP)
 
                 # ── 4. 路由挂载（RUNTIME）─────────────────────────────────
                 eff.add(
@@ -794,6 +907,11 @@ class PluginManager:
                     do=lambda: _register_requires_only(info),
                     undo=lambda: _unregister_requirements(plugin_id),
                 )
+                # ── 6. 模块清单同步（RUNTIME，r5 层3.4）────────────────
+                eff.add(
+                    do=lambda: _sync_module_entry(registry, info),
+                    undo=lambda: _drop_module_entry(registry, plugin_id),
+                )
         except Exception as exc:  # noqa: BLE001
             # ★ 逆序回滚由 `kernel.effect()` 负责（已施加的部分按逆序撤回来）。
             #
@@ -803,7 +921,18 @@ class PluginManager:
             #   没有行就没地方写，也不该为此新建一行）。
             if prev_state is not None:
                 self.note_activation_error(plugin_id, str(exc))
+                # ★ 装载失败 → FAILED（r5 · 层0.2，与 enable 同口径）。
+                #   只在「原先就有行」时转：无行时 install 的语义是「没装上」，
+                #   状态行已被逆删掉，apply_transition 会跳过 —— 不凭空建行。
+                _transition(plugin_id, Phase.FAILED, PhaseReason.LOAD_ERROR)
             raise
+        # ★ 装载全部成功 → ACTIVE（r5 · 层0.2）。
+        #   放在 effect 块**之外**：块内抛异常时上面已转 FAILED，
+        #   这里再转 ACTIVE 会把失败盖掉。
+        _transition(plugin_id, Phase.ACTIVE, PhaseReason.STARTUP)
+        # ★ 依赖重算：install 提供的能力可能让别的插件从「依赖丧失」恢复。
+        #   与 enable() 同口径，放在阶段转移之后（重算时看到最终状态）。
+        _notify_dependencies(registry)
         return self.get_plugin(plugin_id)
 
     def _run_hook_safe(self, info: PluginInfo, stage: str) -> None:
@@ -843,13 +972,27 @@ class PluginManager:
         #    历史迁移建的表会留下），那由第 3 步的 rollback_migrations 负责。
         #    ⇒ 两处分工明确：RUNTIME 交给原语，DATA 交给全量回滚。
         get_kernel().replay_runtime(plugin_id)
+        # ★ 模块清单同步（r5 层3.4）：`/api/v1/modules` 不该再列出它。
+        #   与 disable 同口径，显式摘（卸载是终态，没有「回到之前」要恢复）。
+        _drop_module_entry(registry, plugin_id)
         # ★★ 事件订阅与 lifecycle 模块缓存也要清（2026-11-10，P0）。
         #   订阅不清 ⇒ 目录已被 rmtree 的插件仍被调用（实测：
         #   `del p; gc.collect()` 后 weakref 仍存活，插件对象根本回收不掉）。
         #   缓存不清 ⇒ 旧模块对象（含它顶层注册的一切）留在内存里。
         event_bus.unsubscribe_declared(plugin_id)
         invalidate_lifecycle_cache(plugin_id)
-        # 3) 回滚迁移（删表）
+        # ★★ 第三方插件的模块缓存也要清（r5 热插拔 · 层3.5）。
+        #   上面两行清的是「事件订阅」与「lifecycle 模块」，但插件**路由模块**
+        #   及其兄弟模块（models.py / schema.py …）仍留在 sys.modules 里：
+        #     · 目录已 rmtree，旧代码对象却还能被调用（对象根本没被回收）；
+        #     · 同 id 重装时 router 会重新 exec，而兄弟模块**复用缓存** ⇒
+        #       新路由配旧表模型，SQLAlchemy 里两张同名 Table 或旧结构，
+        #       是最难查的一类不一致（表现是「改了代码没生效」）。
+        #   ⇒ 卸载时把整棵包（plugin_thirdparty_<id> 及其子模块）从 sys.modules 摘掉。
+        #   ★ 只对第三方做：内置模块走正常包导入，清掉会破坏别的模块的引用。
+        if info.source == "third-party":
+            discover_mod.unload_thirdparty_modules(plugin_id)
+
         from db.engine import get_engine
 
         engine = get_engine()
@@ -864,8 +1007,37 @@ class PluginManager:
             ).all():
                 db.delete(row)
             db.commit()
-        # 5) 删文件（插件目录整体移除）
-        if info.directory.exists():
+        # 5) 删文件（**只删可写数据根里的那份**）
+        #
+        # ★★ 作用域守卫（r5 · 2026-11-15，实测事故驱动）：
+        #   旧实现对 `info.directory` 无条件 `rmtree` —— 而目录可能是
+        #   **发行根**（仓库 `plugins/`，随系统分发、只读）里的那份。
+        #   后果实测：对 `plugins/hello-seam` 走一遍 install→uninstall，
+        #   示例插件的**源码被删掉**（我第一次跑端到端就这样丢了交付物，
+        #   而且是"以为在测运行时安装、实际动的是发行版文件"这种最难察觉的形态）。
+        #   ⇒ 规则：**卸载只回收"我们自己装进来的东西"**。
+        #     判据是本层 1.1 定下的可写根 = `default_data_plugins_root()`。
+        #     发行根/其它根下的目录：清状态、摘路由、回滚迁移，但**不动文件**。
+        #     （这也是"发行根只读兼容"这句话的代码形态；此前只有发现层遵守它。）
+        try:
+            from core.plugins.discover import default_data_plugins_root
+
+            writable_root = default_data_plugins_root().resolve()
+            target_dir = info.directory.resolve()
+            owned = target_dir.is_relative_to(writable_root)
+        except Exception:  # noqa: BLE001 —— 判不出来时保守：不删（宁留垃圾不误删源码）
+            owned = False
+        if not owned:
+            # ★ extra 里不能用 `module` 这个键：它是 LogRecord 的保留属性，
+            #   裸 logging.getLogger 的 logger 一执行就抛
+            #   `KeyError: "Attempt to overwrite 'module' in LogRecord"` ——
+            #   于是这条**警告本身**会把真正的问题盖掉。
+            #   （仓库里另有 20 处同样的写法，见 reports/r5-bidiu.md §6 的发现。）
+            log.warning(
+                "插件目录不在可写数据根内，卸载只清状态不删文件（发行根只读）",
+                extra={"plugin_id": plugin_id, "directory": str(info.directory)},
+            )
+        elif info.directory.exists():
             shutil.rmtree(info.directory, ignore_errors=True)
         # ★ 卸载完成 → TERMINATED（终态）。
         #   注意：状态行在第 4 步被删了，所以这次转移**会因「行不存在」被跳过**

@@ -309,8 +309,14 @@ def test_full_lifecycle_install_enable_disable_uninstall(
         ).fetchone()
     assert row is None, "卸载后 plugin_state 应被清理"
 
-    # 文件删了
-    assert not demo_plugin_dir.exists(), "卸载后插件目录应被删除"
+    # 文件：本用例的插件目录在**发行根**（仓库 plugins/）下 ⇒ 卸载只清状态、不动文件
+    #   （r5 作用域守卫：只有可写数据根里的那份才被回收，见 manager.uninstall 注释）
+    assert demo_plugin_dir.exists(), (
+        "发行根里的插件目录不该被卸载删除（源码属于发行版，不是装进来的东西）"
+    )
+    # 反向判据：**可写数据根**里的那份必须被回收 —— 由
+    # tests/test_plugin_hotplug_security.py::test_uninstall_removes_route_assets_dir_and_modules
+    # 守着（它走上传 → 数据根 → 卸载 → 目录消失）。
 
 
 # ───────────────────── 口径统一：third-party 无状态行 = 未启用 ─────────────────────
@@ -334,9 +340,17 @@ def test_third_party_without_state_row_is_not_enabled(
     assert builtins, "测试环境应有内置插件"
     assert all(p["enabled"] is True for p in builtins)
 
-    # 扩展点贡献可见但不标启用
+    # 扩展点贡献：默认视图**只含启用项**（r5 层0.4），全量视图才看得到它。
+    # ★ 两个语义都要有判据守着：
+    #   「拔掉的插件不该出现在渲染路径上」与「管理界面仍能看见它为什么不在」。
     slots = client.get("/api/v1/plugins/slots/dashboard.card", headers=AUTH).json()
-    contrib = next(c for c in slots["contributions"] if c["plugin_id"] == DEMO_ID)
+    assert not [c for c in slots["contributions"] if c["plugin_id"] == DEMO_ID], (
+        "默认（渲染路径）视图不该包含未启用插件的贡献"
+    )
+    slots_all = client.get(
+        "/api/v1/plugins/slots/dashboard.card?include_disabled=true", headers=AUTH
+    ).json()
+    contrib = next(c for c in slots_all["contributions"] if c["plugin_id"] == DEMO_ID)
     assert contrib["enabled"] is False
 
     # MCP 不暴露幽灵工具

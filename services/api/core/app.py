@@ -88,6 +88,56 @@ async def _fetch_one(
 _DEFAULT_MODULES_DIR = Path(__file__).resolve().parents[1] / "modules"
 
 
+def _register_plugin_assets(app: FastAPI) -> None:
+    """挂载 `/plugin-assets`（r5 热插拔 · 层2.2）。
+
+    ★ 依赖三条窄回调，不传 PluginManager：
+      · `find_plugin_dir(id)` —— 插件目录在哪（不存在 ⇒ None）
+      · `is_active(id)`       —— 该插件此刻是不是 ACTIVE
+      · `decode_bearer(token)`—— 复用内核的 access token 验签
+
+    ★ 为什么 `is_active` 只看 phase，不看 `enabled`：
+      `enabled` 是派生读出口（PAUSED ⇒ False），而资产服务的判据是
+      「这个插件的代码此刻该不该进浏览器」= phase ∈ {ACTIVE}。
+      两者在 PAUSED 上一致（都 False），但直接读 phase 少一次翻译、
+      也少一处「翻译口径分叉」的机会。
+    ★ 整个挂载失败不阻断启动：资产端点是**增强**，不是前提 ——
+      与包层同理（内核已经能跑，少一个前缀不该让它起不来）。
+    """
+    try:
+        from core.plugins.assets import ASSETS_PREFIX, PluginAssetsApp
+        from core.plugins.manager import get_plugin_manager
+        from core.plugins.phase import Phase
+        from core.security import decode_token
+
+        mgr = get_plugin_manager()
+
+        def find_plugin_dir(plugin_id: str) -> Path | None:
+            for p in mgr.discover().plugins:
+                if p.id == plugin_id:
+                    return Path(p.directory)
+            return None
+
+        def is_active(plugin_id: str) -> bool:
+            item = mgr.get_plugin(plugin_id)
+            return item.get("phase") == Phase.ACTIVE.value
+
+        def decode_bearer(token: str) -> dict[str, Any]:
+            return decode_token(token, expected_type="access")
+
+        app.mount(
+            ASSETS_PREFIX,
+            PluginAssetsApp(
+                find_plugin_dir=find_plugin_dir,
+                is_active=is_active,
+                decode_bearer=decode_bearer,
+            ),
+            name="plugin-assets",
+        )
+    except Exception as _exc:  # noqa: BLE001 —— 资产端点是增强，不拖垮启动
+        log.warning("插件资产端点挂载失败（已跳过）：%s", _exc)
+
+
 def create_app(
     modules_dir: str | Path | None = None,
     registry: ModuleRegistry | None = None,
@@ -156,6 +206,18 @@ def create_app(
     app.state.registry = reg
     app.state.activator = activator
     app.state.modules = {}  # id -> manifest dict（注册表：全量清单）
+
+    # ── ★ 插件前端资产端点（r5 热插拔 · 层2.2）──────────────────────
+    # GET /plugin-assets/{id}/{path} —— 第三方插件的 UI 产物（web/dist/）由内核
+    # 在运行期服务。这是「第三方插件能带 UI 进来」的后端一半：
+    # 前端运行时 import(entry)，而 entry 指向的就是这个前缀。
+    #
+    # ★ 为什么挂在 app 上而不是做成 APIRouter 里的普通路由：
+    #   它是文件服务，需要**自己**控制解码/规范化/穿越判定每一步（见 assets.py），
+    #   走路由框架会把这条链交给别人。挂载点让「前缀 → 这个 app」一目了然。
+    # ★ 依赖注入只给两个窄动作 + 一个验签函数（与包层 boot.py 同纪律）：
+    #   传窄动作，不把整个 PluginManager 塞进去 —— 那样资产层就开始认识内核内部结构。
+    _register_plugin_assets(app)
 
     # ── 中间件（顺序：CORS 最外，TraceId 最内贴路由）──
     app.add_middleware(IdempotencyMiddleware)

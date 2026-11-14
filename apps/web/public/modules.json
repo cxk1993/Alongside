@@ -239,5 +239,21 @@
       "minW": 480,
       "minH": 360
     }
+  },
+  {
+    "id": "isdu",
+    "name": "i山大",
+    "version": "0.6.0",
+    "kind": "builtin",
+    "icon": "课",
+    "description": "iSDU 公告/课表/成绩：课表可幂等写入 course，凭证只在内存。",
+    "entry": "@/apps/isdu",
+    "window": {
+      "w": 900,
+      "h": 620,
+      "minW": 560,
+      "minH": 420,
+      "singleton": true
+    }
   }
 ]

@@ -20,11 +20,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from alembic import command
-from alembic.config import Config
 from db.engine import init_engine
 
 _API_ROOT = Path(__file__).resolve().parent.parent  # services/api/
@@ -112,6 +112,19 @@ def _load_migration_file(path: Path, plugin_id: str, version: str) -> ModuleType
     return mod
 
 
+def _plugin_migration_dir(plugin_dir: Path) -> Path | None:
+    """插件迁移目录：内置插件在模块根 `migrations/`，第三方插件在 `api/migrations/`。
+
+    ★ 2026-11-13 修复：这里原先只认 `api/migrations`（第三方布局），
+      于是 `python -m db.migrate upgrade head` **从不执行内置插件的迁移**
+      （新建的内置插件表永远建不出来，只能靠服务启动时的 lifespan 对账兜底）。
+    """
+    for candidate in (plugin_dir / "migrations", plugin_dir / "api" / "migrations"):
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
 def discover_plugin_migrations(modules_dir: Path | None = None) -> list[tuple[str, str, Path]]:
     """[(plugin_id, version, path)]，按插件 id、文件名序排好。"""
     root = modules_dir or _MODULES_DIR
@@ -119,8 +132,8 @@ def discover_plugin_migrations(modules_dir: Path | None = None) -> list[tuple[st
     if not root.is_dir():
         return found
     for plugin_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-        mig_dir = plugin_dir / "api" / "migrations"
-        if not mig_dir.is_dir():
+        mig_dir = _plugin_migration_dir(plugin_dir)
+        if mig_dir is None:
             continue
         for path in sorted(mig_dir.glob("*.py")):
             if path.name.startswith("__"):

@@ -285,6 +285,9 @@ def cmd_dev(_: argparse.Namespace) -> None:
     ensure_all()
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    # ★ 插件的跨插件 HTTP 调用默认打 127.0.0.1:18000（生产端口），
+    #   dev 下后端在 8000 ⇒ 不设这一条，所有 get_plugin_client 都会 ConnectError。
+    env["INTERNAL_API_BASE"] = f"http://127.0.0.1:{API_PORT}"
 
     specs = [
         ("web", npm_cmd(["run", "dev"]), WEB),

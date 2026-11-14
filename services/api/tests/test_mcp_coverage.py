@@ -65,6 +65,7 @@ _EXEMPT_PATTERNS: list[tuple[str, str]] = [
     (r"/snapshots/sync$", "财务快照同步，后台批量作业"),
     (r"/libs/\{[^}]+\}/sync$", "笔记库同步，后台批量作业"),
     (r"/sync$", "笔记总同步，后台批量作业"),
+    (r"/session$", "iSDU 退出登录：只清进程内存里的凭据，安全动作，不暴露给 AI 调用"),
     (r"/ingest(-all)?$", "复盘源批量灌入，后台作业"),
     (r"/export$", "批量导出，人工触发的运维动作"),
     (r"/import$", "批量导入，人工触发的运维动作"),

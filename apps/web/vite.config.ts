@@ -21,6 +21,13 @@ export default defineConfig({
     port: 5173,
     // 端口被占时直接报错，不要偷偷换端口 —— 否则主人按文档访问会打不开
     strictPort: true,
+    // ★ 开发代理：前端用相对路径 `/api/...` 请求，Vite 必须把它转给本机后端。
+    //   之前这里没有 proxy，导致 dev 下登录请求打到 Vite 自己（404），
+    //   页面报"密码错误"——其实后端根本没收到请求。
+    proxy: {
+      "/api": { target: "http://127.0.0.1:8000", changeOrigin: false },
+      "/healthz": { target: "http://127.0.0.1:8000", changeOrigin: false },
+    },
   },
   build: {
     outDir: "dist",

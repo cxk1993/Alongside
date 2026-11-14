@@ -1,10 +1,9 @@
 """T04 数据层单测：mixin建表 / repo分页边界 / todo真实样例 / 迁移 / 并发 / 备份 / 字典一致。"""
 from __future__ import annotations
-from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 
 import sys
 import threading
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -12,6 +11,7 @@ import pytest
 from sqlmodel import Session, select
 
 from core.config import get_settings
+from core.db_scope import declare_scope  # 2026-11-09 作用域翻转：显式声明
 from db.base import Base, utcnow
 from db.engine import make_engine
 from db.models import AppSetting, AuditLog
@@ -170,12 +170,17 @@ def test_migration_full_cycle(tmp_path, monkeypatch) -> None:
         }
     assert {"audit_log", "idempotency_key", "app_setting", "plugin_state",
             "plugin_setting"} <= names
+    # ★ 2026-11-13 修复后：`upgrade head` 会一并执行内置插件迁移
+    #   （旧实现只认 `api/migrations/`，内置模块的 `migrations/` 从不执行）。
+    assert {"calendar_event", "todo_item", "course_item"} <= names
 
     fake = tmp_path / "modules"
     _write_fake_plugin_migration(fake)
     executed = M.run_plugin_migrations(engine, fake)
     assert executed == ["probe_plugin/0001_init"]
     assert M.run_plugin_migrations(engine, fake) == []  # 幂等
+    # 内置插件的迁移已被 upgrade 阶段执行 ⇒ 回滚时也要撤掉，否则表会残留
+    M.downgrade_plugin_migrations(engine)
     M._downgrade_base(fake)
     with engine.connect() as c:
         names = {

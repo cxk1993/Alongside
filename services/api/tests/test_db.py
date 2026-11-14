@@ -180,9 +180,12 @@ def test_migration_full_cycle(tmp_path, monkeypatch) -> None:
         }
     assert {"audit_log", "idempotency_key", "app_setting", "plugin_state",
             "plugin_setting"} <= names
-    # ★ 2026-11-13 修复后：`upgrade head` 会一并执行内置插件迁移
-    #   （旧实现只认 `api/migrations/`，内置模块的 `migrations/` 从不执行）。
-    assert {"calendar_event", "todo_item", "course_item"} <= names
+    # ★ 内置插件迁移「真跑」的断言不在这里 —— 本用例故意传空模块目录隔离插件面
+    #   （见上），故 calendar/todo/course 等内置表此刻本就不该存在。
+    #   那条修复（旧实现只认 `api/migrations/`，内置模块的 `migrations/` 从不执行）
+    #   由 tests/test_migrate_plugin_dirs.py 的
+    #   test_real_modules_discover_builtin_migrations 单独守着（真实 modules 目录）。
+    assert "calendar_event" not in names  # 空插件目录 ⇒ 内置表不出现（隔离有效的对照）
 
     fake = tmp_path / "modules"
     _write_fake_plugin_migration(fake)

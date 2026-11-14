@@ -1,0 +1,42 @@
+{
+  "id": "sdu-feeds",
+  "name": "山大通知聚合",
+  "version": "0.1.0",
+  "kind": "third-party",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "rss",
+  "description": "把山大公开站点（学院公告/学术报告/本科生院/青春山大）的通知抓成统一条目，可一键转待办。纯 API 插件，无窗口 UI。",
+  "author": "sdu-student",
+  "window": {
+    "w": 720,
+    "h": 560
+  },
+  "entry": "",
+  "api": {
+    "base": "/api/v1/sdu-feeds",
+    "openapi": "/api/v1/sdu-feeds/openapi.json",
+    "health": "/api/v1/sdu-feeds/health"
+  },
+  "provides": [
+    "sdu.feed.read",
+    "sdu.feed.sync"
+  ],
+  "requires": [],
+  "optionalDependencies": [
+    "todo.item.write"
+  ],
+  "slots": [],
+  "emits": [
+    "sdu.feed.item.new"
+  ],
+  "consumes": [],
+  "permissions": [
+    "db:own",
+    "net:out:www.cs.sdu.edu.cn",
+    "net:out:www.bkjx.sdu.edu.cn",
+    "net:out:www.youth.sdu.edu.cn"
+  ],
+  "migrations": "api/migrations",
+  "settingsSchema": null
+}

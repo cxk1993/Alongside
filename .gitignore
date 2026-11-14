@@ -64,3 +64,10 @@ id_ed25519*
 # Build backups
 dist_old_*/
 apps/web/dist_old_*/
+
+# ── r5：示例插件 hello-seam 的 UI 构建产物必须入库 ──
+# 后端 entry 改写的判据是「插件目录下存在 web/dist/index.js」；
+# 远端 clone 后若没有这份产物，示例插件装上也不会有 UI（接缝在远端断裂）。
+# 上面的 `dist/` 是通用忽略规则，这里为这一个目录开负向例外。
+!plugins/hello-seam/web/dist/
+!plugins/hello-seam/web/dist/index.js

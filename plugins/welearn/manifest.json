@@ -1,0 +1,41 @@
+{
+  "id": "welearn",
+  "name": "WE Learn",
+  "version": "0.1.0",
+  "kind": "third-party",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "英",
+  "description": "只读同步你自己账号里的 WE Learn 课程、单元与学习进度；没刷完的单元可一键转待办。纯 API 插件，无窗口。",
+  "author": "wangyuxiang",
+  "window": {
+    "w": 720,
+    "h": 560
+  },
+  "entry": "",
+  "api": {
+    "base": "/api/v1/welearn",
+    "openapi": "/api/v1/welearn/openapi.json",
+    "health": "/api/v1/welearn/health"
+  },
+  "provides": [
+    "welearn.course.read",
+    "welearn.unit.read",
+    "welearn.sync"
+  ],
+  "requires": [],
+  "optionalDependencies": [
+    "todo.item.write"
+  ],
+  "slots": [],
+  "emits": [
+    "welearn.synced"
+  ],
+  "consumes": [],
+  "permissions": [
+    "db:own",
+    "net:out:welearn.sflep.com"
+  ],
+  "migrations": "api/migrations",
+  "settingsSchema": null
+}

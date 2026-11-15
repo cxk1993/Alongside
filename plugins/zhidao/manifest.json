@@ -1,0 +1,31 @@
+{
+  "id": "zhidao",
+  "name": "知到",
+  "version": "0.1.0",
+  "kind": "third-party",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "知",
+  "description": "智慧树知到学生端：课程、见面课、作业。（内嵌窗口：只做互操作，不抓数据）",
+  "author": "wangyuxiang",
+  "window": {
+    "w": 1180,
+    "h": 780,
+    "minW": 760,
+    "minH": 480
+  },
+  "entry": "/plugin-assets/zhidao/index.js",
+  "api": {
+    "base": "/api/v1/zhidao",
+    "openapi": "/api/v1/zhidao/openapi.json",
+    "health": "/api/v1/zhidao/health"
+  },
+  "provides": [],
+  "requires": [],
+  "slots": [],
+  "emits": [],
+  "consumes": [],
+  "permissions": [],
+  "migrations": null,
+  "settingsSchema": null
+}

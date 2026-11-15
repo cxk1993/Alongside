@@ -1,0 +1,31 @@
+{
+  "id": "mooc",
+  "name": "中国大学MOOC",
+  "version": "0.1.0",
+  "kind": "third-party",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "M",
+  "description": "网易中国大学MOOC：课程学习、测验、讨论区。（内嵌窗口：只做互操作，不抓数据）",
+  "author": "wangyuxiang",
+  "window": {
+    "w": 1180,
+    "h": 780,
+    "minW": 760,
+    "minH": 480
+  },
+  "entry": "/plugin-assets/mooc/index.js",
+  "api": {
+    "base": "/api/v1/mooc",
+    "openapi": "/api/v1/mooc/openapi.json",
+    "health": "/api/v1/mooc/health"
+  },
+  "provides": [],
+  "requires": [],
+  "slots": [],
+  "emits": [],
+  "consumes": [],
+  "permissions": [],
+  "migrations": null,
+  "settingsSchema": null
+}

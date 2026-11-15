@@ -1,0 +1,43 @@
+{
+  "id": "yuketang",
+  "name": "雨课堂",
+  "version": "0.1.0",
+  "kind": "third-party",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "雨",
+  "description": "只读同步你自己账号里的雨课堂课程、上课记录、公告与考核；公告和临期考核可一键转进待办。纯 API 插件，无窗口。",
+  "author": "wangyuxiang",
+  "window": {
+    "w": 720,
+    "h": 560
+  },
+  "entry": "",
+  "api": {
+    "base": "/api/v1/yuketang",
+    "openapi": "/api/v1/yuketang/openapi.json",
+    "health": "/api/v1/yuketang/health"
+  },
+  "provides": [
+    "yuketang.course.read",
+    "yuketang.activity.read",
+    "yuketang.sync"
+  ],
+  "requires": [],
+  "optionalDependencies": [
+    "todo.item.write"
+  ],
+  "slots": [],
+  "emits": [
+    "yuketang.synced"
+  ],
+  "consumes": [],
+  "permissions": [
+    "db:own",
+    "net:out:www.yuketang.cn",
+    "net:out:changjiang.yuketang.cn",
+    "net:out:sdu.yuketang.cn"
+  ],
+  "migrations": "api/migrations",
+  "settingsSchema": null
+}

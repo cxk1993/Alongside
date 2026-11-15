@@ -184,6 +184,17 @@ GATES: tuple[Gate, ...] = (
         has_regression_test=True,
         test_ref="services/api/tests_protocol/test_db_scope_wiring.py",
     ),
+    Gate(
+        id="protocol-doc",
+        path="tools/check_protocol_doc.py",
+        description=(
+            "契约文档一致性：docs/specs/plugin-protocol-contract.md 必须与 gen_protocol_doc.py "
+            "从 schema 的当前输出逐字一致（文档过期 / schema 改了没重生成 ⇒ BLOCKING）。"
+            "自带 --selfcheck（篡改临时副本必须报红，真文档零写入）。"
+        ),
+        blocking=True,
+        has_regression_test=False,
+    ),
 )
 
 #: 文件名判据：前缀或后缀命中即视为「像门禁」。

@@ -121,7 +121,7 @@ export function DesktopTodaySummary() {
   // 数据源：provider id → 图标 / 中文名（业务词只出现在此常量里）
   // purity-ok: 右栏今日摘要必须列出四类来源，这四行是数据源清单、不是业务逻辑
   const sources = [
-    { id: "calendar", label: "日程", icon: "历" },
+    { id: "calendar", label: "日程", icon: "历" }, // purity-ok: BFF 摘要 provider id 清单（与 TimeWidget 四源同源），非业务逻辑
     { id: "todo", label: "待办", icon: "待" },
     { id: "diary", label: "日记", icon: "日" },
     { id: "review", label: "复盘", icon: "复" },

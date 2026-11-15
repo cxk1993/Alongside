@@ -63,7 +63,7 @@ describe("U2 · TimeWidget（聚合小日历视图侧）", () => {
     expect(screen.getByTestId("today-sum-diary")).toBeTruthy();
     expect(screen.getByTestId("today-sum-review")).toBeTruthy();
     // 月历常驻（U2 v2）
-    expect(screen.getByTestId("month-calendar")).toBeTruthy();
+    expect(screen.getByTestId("month-grid")).toBeTruthy();
     // 单请求 BFF（裁决令61 丙案）
     expect(vi.mocked(api.get).mock.calls.map((c) => c[0])).toContain("/api/v1/summary/today");
     // Esc 关闭
@@ -172,7 +172,7 @@ describe("U2 · TimeWidget（聚合小日历视图侧）", () => {
     const { el } = wrapper();
     render(el);
     fireEvent.click(screen.getByLabelText(/当前时间/));
-    await waitFor(() => expect(screen.getByTestId("month-calendar")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("month-grid")).toBeTruthy());
     await waitFor(() =>
       expect(
         screen.getByTestId(`cal-day-${today}`).querySelector(".today-sum__cal-dot--calendar.is-on"),
@@ -211,7 +211,7 @@ describe("U2 · TimeWidget（聚合小日历视图侧）", () => {
     const { el } = wrapper();
     render(el);
     fireEvent.click(screen.getByLabelText(/当前时间/));
-    await waitFor(() => expect(screen.getByTestId("month-calendar")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("month-grid")).toBeTruthy());
     fireEvent.click(screen.getByTestId(`cal-day-${tomorrow}`));
     await waitFor(() => expect(screen.getByTestId("day-peek-panel")).toBeTruthy());
     expect(screen.getByText("明天开会 · 10:00")).toBeTruthy();
@@ -230,7 +230,7 @@ describe("U2 · TimeWidget（聚合小日历视图侧）", () => {
     const { el } = wrapper();
     render(el);
     fireEvent.click(screen.getByLabelText(/当前时间/));
-    await waitFor(() => expect(screen.getByTestId("month-calendar")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("month-grid")).toBeTruthy());
     const d = new Date();
     expect(screen.getByText(`${d.getFullYear()}年${d.getMonth() + 1}月`)).toBeTruthy();
     fireEvent.click(screen.getByLabelText("下个月"));
@@ -251,7 +251,7 @@ describe("U2 · TimeWidget（聚合小日历视图侧）", () => {
     const { el } = wrapper();
     render(el);
     fireEvent.click(screen.getByLabelText(/当前时间/));
-    await waitFor(() => expect(screen.getByTestId("month-calendar")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("month-grid")).toBeTruthy());
     fireEvent.click(screen.getByTestId(`cal-day-${tomorrow}`));
     await waitFor(() => expect(screen.getByTestId("day-peek-err")).toBeTruthy());
   });

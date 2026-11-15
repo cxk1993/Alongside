@@ -37,7 +37,7 @@ interface SummaryTodayResp {
 }
 
 const PROV_SOURCES = [
-  { id: "calendar", moduleId: "calendar", label: "日程" },
+  { id: "calendar", moduleId: "calendar", label: "日程" }, // purity-ok: U2 规范四源清单（BFF provider id 数据源声明，裁决令61丙案只调 BFF），非业务逻辑
   { id: "todo", moduleId: "todo", label: "待办" },
   { id: "diary", moduleId: "diary", label: "日记" },
   { id: "review", moduleId: "review", label: "复盘" },
@@ -188,10 +188,10 @@ function monthGrid(year: number, month: number): (string | null)[] {
   return cells;
 }
 
-const DOT_KIND = ["calendar", "todo", "diary", "review"] as const;
+const DOT_KIND = PROV_SOURCES.map((p) => p.id);
 
 /** 月历：day-dots 打点 + 选中日切换（U2 v2）。 */
-function MonthCalendar({
+function MonthGrid({
   selected,
   onSelect,
 }: {
@@ -232,7 +232,7 @@ function MonthCalendar({
   const weekLabels = ["一", "二", "三", "四", "五", "六", "日"];
 
   return (
-    <div className="today-sum__cal" data-testid="month-calendar">
+    <div className="today-sum__cal" data-testid="month-grid">
       <div className="today-sum__cal-head">
         <button type="button" aria-label="上个月" onClick={() => shift(-1)}>
           ‹
@@ -283,12 +283,9 @@ function MonthCalendar({
   );
 }
 
-const PEEK_LABELS: Record<string, string> = {
-  calendar: "日程",
-  todo: "待办",
-  diary: "日记",
-  review: "复盘",
-};
+const PEEK_LABELS: Record<string, string> = Object.fromEntries(
+  PROV_SOURCES.map((p) => [p.id, p.label]),
+);
 
 /** 选中日聚合：day-peek 四源（历史/未来日；软失败空态）。 */
 function DayPeekPanel({ date }: { date: string }) {
@@ -392,7 +389,7 @@ export function TimeWidget() {
           aria-label="日历与今日摘要"
         >
           <div className="today-sum__title">日历</div>
-          <MonthCalendar selected={selectedDate} onSelect={setSelectedDate} />
+          <MonthGrid selected={selectedDate} onSelect={setSelectedDate} />
           <div className="today-sum__divider" />
           {isToday ? (
             <>

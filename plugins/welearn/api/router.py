@@ -3,20 +3,18 @@
 ════════════════════════════════════════════════════════════════════
 ★ 已用真实账号校准（2026-11-15，welearn.sflep.com）：
     GET /ajax/authCourse.aspx?action=gmc      → {"ret":0,"clist":[...]}
-    GET /student/course_info.aspx?cid=2832    → HTML（单元 + 已完成/总数）
+    GET /student/course_info.aspx?cid=<cid>    → HTML（单元 + 已完成/总数）
 ★ 边界：只发 GET；没有提交作业/刷课/答题的任何写回路径。
 ★ 鉴权只靠 Cookie（.AspNet.Cookies + ASP.NET_SessionId），无签名。
-★ 第三方插件硬约束：不能相对导入；每端点 Depends(get_current_user)。
+★ 模块加载：本插件由内核以 `plugin_thirdparty_welearn` 包注册，**可以相对导入**
+  （r5 起已支持，见 core/plugins/discover.py）；勿再手写 sys.modules 加载器。
 ════════════════════════════════════════════════════════════════════
 """
 
 from __future__ import annotations
 
-import importlib.util
 import logging
 import re
-import sys
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -29,10 +27,6 @@ from core.events import event_bus
 from core.security import User
 from db.base import utcnow
 
-_HERE = Path(__file__).resolve().parent
-_MODEL_KEY = "welearn_models"
-_CLIENT_KEY = "welearn_client"
-
 _DB = Session
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -41,34 +35,31 @@ _MAX_ITEMS = 100
 _MAX_CREATE = 40
 
 #: 单元块：<h4 class="panel-title">… Unit 1 Travel … 已完成：19 /19
+#: ★ r8：两侧数字都可能各自被 `<span>` 包住（span 上还可能带 class），
+#:   旧写法只容忍第一个数字有 span ⇒ 真站若写成 `<span>19</span>/<span>19</span>` 会整页解析成空。
+#:   （此为按结构推断的加固，尚无真实快照佐证；拿到脱敏快照后用测试对齐。）
 _UNIT_RE = re.compile(
     r'<h4 class="panel-title">\s*<a[^>]*>(.*?)'
-    r'已完成：\s*(?:<span>)?(\d+)(?:</span>)?\s*/\s*(\d+)',
+    r'已完成：\s*(?:<span[^>]*>)?\s*(\d+)\s*(?:</span>)?\s*/\s*'
+    r'(?:<span[^>]*>)?\s*(\d+)',
     re.S,
 )
 _TAG_RE = re.compile(r"<[^>]+>")
 
 
-def _load_by_path(key: str, filename: str) -> Any:
-    cached = sys.modules.get(key)
-    if cached is not None:
-        return cached
-    path = _HERE / filename
-    spec = importlib.util.spec_from_file_location(key, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"welearn 无法加载 {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[key] = module
-    spec.loader.exec_module(module)
-    return module
+# ════════════════════════════ 模块加载 ════════════════════════════
+# ★ r8（N1）：内核已把 `api/` 注册成包 `plugin_thirdparty_welearn`，走相对导入。
+#   与路由共用同一份模块对象 ⇒ 卸载能一并清掉，不会「新路由配旧表模型」。
+from . import client as client_mod  # noqa: E402
+from . import models  # noqa: E402
 
 
 def _models() -> Any:
-    return _load_by_path(_MODEL_KEY, "models.py")
+    return models
 
 
 def _client_mod() -> Any:
-    return _load_by_path(_CLIENT_KEY, "client.py")
+    return client_mod
 
 
 class SessionIn(BaseModel):
@@ -113,7 +104,7 @@ def parse_units(html: str) -> list[dict[str, Any]]:
         title = _clean(name)
         if not title:
             continue
-        done_n, total_n = int(done), int(total)
+        done_n, total_n = _to_int(done), _to_int(total)
         if total_n <= 0:
             # 「课程说明」这类不是学习单元（0/0），跳过
             continue
@@ -127,6 +118,19 @@ def parse_units(html: str) -> list[dict[str, Any]]:
             }
         )
     return units
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    """上游数字可能是 "12" / "12%" / None —— 解析失败给默认值，不能抛。
+
+    ★ 裸 `int(row.get("per") or 0)` 在平台改版把 `per` 写成 "12%" 时会 ValueError，
+      而调用点只捕 WelearnError ⇒ 整窗 500。
+    """
+    try:
+        text = str(value).strip().rstrip("%").strip()
+        return int(float(text)) if ("." in text) else int(text)
+    except (TypeError, ValueError):
+        return default
 
 
 def _course_name(rows: list[dict[str, Any]], cid: str) -> str:
@@ -148,8 +152,8 @@ def _courses(client: Any) -> list[dict[str, Any]]:
                 "cid": str(row.get("cid")),
                 "scid": str(row.get("scid") or row.get("cid")),
                 "name": str(row.get("name") or "未命名课程"),
-                "task_count": int(str(row.get("taskcount") or 0) or 0),
-                "percent": int(row.get("per") or 0),
+                "task_count": _to_int(row.get("taskcount")),
+                "percent": _to_int(row.get("per")),
             }
         )
     return out
@@ -169,9 +173,10 @@ def save_session(
 ) -> dict[str, Any]:
     models = _models()
     client_mod = _client_mod()
-    client = client_mod.WelearnClient(body.cookie, body.base_url)
 
     try:
+        # 构造可能抛 shape 错（域名不在白名单 / 非 https），必须在 try 内 → 返回人话 4xx。
+        client = client_mod.WelearnClient(body.cookie, body.base_url)
         payload = client.courses()
     except client_mod.WelearnError as exc:
         raise UnauthorizedError(f"会话校验失败：{exc}") from exc

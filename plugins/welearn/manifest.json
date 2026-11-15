@@ -34,8 +34,12 @@
   "consumes": [],
   "permissions": [
     "db:own",
-    "net:out:welearn.sflep.com"
+    "net:out:sflep.com"
   ],
+  "sideEffects": {
+    "external": true,
+    "checkpoint": "before-side-effect"
+  },
   "migrations": "api/migrations",
   "settingsSchema": null
 }

@@ -17,20 +17,19 @@
 ★ 为什么没有窗口（entry 为空）：第三方插件 UI 拿不到宿主 token（B3）；
   纯 API 插件是 sdu-feeds 已验证的形态。
 
-★ 第三方插件两条硬约束：不能用相对导入；每端点必须 Depends(get_current_user)。
+★ 模块加载（r8 · N1）：本插件由内核以 `plugin_thirdparty_yuketang` 包注册
+  （core/plugins/discover.py），models/client 走相对导入，卸载可整体清理。
+  每端点必须 Depends(get_current_user)。
 ════════════════════════════════════════════════════════════════════
 """
 
 from __future__ import annotations
 
 import ast
-import importlib.util
 import json
 import logging
 import re
-import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -42,10 +41,6 @@ from core.errors import NotFoundError, UnauthorizedError, ValidationError
 from core.events import event_bus
 from core.security import User
 from db.base import utcnow
-
-_HERE = Path(__file__).resolve().parent
-_MODEL_KEY = "yuketang_models"
-_CLIENT_KEY = "yuketang_client"
 
 _DB = Session
 log = logging.getLogger(__name__)
@@ -59,27 +54,21 @@ _DUE_WINDOW = timedelta(days=30)
 _MAX_CREATE = 60
 
 
-# ════════════════════════════ 按路径加载同目录模块 ════════════════════════════
-def _load_by_path(key: str, filename: str) -> Any:
-    cached = sys.modules.get(key)
-    if cached is not None:
-        return cached
-    path = _HERE / filename
-    spec = importlib.util.spec_from_file_location(key, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"yuketang 无法加载 {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[key] = module
-    spec.loader.exec_module(module)
-    return module
+# ════════════════════════════ 模块加载 ════════════════════════════
+# ★ r8（N1）：不再手写 sys.modules 加载器。内核已把本插件的 `api/` 注册成包
+#   `plugin_thirdparty_yuketang`（core/plugins/discover.py），所以直接相对导入即可，
+#   兄弟模块与路由共用同一份模块对象 ⇒ 卸载时 unload_thirdparty_modules() 能一并清掉，
+#   不会出现「新路由配旧表模型」。
+from . import client as client_mod  # noqa: E402
+from . import models  # noqa: E402
 
 
 def _models() -> Any:
-    return _load_by_path(_MODEL_KEY, "models.py")
+    return models
 
 
 def _client_mod() -> Any:
-    return _load_by_path(_CLIENT_KEY, "client.py")
+    return client_mod
 
 
 # ════════════════════════════ 入参 ════════════════════════════
@@ -114,7 +103,9 @@ def _require_session(db: _DB) -> Any:
 
 
 def _mask(value: str) -> str:
-    return "*" * len(value) if len(value) <= 8 else f"{value[:4]}…{value[-4:]}"
+    # ★ r8（N7）：既然打码就打全。原先留前 4 + 后 4 位对单用户毫无用处，
+    #   却把会话指纹写进了响应体（也会进前端日志）。与 welearn 的 `_mask` 统一口径。
+    return f"len={len(value)} 值已隐藏"
 
 
 # ════════════════════════════ 归一化（平台改版只改这里） ════════════════════════════
@@ -129,6 +120,21 @@ def _first(raw: dict[str, Any], keys: tuple[str, ...]) -> Any:
         if key in raw and raw[key] not in (None, ""):
             return raw[key]
     return None
+
+
+def _truthy(value: Any) -> bool:
+    """上游可能给 True / 1 / "1" / "true" / "0"。
+
+    ★ 不能用裸 `bool(...)`：`bool("0")` 与 `bool("false")` 都是 True，
+      会把「未签到 / 未完成」写成已完成，且静默无报错。
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "y", "t")
+    return bool(value)
 
 
 def _to_iso(value: Any) -> str | None:
@@ -193,8 +199,8 @@ def _normalize_activity(raw: Any) -> dict[str, Any] | None:
         "title": str(title),
         "type": str(_first(raw, ("type", "actype")) or ""),
         "starts_at": _to_iso(_first(raw, ("create_time", "start_time"))),
-        "is_finished": bool(raw.get("is_finished")),
-        "attended": bool(raw.get("attend_status")),
+        "is_finished": _truthy(raw.get("is_finished")),
+        "attended": _truthy(raw.get("attend_status")),
     }
 
 
@@ -208,7 +214,7 @@ def _clean_content(value: Any) -> str:
             for parser in (json.loads, ast.literal_eval):
                 try:
                     parsed = parser(text)
-                except (ValueError, SyntaxError):
+                except Exception:  # noqa: BLE001 —— 远端字符串可能有深嵌套(RecursionError)/超长(MemoryError)
                     continue
                 if isinstance(parsed, dict):
                     text = str(parsed.get("app_text") or parsed.get("text") or "")
@@ -253,8 +259,8 @@ def _normalize_leaf(raw: Any) -> dict[str, Any] | None:
         "leaf_type": str(_first(raw, ("leaf_type",)) or ""),
         "deadline": _to_iso(deadline),
         "starts_at": _to_iso(_first(raw, ("start_time",))),
-        "is_score": bool(raw.get("is_score")),
-        "is_locked": bool(raw.get("is_locked")),
+        "is_score": _truthy(raw.get("is_score")),
+        "is_locked": _truthy(raw.get("is_locked")),
     }
 
 
@@ -320,9 +326,11 @@ def save_session(
     """保存并当场验证会话；验证不过不落库。"""
     models = _models()
     client_mod = _client_mod()
-    client = client_mod.YuketangClient(body.sessionid, body.base_url)
 
     try:
+        # 构造也可能抛 shape 错（域名不在白名单 / 非 https），必须在 try 内 →
+        # 否则会掉进兜底 500「服务器内部错误」，而 base_url 填错恰恰是最常见的首个坑。
+        client = client_mod.YuketangClient(body.sessionid, body.base_url)
         info = client.userinfo()
     except client_mod.YuketangError as exc:
         raise UnauthorizedError(
@@ -524,7 +532,14 @@ def sync_to_todo(
         label = f"{course.get('course_name') or course['name']}（{course['name']}）"
 
         if body.include_notices:
-            for notice in _fetch_notices(client, cid, body.max_items):
+            # ★ 公告是增强项：单门课公告接口 4xx（改版/权限/限流）只记 failed，
+            #   不能掀翻整次 sync —— 否则同批课程全都拿不到结果摘要。
+            try:
+                notices = _fetch_notices(client, cid, body.max_items)
+            except client_mod.YuketangError as exc:
+                failed.append({"classroom_id": cid, "stage": "notices", "error": str(exc)})
+                notices = []
+            for notice in notices:
                 key = f"{cid}:notice:{notice['notice_id']}"
                 if already(key):
                     skipped_known += 1

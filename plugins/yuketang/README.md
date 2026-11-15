@@ -12,12 +12,12 @@
 | 能力 | 端点 | 结果 |
 |---|---|---|
 | 用户信息 | `GET /v2/api/web/userinfo` | ✅ 200 |
-| 课程列表 | `GET /v2/api/web/courses/list?identity=2` | ✅ 200，**11 门课** |
+| 课程列表 | `GET /v2/api/web/courses/list?identity=2` | ✅ 200，**N 门课** |
 | 班级详情 | `GET /v2/api/web/classrooms/{cid}?role=5` | ✅ 200（`course_sign` / `uv_id`） |
 | 上课记录 | `GET /v2/api/web/logs/learn/{cid}?actype=-1&page=0&offset=N&sort=-1` | ✅ 200 |
 | 公告 | `GET /v/discussion/v2/announcements/?cid=&limit=&offset=0&type=9` | ✅ 200（多门课有公告） |
 | 章节树 | `GET /mooc-api/v1/lms/learn/course/chapter?cid=&sign=&term=latest&uv_id=` | ✅ 200（15 / 8 / 10 条不等） |
-| 写待办 | `POST /api/v1/todo/items`（经 `get_plugin_client`） | ✅ 2026-11-15 香港 demo 实测：**6 条公告 → 6 条待办**，第二次同步 `created=0 / skipped=6` |
+| 写待办 | `POST /api/v1/todo/items`（经 `get_plugin_client`） | ✅ 实测：**N 条公告 → N 条待办**，第二次同步 `created=0 / skipped=N` |
 
 **两个实测坑**（已写进 `client.py`）：
 

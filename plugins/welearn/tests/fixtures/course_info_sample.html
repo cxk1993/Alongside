@@ -1,0 +1,55 @@
+<!--
+  脱敏仿真样本：按 WE Learn `/student/course_info.aspx` 的真实结构手写，
+  不是账号抓取的快照（真实快照须脱敏后替换本文件）。
+
+  覆盖的形态：
+    1) 正常单元 + `<span>` 包数字
+    2) 已完成单元（19/19）
+    3) 0/0 的「课程说明」块（必须被跳过）
+    4) 标题里带嵌套标签 + 多余空白（必须被清洗）
+-->
+<div class="panel-group" id="accordion">
+  <div class="panel panel-default">
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a data-toggle="collapse" href="#u1" class="collapsed">
+          <span class="unit-icon"></span> Unit 1 Travel
+          已完成：<span>19</span>/<span>19</span>
+        </a>
+      </h4>
+    </div>
+  </div>
+
+  <div class="panel panel-default">
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a data-toggle="collapse" href="#u2" class="collapsed">
+          Unit 2 Food
+          已完成：<span>3</span>/<span>10</span>
+        </a>
+      </h4>
+    </div>
+  </div>
+
+  <div class="panel panel-default">
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a href="#intro">
+          课程说明
+          已完成：<span>0</span>/<span>0</span>
+        </a>
+      </h4>
+    </div>
+  </div>
+
+  <div class="panel panel-default">
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a data-toggle="collapse" href="#u3" class="collapsed">
+            Unit 3   Sports
+          已完成：<span>5</span>/<span>8</span>
+        </a>
+      </h4>
+    </div>
+  </div>
+</div>

@@ -35,6 +35,9 @@ RECENT_PATH = "/ajax/authCourse.aspx"
 
 _ALLOWED_HOST_SUFFIXES = (".sflep.com",)
 
+#: 仅本机调试才允许降级到明文 http / 非 443 端口（见 _check_base）。
+_ALLOW_INSECURE = os.environ.get("WELEARN_ALLOW_INSECURE", "") == "1"
+
 _rate_lock = threading.Lock()
 _last_call = 0.0
 
@@ -55,12 +58,26 @@ def _throttle() -> None:
 
 
 def _check_base(base_url: str) -> str:
+    """三层收口：http(s) → 域名后缀白名单 → https + 443（调试开关才放开后两层）。"""
     parsed = urlparse(base_url)
     if parsed.scheme not in ("http", "https"):
         raise WelearnError("base_url 必须是 http(s) 地址", kind="shape")
     host = (parsed.hostname or "").lower()
     if not host or not any(host.endswith(s) for s in _ALLOWED_HOST_SUFFIXES):
         raise WelearnError(f"base_url 的域名 {host!r} 不在允许列表（*.sflep.com）", kind="shape")
+    if not _ALLOW_INSECURE:
+        if parsed.scheme != "https":
+            raise WelearnError(
+                "base_url 必须用 https —— 明文 http 会让 Cookie 走上公网"
+                "（确实需要时设 WELEARN_ALLOW_INSECURE=1）",
+                kind="shape",
+            )
+        if parsed.port not in (None, 443):
+            raise WelearnError(
+                f"base_url 只允许 443 端口，收到 {parsed.port}"
+                "（确实需要时设 WELEARN_ALLOW_INSECURE=1）",
+                kind="shape",
+            )
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
@@ -83,12 +100,18 @@ class WelearnClient:
             "Referer": self._base + "/",
         }
         try:
-            with httpx.Client(timeout=TIMEOUT_SECONDS, follow_redirects=True) as c:
+            # ★ 不跟随重定向：httpx 每次跳转都会剥掉 Cookie，跟随后请求变成「无 Cookie 请求」，
+            #   平台一次规范化跳转就会让单元列表稳定为空（静默假成功）。3xx 一律判会话失效。
+            with httpx.Client(timeout=TIMEOUT_SECONDS, follow_redirects=False) as c:
                 r = c.get(self._base + path, params=params, headers=headers)
         except httpx.HTTPError as exc:
             raise WelearnError(f"连不上 WE Learn：{exc}", kind="network") from exc
         if len(r.content) > MAX_BYTES:
             raise WelearnError("响应过大，已拒绝解析", kind="upstream")
+        if r.status_code in (301, 302, 303, 307, 308):
+            raise WelearnError(
+                "被重定向到登录页：Cookie 已失效，或 base_url 不是学校所在区域", kind="auth"
+            )
         if "/login" in str(r.url) or "prelogin" in str(r.url):
             raise WelearnError("被重定向到登录页，Cookie 已失效", kind="auth")
         if r.status_code >= 400:

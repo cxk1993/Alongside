@@ -44,6 +44,10 @@ CHAPTER_PATH = "/mooc-api/v1/lms/learn/course/chapter"  # ?cid=&sign=&term=lates
 
 _ALLOWED_HOST_SUFFIXES = (".yuketang.cn", ".rainclassroom.com", ".xuetangx.com")
 
+#: 仅本机调试才允许降级到明文 http / 非 443 端口。默认关闭：
+#: 明文出网会把 sessionid 直接送上公网，非标准端口则是受限探针。
+_ALLOW_INSECURE = os.environ.get("YUKETANG_ALLOW_INSECURE", "") == "1"
+
 _rate_lock = threading.Lock()
 _last_call = 0.0
 
@@ -66,7 +70,11 @@ def _throttle() -> None:
 
 
 def _check_host(base_url: str) -> str:
-    """只允许雨课堂自己的域名——防止把会话发给任意地址。"""
+    """只允许雨课堂自己的域名——防止把会话发给任意地址。
+
+    三层收口（默认全开，`YUKETANG_ALLOW_INSECURE=1` 才放开后两层）：
+    ① 必须是 http(s)；② 域名必须命中后缀白名单；③ 必须 https 且端口是 443。
+    """
     parsed = urlparse(base_url)
     if parsed.scheme not in ("http", "https"):
         raise YuketangError("base_url 必须是 http(s) 地址", kind="shape")
@@ -76,6 +84,19 @@ def _check_host(base_url: str) -> str:
             f"base_url 的域名 {host!r} 不在允许列表（*.yuketang.cn / *.rainclassroom.com）",
             kind="shape",
         )
+    if not _ALLOW_INSECURE:
+        if parsed.scheme != "https":
+            raise YuketangError(
+                "base_url 必须用 https —— 明文 http 会让 sessionid 走上公网"
+                "（确实需要时设 YUKETANG_ALLOW_INSECURE=1）",
+                kind="shape",
+            )
+        if parsed.port not in (None, 443):
+            raise YuketangError(
+                f"base_url 只允许 443 端口，收到 {parsed.port}"
+                "（确实需要时设 YUKETANG_ALLOW_INSECURE=1）",
+                kind="shape",
+            )
     return f"{parsed.scheme}://{parsed.netloc}"
 
 

@@ -1,9 +1,11 @@
 """插件迁移 0001：建 yuketang_session / yuketang_synced。
 
 ★ 只增不改：已经执行过的迁移不许再动，要改就加 0002。
-★ models.py 必须按文件路径加载（第三方插件不能用相对导入），
-  且模块键必须与 router.py 的 `_MODEL_KEY` 逐字一致 —— 否则 SQLModel
-  会把同一张表定义两次，抛 "Table ... is already defined"。
+★ 模块加载（r8 · N1）：迁移比路由**先**执行，且自己不是任何包的子模块，
+  所以这里主动把 `api/` 按内核的包命名（`plugin_thirdparty_yuketang`）注册进
+  sys.modules，再把 models 作为该包的子模块加载 —— 于是路由那边的
+  `from . import models` 命中**同一份**模块对象，表只定义一次；
+  卸载时 `unload_thirdparty_modules()` 按包前缀清理，也能一并清掉。
 """
 
 from __future__ import annotations
@@ -13,18 +15,37 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_MODEL_MODULE = "yuketang_models"
+_PKG = "plugin_thirdparty_yuketang"
+
+
+def _ensure_pkg(api_dir: Path) -> None:
+    """把 api/ 注册成包（幂等），与 core/plugins/discover.py 的口径逐字一致。"""
+    existing = sys.modules.get(_PKG)
+    if existing is not None and getattr(existing, "__path__", None) == [str(api_dir)]:
+        return
+    spec = importlib.util.spec_from_file_location(
+        _PKG, api_dir / "__init__.py", submodule_search_locations=[str(api_dir)]
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"yuketang 无法把 {api_dir} 注册为包")
+    pkg = importlib.util.module_from_spec(spec)
+    pkg.__path__ = [str(api_dir)]  # type: ignore[attr-defined]
+    pkg.__package__ = _PKG
+    sys.modules[_PKG] = pkg
 
 
 def _load_models() -> Any:
-    cached = sys.modules.get(_MODEL_MODULE)
+    api_dir = Path(__file__).resolve().parent.parent
+    _ensure_pkg(api_dir)
+    key = f"{_PKG}.models"
+    cached = sys.modules.get(key)
     if cached is not None:
         return cached
-    path = Path(__file__).resolve().parent.parent / "models.py"
-    spec = importlib.util.spec_from_file_location(_MODEL_MODULE, path)
-    assert spec is not None and spec.loader is not None
+    spec = importlib.util.spec_from_file_location(key, api_dir / "models.py")
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"yuketang 无法加载 {api_dir / 'models.py'}")
     module = importlib.util.module_from_spec(spec)
-    sys.modules[_MODEL_MODULE] = module
+    sys.modules[key] = module
     spec.loader.exec_module(module)
     return module
 

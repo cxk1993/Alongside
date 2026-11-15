@@ -5,13 +5,13 @@
 
 ---
 
-## 验证状态（2026-11-15，真实账号 + 香港 demo）
+## 验证状态（真实账号实测）
 
 | 能力 | 端点 | 结果 |
 |---|---|---|
-| 课程列表 | `GET /ajax/authCourse.aspx?action=gmc` | ✅ 1 门课（新世纪大学英语视听说 3，进度 12%） |
-| 单元与进度 | `GET /student/course_info.aspx?cid=2832`（HTML） | ✅ 8 个单元，Unit 1 已完成 19/19 |
-| 写待办 | `POST /api/v1/todo/items` | ✅ 7 条（Unit 2–8），第二次同步 `created=0 / skipped=7` |
+| 课程列表 | `GET /ajax/authCourse.aspx?action=gmc` | ✅ 1 门课（课程 A，进度 N%） |
+| 单元与进度 | `GET /student/course_info.aspx?cid=<cid>`（HTML） | ✅ 8 个单元，首个单元已完成 X/Y |
+| 写待办 | `POST /api/v1/todo/items` | ✅ 7 条，第二次同步 `created=0 / skipped=7` |
 
 **鉴权只靠 Cookie**：`.AspNet.Cookies` + `ASP.NET_SessionId`，没有签名、没有风控参数——
 这是五家里第二个能服务端直连的（第一个是雨课堂）。

@@ -34,10 +34,14 @@
   "consumes": [],
   "permissions": [
     "db:own",
-    "net:out:www.yuketang.cn",
-    "net:out:changjiang.yuketang.cn",
-    "net:out:sdu.yuketang.cn"
+    "net:out:yuketang.cn",
+    "net:out:rainclassroom.com",
+    "net:out:xuetangx.com"
   ],
+  "sideEffects": {
+    "external": true,
+    "checkpoint": "before-side-effect"
+  },
   "migrations": "api/migrations",
   "settingsSchema": null
 }

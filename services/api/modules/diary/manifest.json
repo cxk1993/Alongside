@@ -27,7 +27,8 @@
   "provides": [
     "x.summary.today",
     "diary.entry.patch",
-    "diary.entry.delete"
+    "diary.entry.delete",
+    "x.day.peek"
   ],
   "requires": [
     "docs.node.read",

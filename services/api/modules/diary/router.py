@@ -231,3 +231,40 @@ def delete_entry(
 ) -> None:
     """软删日记（docs 回收站语义，可恢复）。"""
     _svc(request, user).delete_entry(node_id)
+
+
+# ── r7 · 日聚合能力（x.day.peek）：dashboard 环回聚合供数 ──
+@router.get("/day-peek")
+def day_peek(
+    request: Request,
+    date: str | None = Query(None, description="YYYY-MM-DD；缺省=今天"),
+    user: UserDep = Depends(get_current_user),
+) -> dict:
+    """当日日记条目（只读，不做 get-or-create 写副作用）。"""
+    svc = _svc(request, user)
+    target = date or svc.today().isoformat()
+    days = set(svc.month_days(int(target[:4]), int(target[5:7])))
+    exists = target in days
+    return {"items": [{"text": target, "state": "info"}] if exists else []}
+
+
+@router.get("/day-dots")
+def day_dots(
+    request: Request,
+    from_: str | None = Query(None, alias="from", description="起始日期"),
+    to: str | None = Query(None, description="结束日期"),
+    user: UserDep = Depends(get_current_user),
+) -> dict:
+    """区间内有日记的日期清单（逐月 month_days 并集后过滤）。只读。"""
+    svc = _svc(request, user)
+    today_iso = svc.today().isoformat()
+    start = from_ or today_iso[:8] + "01"
+    end = to or today_iso
+    y, m = int(start[:4]), int(start[5:7])
+    dates: set[str] = set()
+    while (y, m) <= (int(end[:4]), int(end[5:7])):
+        dates.update(svc.month_days(y, m))
+        m += 1
+        if m > 12:
+            y, m = y + 1, 1
+    return {"dates": sorted(d for d in dates if start <= d <= end)}

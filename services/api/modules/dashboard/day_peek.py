@@ -1,120 +1,86 @@
-"""U2 小日历 · 日聚合只读查询（day_peek / day_dots）。
+"""U2 小日历 · 日聚合（r7 起走能力发现 + HTTP 环回，dashboard 不再直读他家模型）。
 
-跨 calendar/todo/diary(docs)/review **只读聚合**，零新表。
-供顶栏小日历 peek 与右侧今日栏共用。
+★ 为什么重写：旧实现 `try: from modules.calendar.models import ...` 直读四家模型，
+  违反本模块纪律（router.py:8「插件之间不许 import——聚合走 HTTP」），且新插件
+  永远进不了月历/单日聚合。现在与 today-summary 的 BFF 同款：**能力发现 + 环回聚合**。
+
+契约（声明 `provides: "x.day.peek"` 的模块必须实现，键名固定、条目形状自由）：
+  GET /api/v1/<id>/day-peek?date=YYYY-MM-DD   → {"items": [...]}   该源当日条目
+  GET /api/v1/<id>/day-dots?from=…&to=…       → {"dates": ["YYYY-MM-DD", …]}
+
+发现：`request.app.state.modules`（运行时动态——热装插件声明即参与，无需重启）。
+降级：单家超时/失败 → 该源当日缺席（缺一不塌），不影响其余。
+复用 aggregator 的 fetch 机制（self-base / 内网 token / 测试注入 set_fetch_override）。
 """
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+import asyncio
+from datetime import date as _date
 from typing import Any
 
-from sqlmodel import Session, col, select
+from .aggregator import _safe_call, get_fetch
 
 
-def _day_range(d: date) -> tuple[datetime, datetime]:
-    start = datetime.combine(d, time.min)
-    return start, start + timedelta(days=1)
+def _providers(app: Any) -> list[str]:
+    """从模块注册表发现声明了 x.day.peek 的模块（运行时动态）。"""
+    mods = getattr(getattr(app, "state", None), "modules", None) or {}
+    out: list[str] = []
+    for pid, manifest in mods.items():
+        if not isinstance(manifest, dict):
+            continue
+        if "x.day.peek" in (manifest.get("provides") or []):
+            out.append(str(pid))
+    return sorted(out)
 
 
-def day_dots(db: Session, start: date, end: date) -> dict[str, list[str]]:
-    """月视图打点：date → ["calendar","todo",...]（有内容的源）。"""
-    marks: dict[str, set[str]] = {}
-    s0 = datetime.combine(start, time.min)
-    s1 = datetime.combine(end, time.min) + timedelta(days=1)
+async def day_peek(app: Any, d: _date) -> dict[str, Any]:
+    """单日聚合：并行环回各 provider 的 day-peek，软失败缺席。"""
+    fn = get_fetch()
+    providers = _providers(app)
+    tasks = [
+        _safe_call(fn, f"/api/v1/{pid}/day-peek?date={d.isoformat()}")
+        for pid in providers
+    ]
+    results = await asyncio.gather(*tasks) if tasks else []
 
-    def mark(dt: datetime | None, kind: str) -> None:
-        if dt is None:
-            return
-        if s0 <= dt < s1:
-            marks.setdefault(dt.date().isoformat(), set()).add(kind)
-
-    try:
-        from modules.calendar.models import CalendarEvent  # type: ignore
-
-        for ev in db.exec(select(CalendarEvent)).all():
-            mark(getattr(ev, "start_at", None) or getattr(ev, "start", None), "calendar")
-    except Exception:
-        pass
-    try:
-        from modules.todo.models import TodoItem  # type: ignore
-
-        for it in db.exec(select(TodoItem)).all():
-            if getattr(it, "done", False) or getattr(it, "status", "") == "done":
-                continue
-            mark(getattr(it, "due", None) or getattr(it, "due_at", None), "todo")
-    except Exception:
-        pass
-    return {k: sorted(v) for k, v in sorted(marks.items())}
+    list_out: dict[str, list[Any]] = {}
+    marks: dict[str, int] = {}
+    dots: dict[str, bool] = {}
+    for pid, res in zip(providers, results, strict=True):
+        if res.get("status") != "ok":
+            continue  # 单家失败 → 该源缺席，不拖累其余
+        data = res.get("data")
+        items = data.get("items") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            continue
+        list_out[pid] = items
+        marks[pid] = len(items)
+        dots[pid] = bool(items)
+    return {"date": d.isoformat(), "marks": marks, "dots": dots, "list": list_out}
 
 
-def day_peek(db: Session, d: date) -> dict[str, Any]:
-    """单日聚合：marks + list（calendar/diary/review/todo）。"""
-    s0, s1 = _day_range(d)
-    out: dict[str, Any] = {
-        "date": d.isoformat(),
-        "marks": {"calendar": 0, "diary": 0, "review": 0, "todo_open": 0},
-        "dots": {"has_event": False, "has_diary": False, "has_review": False, "has_todo": False},
-        "list": {"calendar": [], "diary": [], "review": [], "todo": []},
-    }
-    # calendar
-    try:
-        from modules.calendar.models import CalendarEvent  # type: ignore
+async def day_dots(app: Any, start: _date, end: _date) -> dict[str, list[str]]:
+    """月视图打点：date → [provider-id, …]（各源报日期，这里并集合并）。"""
+    fn = get_fetch()
+    providers = _providers(app)
+    tasks = [
+        _safe_call(
+            fn,
+            f"/api/v1/{pid}/day-dots?from={start.isoformat()}&to={end.isoformat()}",
+        )
+        for pid in providers
+    ]
+    results = await asyncio.gather(*tasks) if tasks else []
 
-        for ev in db.exec(select(CalendarEvent)).all():
-            st = getattr(ev, "start_at", None) or getattr(ev, "start", None)
-            if st and s0 <= st < s1:
-                out["list"]["calendar"].append(
-                    {"id": str(getattr(ev, "id", "")), "title": getattr(ev, "title", ""), "start": st.isoformat()}
-                )
-    except Exception:
-        pass
-    # todo
-    try:
-        from modules.todo.models import TodoItem  # type: ignore
-
-        for it in db.exec(select(TodoItem)).all():
-            due = getattr(it, "due", None) or getattr(it, "due_at", None)
-            done = bool(getattr(it, "done", False) or getattr(it, "status", "") == "done")
-            if due and s0 <= due < s1 and not done:
-                out["list"]["todo"].append(
-                    {"id": str(getattr(it, "id", "")), "title": getattr(it, "title", ""), "done": False}
-                )
-    except Exception:
-        pass
-    # diary / review：日期串匹配 docs 树或 review 表（尽力而为）
-    key = d.isoformat()
-    short = f"{d.year:04d}/{d.month:02d}/{d.day:02d}"
-    try:
-        from modules.docs.models import DocsNode  # type: ignore
-
-        for n in db.exec(select(DocsNode)).all():
-            name = getattr(n, "name", "") or ""
-            path_hint = name + " " + str(getattr(n, "meta_json", "") or "")
-            if key in path_hint or short in path_hint:
-                out["list"]["diary"].append({"id": str(n.id), "title": name})
-    except Exception:
-        pass
-    try:
-        from modules.review.models import ReviewDay  # type: ignore
-
-        for r in db.exec(select(ReviewDay)).all():
-            day = getattr(r, "day", None) or getattr(r, "date", None)
-            ds = day.isoformat() if hasattr(day, "isoformat") else str(day or "")
-            if ds == key:
-                out["list"]["review"].append({"id": str(getattr(r, "id", "")), "title": ds})
-    except Exception:
-        pass
-
-    out["marks"] = {
-        "calendar": len(out["list"]["calendar"]),
-        "diary": len(out["list"]["diary"]),
-        "review": len(out["list"]["review"]),
-        "todo_open": len(out["list"]["todo"]),
-    }
-    out["dots"] = {
-        "has_event": out["marks"]["calendar"] > 0,
-        "has_diary": out["marks"]["diary"] > 0,
-        "has_review": out["marks"]["review"] > 0,
-        "has_todo": out["marks"]["todo_open"] > 0,
-    }
-    return out
+    out: dict[str, list[str]] = {}
+    for pid, res in zip(providers, results, strict=True):
+        if res.get("status") != "ok":
+            continue
+        data = res.get("data")
+        dates = data.get("dates") if isinstance(data, dict) else None
+        if not isinstance(dates, list):
+            continue
+        for ds in dates:
+            if isinstance(ds, str) and start.isoformat() <= ds <= end.isoformat():
+                out.setdefault(ds, []).append(pid)
+    return {k: sorted(v) for k, v in sorted(out.items())}

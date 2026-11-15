@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi import Path as FPath
 from fastapi import Query
 
@@ -74,35 +74,35 @@ async def today(
 
 
 @router.get("/day-peek")
-def day_peek_endpoint(
+async def day_peek_endpoint(
+    request: Request,
     date: str | None = Query(None, description="要看的日期（YYYY-MM-DD 日历日；不传=今天）"),
-    db: Annotated[Any, Depends(get_db)] = None,
     _user: UserDep = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """U2 小日历：单日聚合（日程/日记/复盘/待办）。只读。"""
+    """U2 小日历：单日聚合（r7 起按 x.day.peek 能力发现 + 环回聚合）。只读。"""
     from datetime import date as _date
 
     from .day_peek import day_peek as _peek
 
     d = _date.fromisoformat(date) if date else _date.today()
-    return _peek(db, d)
+    return await _peek(request.app, d)
 
 
 @router.get("/day-dots")
-def day_dots_endpoint(
+async def day_dots_endpoint(
+    request: Request,
     from_: Annotated[str | None, Query(alias="from", description="起始日期（YYYY-MM-DD 日历日）")] = None,
     to: str | None = Query(None, description="结束日期（YYYY-MM-DD 日历日）"),
-    db: Annotated[Any, Depends(get_db)] = None,
     _user: UserDep = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """U2 小日历：区间打点（月视图）。只读。"""
+    """U2 小日历：区间打点（月视图；r7 起按 x.day.peek 能力发现）。只读。"""
     from datetime import date as _date
 
     from .day_peek import day_dots as _dots
 
     start = _date.fromisoformat(from_) if from_ else _date.today().replace(day=1)
     end = _date.fromisoformat(to) if to else start
-    return _dots(db, start, end)
+    return await _dots(request.app, start, end)
 
 
 @router.get("/health-of-system", response_model=HealthOfSystemOut)

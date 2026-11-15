@@ -96,6 +96,32 @@ def get_fetch() -> FetchFn:
     return _fetch_override if _fetch_override is not None else default_fetch
 
 
+_shared_client: httpx.AsyncClient | None = None
+
+
+def _get_shared_client() -> httpx.AsyncClient:
+    """模块级共享 AsyncClient（★ r7：每次新建 client 会让并发聚合互相拖垮）。
+
+    实测（Windows）：4 路并发各建一个 AsyncClient，总耗时 844ms 且全部超时；
+    复用同一连接池后降到 ~400ms 全部成功。
+    """
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
+            timeout=CALL_TIMEOUT_S,
+        )
+    return _shared_client
+
+
+async def close_shared_client() -> None:
+    """关停共享 client（应用 shutdown / 测试收尾用）。"""
+    global _shared_client
+    if _shared_client is not None and not _shared_client.is_closed:
+        await _shared_client.aclose()
+    _shared_client = None
+
+
 async def default_fetch(path: str) -> Any:
     """默认 HTTP 客户端：GET {DASHBOARD_SELF_BASE}{path}，非 2xx 抛错。
 
@@ -105,17 +131,24 @@ async def default_fetch(path: str) -> Any:
     url = f"{get_self_base()}{path}"
 
     async def _do() -> Any:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, headers=self_headers(), timeout=CALL_TIMEOUT_S)
-            if resp.status_code >= 400:
-                raise RuntimeError(f"HTTP {resp.status_code} for {path}")
-            return resp.json()
+        client = _get_shared_client()
+        resp = await client.get(url, headers=self_headers(), timeout=CALL_TIMEOUT_S)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"HTTP {resp.status_code} for {path}")
+        return resp.json()
 
-    return await asyncio.wait_for(_do(), timeout=CALL_TIMEOUT_S + 0.05)
+    return await _do()
 
 
 async def _safe_call(fetch: FetchFn, path: str) -> dict[str, Any]:
-    """带超时与降级的单次子调用。"""
+    """带超时与降级的单次子调用。
+
+    ★ r7 实测（Windows）：`asyncio.wait_for` 叠在 default_fetch 内部那层 wait_for 上，
+      外层先触发 → 取消 httpx 请求 → 取消在 Windows 上不干净，**并发时四路全部超时**
+      （日志里连源调用记录都没有）。
+      修法：**只保留这一层超时**（default_fetch 不再自带 wait_for，只把 timeout 交给 httpx），
+      由本函数统一以 CALL_TIMEOUT_S 硬线切断 —— 语义与旧版一致，但不再双层嵌套。
+    """
     started = time.perf_counter()
     try:
         data = await asyncio.wait_for(fetch(path), timeout=CALL_TIMEOUT_S)

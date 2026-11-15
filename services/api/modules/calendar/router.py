@@ -49,6 +49,21 @@ def _emit(topic: str, payload: dict) -> None:
     event_bus.publish(topic, payload=payload, source="calendar")
 
 
+def _as_aware(dt):
+    """把 naive datetime 视为 UTC（DB 存 UTC），aware 原样返回；None 透传。
+
+    ★ r7 实测：due_at/start_at 是 TimestampTZ（aware），而 date.combine 造的是 naive，
+      直接比较会 TypeError（旧实现被 try/except 静默吞掉，表现为"永远没数据"）。
+    """
+    from datetime import UTC, datetime as _datetime
+
+    if dt is None:
+        return None
+    if isinstance(dt, _datetime) and dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
+
+
 @router.get("/health")
 def health() -> dict[str, bool]:
     """每个插件都必须有 health —— 内核据此判断"该能力是否可用"。"""
@@ -293,3 +308,54 @@ except Exception as _rs_exc:  # noqa: BLE001
     import logging
 
     logging.getLogger("calendar.reminder").warning("calendar 提醒调度启动失败: %s", _rs_exc)
+
+
+# ── r7 · 日聚合能力（x.day.peek）：dashboard 环回聚合供数 ──
+@router.get("/day-peek")
+def day_peek(
+    date: str | None = Query(None, description="YYYY-MM-DD；缺省=今天"),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> dict:
+    """当日日程条目（dashboard x.day.peek 环回聚合消费）。只读。"""
+    from datetime import date as _date, datetime as _dt, time as _time
+    from sqlmodel import select
+
+    from .models import CalendarEvent
+
+    d = _date.fromisoformat(date) if date else _date.today()
+    s0 = _dt.combine(d, _time.min, tzinfo=UTC)
+    s1 = s0 + timedelta(days=1)
+    items = []
+    for ev in db.exec(select(CalendarEvent)).all():
+        st = getattr(ev, "start_at", None) or getattr(ev, "start", None)
+        if st and _as_aware(st) and s0 <= _as_aware(st) < s1:
+            items.append(
+                {"id": str(getattr(ev, "id", "")), "title": getattr(ev, "title", ""), "start": st.isoformat()}
+            )
+    return {"items": items}
+
+
+@router.get("/day-dots")
+def day_dots(
+    from_: str | None = Query(None, alias="from", description="起始日期"),
+    to: str | None = Query(None, description="结束日期"),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> dict:
+    """区间内有日程的日期清单（只读）。"""
+    from datetime import date as _date, datetime as _dt, time as _time, timedelta as _td
+    from sqlmodel import select
+
+    from .models import CalendarEvent
+
+    start = _date.fromisoformat(from_) if from_ else _date.today().replace(day=1)
+    end = _date.fromisoformat(to) if to else start
+    s0 = _dt.combine(start, _time.min, tzinfo=UTC)
+    s1 = _dt.combine(end, _time.min, tzinfo=UTC) + _td(days=1)
+    dates: set[str] = set()
+    for ev in db.exec(select(CalendarEvent)).all():
+        st = getattr(ev, "start_at", None) or getattr(ev, "start", None)
+        if st and _as_aware(st) and s0 <= _as_aware(st) < s1:
+            dates.add(_as_aware(st).date().isoformat())
+    return {"dates": sorted(dates)}

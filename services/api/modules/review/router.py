@@ -211,3 +211,48 @@ def create_note(
 ) -> ReviewNoteOut:
     """写 Alongside 自己的批注，不写回 Work-Review / 不污染 raw。"""
     return ReviewService(db).add_note(body.date, body.content_md)
+
+
+# ── r7 · 日聚合能力（x.day.peek）：dashboard 环回聚合供数 ──
+@router.get("/day-peek")
+def day_peek(
+    date: str | None = Query(None, description="YYYY-MM-DD；缺省=今天"),
+    db: Session = Depends(get_db),
+    _user: UserDep = Depends(get_current_user),
+) -> dict:
+    """当日复盘条目（只读）。"""
+    from sqlmodel import select
+
+    from .models import ReviewDaily
+
+    d = DateType.fromisoformat(date) if date else DateType.today()
+    items = []
+    for r in db.exec(select(ReviewDaily)).all():
+        day = getattr(r, "day", None) or getattr(r, "date", None)
+        ds = day.isoformat() if hasattr(day, "isoformat") else str(day or "")
+        if ds == d.isoformat():
+            items.append({"id": str(getattr(r, "id", "")), "title": ds})
+    return {"items": items}
+
+
+@router.get("/day-dots")
+def day_dots(
+    from_: str | None = Query(None, alias="from", description="起始日期"),
+    to: str | None = Query(None, description="结束日期"),
+    db: Session = Depends(get_db),
+    _user: UserDep = Depends(get_current_user),
+) -> dict:
+    """区间内有复盘的日期清单（只读）。"""
+    from sqlmodel import select
+
+    from .models import ReviewDaily
+
+    start = DateType.fromisoformat(from_) if from_ else DateType.today().replace(day=1)
+    end = DateType.fromisoformat(to) if to else start
+    dates: set[str] = set()
+    for r in db.exec(select(ReviewDaily)).all():
+        day = getattr(r, "day", None) or getattr(r, "date", None)
+        ds = day.isoformat() if hasattr(day, "isoformat") else str(day or "")
+        if start.isoformat() <= ds <= end.isoformat():
+            dates.add(ds)
+    return {"dates": sorted(dates)}

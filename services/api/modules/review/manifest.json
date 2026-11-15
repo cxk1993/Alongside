@@ -30,7 +30,8 @@
     "review.note.write",
     "review.source.read",
     "x.summary.today",
-    "review.note.delete"
+    "review.note.delete",
+    "x.day.peek"
   ],
   "requires": [],
   "slots": [],

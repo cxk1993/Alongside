@@ -36,7 +36,8 @@
     "calendar.event.patch",
     "calendar.event.delete",
     "calendar.child.patch",
-    "calendar.child.delete"
+    "calendar.child.delete",
+    "x.day.peek"
   ],
   "requires": [],
   "slots": [

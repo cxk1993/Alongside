@@ -18,6 +18,7 @@ HTTP 契约（全项目统一，不许自创）：
 """
 import json
 from pathlib import Path
+from datetime import UTC
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -69,6 +70,21 @@ with _MANIFEST_PATH.open(encoding="utf-8") as _f:
 # ★ 依赖别名**只做类型**，不要把 Depends 塞进 Annotated。
 DbDep = Session
 UserDep = User
+
+
+def _as_aware(dt):
+    """把 naive datetime 视为 UTC（DB 存 UTC），aware 原样返回；None 透传。
+
+    ★ r7 实测：due_at/start_at 是 TimestampTZ（aware），而 date.combine 造的是 naive，
+      直接比较会 TypeError（旧实现被 try/except 静默吞掉，表现为"永远没数据"）。
+    """
+    from datetime import UTC, datetime as _datetime
+
+    if dt is None:
+        return None
+    if isinstance(dt, _datetime) and dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
 
 
 @router.get("/health")
@@ -311,3 +327,56 @@ except Exception as _due_exc:  # noqa: BLE001
     import logging
 
     logging.getLogger("todo.due").warning("待办到期提醒调度启动失败: %s", _due_exc)
+
+
+# ── r7 · 日聚合能力（x.day.peek）：dashboard 环回聚合供数 ──
+@router.get("/day-peek")
+def day_peek(
+    date: str | None = Query(None, description="YYYY-MM-DD；缺省=今天"),
+    db: Session = Depends(get_db),
+    _user: UserDep = Depends(get_current_user),
+) -> dict:
+    """当日未完成待办（只读）。"""
+    from datetime import date as _date, datetime as _dt, time as _time, timedelta as _td
+    from sqlmodel import select
+
+    from .models import TodoItem
+
+    d = _date.fromisoformat(date) if date else _date.today()
+    s0 = _dt.combine(d, _time.min, tzinfo=UTC)
+    s1 = s0 + _td(days=1)
+    items = []
+    for it in db.exec(select(TodoItem)).all():
+        if getattr(it, "done", False) or getattr(it, "status", "") == "done":
+            continue
+        due = _as_aware(getattr(it, "due", None) or getattr(it, "due_at", None))
+        if due and s0 <= due < s1:
+            items.append({"id": str(getattr(it, "id", "")), "title": getattr(it, "title", ""), "done": False})
+    return {"items": items}
+
+
+@router.get("/day-dots")
+def day_dots(
+    from_: str | None = Query(None, alias="from", description="起始日期"),
+    to: str | None = Query(None, description="结束日期"),
+    db: Session = Depends(get_db),
+    _user: UserDep = Depends(get_current_user),
+) -> dict:
+    """区间内有未完成待办的日期清单（只读）。"""
+    from datetime import date as _date, datetime as _dt, time as _time, timedelta as _td
+    from sqlmodel import select
+
+    from .models import TodoItem
+
+    start = _date.fromisoformat(from_) if from_ else _date.today().replace(day=1)
+    end = _date.fromisoformat(to) if to else start
+    s0 = _dt.combine(start, _time.min, tzinfo=UTC)
+    s1 = _dt.combine(end, _time.min, tzinfo=UTC) + _td(days=1)
+    dates: set[str] = set()
+    for it in db.exec(select(TodoItem)).all():
+        if getattr(it, "done", False) or getattr(it, "status", "") == "done":
+            continue
+        due = _as_aware(getattr(it, "due", None) or getattr(it, "due_at", None))
+        if due and s0 <= due < s1:
+            dates.add(due.date().isoformat())
+    return {"dates": sorted(dates)}

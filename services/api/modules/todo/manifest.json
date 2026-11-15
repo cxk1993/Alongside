@@ -28,7 +28,8 @@
     "todo.item.patch",
     "todo.tag.read",
     "x.summary.today",
-    "todo.item.delete"
+    "todo.item.delete",
+    "x.day.peek"
   ],
   "requires": [],
   "slots": [

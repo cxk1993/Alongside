@@ -12,7 +12,7 @@
     "w": 720,
     "h": 520
   },
-  "entry": "",
+  "entry": "@/apps/plugins",
   "api": {
     "base": "/api/v1/plugins",
     "openapi": "/api/v1/plugins/openapi.json",

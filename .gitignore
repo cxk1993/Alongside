@@ -1,4 +1,4 @@
-# ── 密钥与本地配置（★ 最重要的一条：.env 绝不进仓库）──
+﻿# ── 密钥与本地配置（★ 最重要的一条：.env 绝不进仓库）──
 .env
 .env.*
 !.env.example
@@ -71,3 +71,12 @@ apps/web/dist_old_*/
 # 上面的 `dist/` 是通用忽略规则，这里为这一个目录开负向例外。
 !plugins/hello-seam/web/dist/
 !plugins/hello-seam/web/dist/index.js
+
+# ── 校园内嵌窗口插件：UI 产物同样必须入库（同 hello-seam 的理由）──
+# 没有 web/dist/index.js，远端 clone 后这些插件装上也不会渲染窗口。
+!plugins/zhidao/web/dist/
+!plugins/zhidao/web/dist/index.js
+!plugins/mooc/web/dist/
+!plugins/mooc/web/dist/index.js
+!plugins/ucampus/web/dist/
+!plugins/ucampus/web/dist/index.js

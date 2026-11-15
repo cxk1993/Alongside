@@ -32,8 +32,11 @@ function wrapper(): { el: ReactNode } {
   };
 }
 
+/** 与真 BFF 一致：label = manifest 名（_fetch_one 有值才放）。 */
+const LABELS: Record<string, string> = { calendar: "日程", todo: "待办", diary: "日记", review: "复盘" };
 const okProv = (id: string, data?: unknown) => ({
   id,
+  label: LABELS[id] ?? id,
   status: "ok" as const,
   data: data ?? { title: "", items: [] },
 });
@@ -75,7 +78,11 @@ describe("U2 · TimeWidget（聚合小日历视图侧）", () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url.startsWith("/api/v1/dashboard/day-dots")) return {};
       return summary(
-        ["calendar", "todo", "diary", "review"].map((id) => ({ id, status: "not-implemented" })),
+        ["calendar", "todo", "diary", "review"].map((id) => ({
+          id,
+          label: LABELS[id] ?? id,
+          status: "not-implemented" as const,
+        })),
       );
     });
     const { el } = wrapper();
@@ -289,7 +296,7 @@ describe("U2 · TimeWidget（聚合小日历视图侧）", () => {
     await waitFor(() => expect(screen.getByText("复盘了本周")).toBeTruthy());
   });
 
-  it("J13 · BFF 401 → 分区显示「未登录 · 请重新登录」（V4-01：不再混为暂时不可用）", async () => {
+  it("J13 · BFF 401 → 面板级「未登录 · 请重新登录」（V4-01：不再混为暂时不可用）", async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url.startsWith("/api/v1/dashboard/day-dots")) return {};
       throw new ApiError({ type: "about:blank", title: "401", status: 401, detail: "unauthorized" });
@@ -297,8 +304,30 @@ describe("U2 · TimeWidget（聚合小日历视图侧）", () => {
     const { el } = wrapper();
     render(el);
     fireEvent.click(screen.getByLabelText(/当前时间/));
-    await waitFor(() => expect(screen.getByTestId("today-sum-calendar-auth")).toBeTruthy());
-    expect(screen.getAllByText("未登录 · 请重新登录").length).toBe(4); // BFF 401 → 四分区全显未登录
+    await waitFor(() => expect(screen.getByTestId("today-summary-auth")).toBeTruthy());
+    // r6 起 401 上移到面板级：一条提示，不逐分区重复
+    expect(screen.getAllByText("未登录 · 请重新登录").length).toBe(1);
     expect(screen.queryByText("暂时不可用")).toBeNull();
+  });
+
+  it("J14 · 新插件声明 today-summary ⇒ 分区自动出现（r6 数据驱动验收）", async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.startsWith("/api/v1/dashboard/day-dots")) return {};
+      return summary([
+        ...["calendar", "todo", "diary", "review"].map((id) => okProv(id)),
+        {
+          id: "mood",
+          label: "心情",
+          status: "ok",
+          data: { title: "", items: [{ text: "今天很开心" }] },
+        },
+      ]);
+    });
+    const { el } = wrapper();
+    render(el);
+    fireEvent.click(screen.getByLabelText(/当前时间/));
+    await waitFor(() => expect(screen.getByTestId("today-sum-mood")).toBeTruthy());
+    expect(screen.getByText("心情")).toBeTruthy();
+    expect(screen.getByText("今天很开心")).toBeTruthy();
   });
 });

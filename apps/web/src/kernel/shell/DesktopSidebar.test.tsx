@@ -8,11 +8,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { DesktopSidebar } from "./DesktopSidebar";
 import { registerContributions, unregisterContributions } from "../slots/contributions";
 import { useDesktopStore } from "../store";
+
+// r6 起今日摘要行清单来自 BFF providers —— 需要 mock api（此前静态四源不依赖网络）。
+vi.mock("@/shared/api/client", async () => {
+  const actual = await vi.importActual<typeof import("@/shared/api/client")>("@/shared/api/client");
+  return { ...actual, api: { get: vi.fn() } };
+});
+import { api } from "@/shared/api/client";
 
 // 摘要卡需要 QueryClient（BFF 拉取）。用模块级 client，rerender 间保持同一实例。
 const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -37,6 +44,8 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
   beforeEach(() => {
     resetStore();
     localStorage.clear();
+    // 默认空 providers；K5 等用例自行覆盖 mockImplementation
+    vi.mocked(api.get).mockResolvedValue({ providers: [] });
   });
   afterEach(() => {
     cleanup();
@@ -86,12 +95,25 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
     ).toBe("true");
   });
 
-  it("K5 · 右栏内置今日摘要（四源入口 + 计数）", async () => {
+  it("K5 · 右栏内置今日摘要（行清单 = BFF providers 动态派生 + 计数）", async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === "/api/v1/summary/today") {
+        return {
+          providers: [
+            { id: "calendar", label: "日程", status: "ok", data: { items: [{ text: "x" }] } },
+            { id: "todo", label: "待办", status: "ok", data: { items: [] } },
+            { id: "diary", label: "日记", status: "ok", data: { items: [] } },
+            { id: "review", label: "复盘", status: "ok", data: { items: [] } },
+          ],
+        };
+      }
+      return { providers: [] };
+    });
     const { container } = renderSide(<DesktopSidebar side="right" />);
     expect(container.querySelector("[data-testid='desktop-today-summary']")).toBeTruthy();
-    expect(screen.getByText("待办")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("待办")).toBeTruthy());
     expect(screen.getByText("复盘")).toBeTruthy();
-    // ★ 2026-09-27：四源各带一个计数位（拿不到时显示 '?'，不阻塞入口可用性）
+    // ★ 计数位与 providers 一一对应（拿不到时显示 '—'，不阻塞入口可用性）
     //   testid 用索引（中性），不在 kernel 测试里引入业务词。
     expect(screen.getAllByTestId(/^today-count-/)).toHaveLength(4);
   });

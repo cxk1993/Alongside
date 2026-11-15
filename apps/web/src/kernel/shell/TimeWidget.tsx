@@ -2,23 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/shared/api/client";
+import { providerLabels, useSummaryToday, type SummaryProvider } from "./summaryToday";
 import { useDesktopStore } from "../store";
 
 /**
  * U2 · 聚合小日历 · 视图侧（拍案 1 号：U2 视图层 → Doubao）。
  *
- * 右上角时间区 → 点击展开「今日摘要」面板，跨插件聚合：
- *   calendar 日程 / todo 待办 / diary 日记 / review 复盘
+ * 右上角时间区 → 点击展开「今日摘要」面板，跨插件聚合。
+ * ★ r6 起分区清单 = BFF providers[]（后端按 manifest `x.summary.today` 动态发现）——
+ *   新插件声明能力即自动出现，本文件不再记任何模块名单（内核洁癖随之收紧）。
  *
- * 数据契约（workbuddy《todaySummary 数据源规范 v1》· 前端并发调各插件自供端点）：
- *   GET /api/v1/<id>/today-summary
- *   → { title?, items:[{text, state?, count?}], link? }   items ≤5
+ * 数据契约（《todaySummary 数据源规范 v1》· 裁决令61 丙案：前端只调 BFF 单请求）：
+ *   GET /api/v1/summary/today → { providers: [{id, label?, status, data?}] }
+ *   源形状：{ title?, items:[{text, state?, count?}], link? }   items ≤5
  * 三态语义（★ 铁律：「没装」≠「没数据」必须界面可区分）：
- *   404           → 「未安装 · 去安装」（占位，不消失）
- *   200 空 items  → 「今日暂无 X」（空态）
- *   200 有        → 列表
- *   5xx           → 「暂时不可用」（≠ 没数据）
- * 铁律：逐分区独立 try/catch（某插件坏了不拖累其余）；不轮询。
+ *   not-implemented → 「未安装 · 去安装」（占位，不消失）
+ *   200 空 items    → 「今日暂无 X」（空态）
+ *   200 有          → 列表
+ *   unavailable/5xx → 「暂时不可用」（≠ 没数据）；BFF 整体失败 → 面板级降级（401=未登录）
+ * 铁律：逐分区独立降级（某插件坏了不拖累其余）；不轮询。
  */
 
 interface TodaySummaryItem {
@@ -26,22 +28,6 @@ interface TodaySummaryItem {
   state?: "info" | "due" | "done" | "alert";
   count?: number;
 }
-/** 内核 BFF /api/v1/summary/today（裁决令61 丙案：前端只调这一个，杜绝双份）。 */
-interface SummaryProvider {
-  id: string;
-  status: "ok" | "not-implemented" | "unavailable";
-  data?: { title?: string; items?: unknown[]; link?: string };
-}
-interface SummaryTodayResp {
-  providers: SummaryProvider[];
-}
-
-const PROV_SOURCES = [
-  { id: "calendar", moduleId: "calendar", label: "日程" }, // purity-ok: U2 规范四源清单（BFF provider id 数据源声明，裁决令61丙案只调 BFF），非业务逻辑
-  { id: "todo", moduleId: "todo", label: "待办" },
-  { id: "diary", moduleId: "diary", label: "日记" },
-  { id: "review", moduleId: "review", label: "复盘" },
-] as const;
 
 function useClock(): string {
   const [now, setNow] = useState(() => formatNow());
@@ -88,50 +74,30 @@ function normalizeItems(items: unknown): TodaySummaryItem[] {
     .filter((it): it is TodaySummaryItem => it !== null);
 }
 
-/** 单个插件分区：三态渲染 + 独立降级（U2 判据 J3/J4/J6）。
- * 裁决令61 丙案：前端只调 BFF /api/v1/summary/today（单请求，四分区共享）；
- * provider.status 三态 = ok / not-implemented（未安装）/ unavailable（暂时不可用）。 */
-function ProvSection({ id, moduleId, label }: { id: string; moduleId: string; label: string }) {
+/** 单个插件分区（r6 起数据驱动：分区清单 = BFF providers，新源声明能力即自动出现）。
+ * 三态语义不变（U2 判据 J3/J4/J6）：not-implemented → 未安装占位（不消失）·
+ * unavailable → 暂时不可用 · ok → 列表/空态。
+ * BFF 整体失败（401/5xx）不再是分区职责 —— 已上移到面板级（V4-01 语义保留）。 */
+function ProvSection({ provider }: { provider: SummaryProvider }) {
   const openWindow = useDesktopStore((s) => s.openWindow);
-  const { data, isError, isLoading, error } = useQuery({
-    queryKey: ["summary-today"],
-    queryFn: (): Promise<SummaryTodayResp> => api.get<SummaryTodayResp>("/api/v1/summary/today"),
-    retry: 1,
-    refetchOnWindowFocus: false,
-  });
-
-  const prov = data?.providers?.find((p) => p.id === id);
-  const body = prov?.data;
-  const items = normalizeItems(body?.items);
-  const go = () => openWindow(moduleId);
+  const { id, status, data } = provider;
+  const label = provider.label ?? id;
+  const items = normalizeItems(data?.items);
+  const go = () => openWindow(id);
 
   return (
     <section className="today-sum__sec" data-testid={`today-sum-${id}`}>
       <button type="button" className="today-sum__head" onClick={go}>
         <span>{label}</span>
-        {body?.title ? <span className="today-sum__sub">{body.title}</span> : null}
+        {data?.title ? <span className="today-sum__sub">{data.title}</span> : null}
         {items.length > 0 ? <span className="today-sum__count">{items.length}</span> : null}
       </button>
-      {isLoading ? (
-        <div className="today-sum__empty">…</div>
-      ) : isError ? (
-        // V4-01：BFF 端点 401（未登录/会话过期）→ 「未登录」子态，不再混进「暂时不可用」
-        error instanceof ApiError && error.status === 401 ? (
-          <div className="today-sum__empty" data-testid={`today-sum-${id}-auth`}>
-            未登录 · 请重新登录
-          </div>
-        ) : (
-          // BFF 端点本身 5xx/404 → 全面板降级（单点，非「没数据」）
-          <div className="today-sum__empty" data-testid={`today-sum-${id}-err`}>
-            暂时不可用
-          </div>
-        )
-      ) : prov?.status === "not-implemented" ? (
+      {status === "not-implemented" ? (
         // 该源未实现：占位 + 引导（★ 铁律：不消失，可操作）
         <div className="today-sum__na" data-testid={`today-sum-${id}-na`}>
           未安装 · 去安装
         </div>
-      ) : prov?.status === "unavailable" ? (
+      ) : status === "unavailable" ? (
         // 该源 5xx/超时：独立降级（缺一不塌）
         <div className="today-sum__empty" data-testid={`today-sum-${id}-err`}>
           暂时不可用
@@ -188,9 +154,8 @@ function monthGrid(year: number, month: number): (string | null)[] {
   return cells;
 }
 
-const DOT_KIND = PROV_SOURCES.map((p) => p.id);
-
-/** 月历：day-dots 打点 + 选中日切换（U2 v2）。 */
+/** 月历：day-dots 打点 + 选中日切换（U2 v2）。
+ * 打点种类 = 当月 day-dots 返回值的并集（数据驱动，不记名单；未知源走默认色）。 */
 function MonthGrid({
   selected,
   onSelect,
@@ -218,6 +183,8 @@ function MonthGrid({
     retry: 1,
     refetchOnWindowFocus: false,
   });
+  // 打点种类 = 当月出现过的源并集（后端给什么画什么，前端不记名单）
+  const dotKinds = [...new Set(Object.values(dots ?? {}).flat())].sort();
 
   const shift = (delta: number) => {
     const d = new Date(y, m + delta, 1);
@@ -267,7 +234,7 @@ function MonthGrid({
               {Number(d.slice(8, 10))}
               {(dots?.[d]?.length ?? 0) > 0 ? (
                 <span className="today-sum__cal-dots" aria-hidden="true">
-                  {DOT_KIND.map((k) => (
+                  {dotKinds.map((k) => (
                     <i
                       key={k}
                       className={`today-sum__cal-dot today-sum__cal-dot--${k}${dots?.[d]?.includes(k) ? " is-on" : ""}`}
@@ -283,13 +250,12 @@ function MonthGrid({
   );
 }
 
-const PEEK_LABELS: Record<string, string> = Object.fromEntries(
-  PROV_SOURCES.map((p) => [p.id, p.label]),
-);
-
-/** 选中日聚合：day-peek 四源（历史/未来日；软失败空态）。 */
+/** 选中日聚合：day-peek（历史/未来日；软失败空态）。
+ * 分区 = 响应 list 的键（数据驱动）；显示名 = 今日摘要 providers 的 manifest 名。 */
 function DayPeekPanel({ date }: { date: string }) {
   const openWindow = useDesktopStore((s) => s.openWindow);
+  const { data: summaryData } = useSummaryToday();
+  const labels = providerLabels(summaryData?.providers);
   const { data, isError, isLoading, error } = useQuery({
     queryKey: ["day-peek", date],
     queryFn: async (): Promise<DayPeekResp> =>
@@ -308,16 +274,16 @@ function DayPeekPanel({ date }: { date: string }) {
 
   return (
     <div className="today-sum__peek" data-testid="day-peek-panel">
-      {Object.keys(PEEK_LABELS).map((k) => {
+      {Object.keys(data?.list ?? {}).map((k) => {
         const items = data?.list?.[k] ?? [];
         return (
           <section key={k} className="today-sum__sec" data-testid={`day-peek-${k}`}>
             <button type="button" className="today-sum__head" onClick={() => openWindow(k)}>
-              <span>{PEEK_LABELS[k]}</span>
+              <span>{labels[k] ?? k}</span>
               {items.length > 0 ? <span className="today-sum__count">{items.length}</span> : null}
             </button>
             {items.length === 0 ? (
-              <div className="today-sum__empty">当日暂无{PEEK_LABELS[k]}</div>
+              <div className="today-sum__empty">当日暂无{labels[k] ?? k}</div>
             ) : (
               <ul className="today-sum__list">
                 {items.map((it, i) => (
@@ -352,6 +318,8 @@ export function TimeWidget() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   })();
   const isToday = selectedDate === todayStr;
+  // r6：今日摘要单请求上提到面板级，分区由 providers 数据驱动（新源声明能力即自动出现）
+  const summaryQ = useSummaryToday();
 
   // 点击外部 / Esc 关闭（判据 J1）
   useEffect(() => {
@@ -394,9 +362,24 @@ export function TimeWidget() {
           {isToday ? (
             <>
               <div className="today-sum__title">今日摘要</div>
-              {PROV_SOURCES.map((p) => (
-                <ProvSection key={p.id} id={p.id} moduleId={p.moduleId} label={p.label} />
-              ))}
+              {summaryQ.isLoading ? (
+                <div className="today-sum__empty">…</div>
+              ) : summaryQ.isError ? (
+                // V4-01：BFF 401（未登录/会话过期）→ 面板级「未登录」；其余 → 暂时不可用
+                summaryQ.error instanceof ApiError && summaryQ.error.status === 401 ? (
+                  <div className="today-sum__empty" data-testid="today-summary-auth">
+                    未登录 · 请重新登录
+                  </div>
+                ) : (
+                  <div className="today-sum__empty" data-testid="today-summary-err">
+                    暂时不可用
+                  </div>
+                )
+              ) : (
+                (summaryQ.data?.providers ?? []).map((p) => (
+                  <ProvSection key={p.id} provider={p} />
+                ))
+              )}
             </>
           ) : (
             <>

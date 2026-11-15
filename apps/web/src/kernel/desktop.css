@@ -1204,6 +1204,25 @@
   font-size: 11px;
   color: var(--txt-faint);
 }
+/* r8：后端薄壳的可行动出口（「打开插件管理」）—— 死窗口升级为指路窗口 */
+.win__placeholder-action {
+  margin-top: var(--sp-1);
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  color: var(--txt);
+  font-size: 13px;
+  cursor: pointer;
+}
+.win__placeholder-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.win__placeholder-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* —— 八向缩放手柄 —— */
 .win__rz {

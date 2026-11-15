@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { Skeleton } from "@/shared/components/Skeleton";
-import { resolveLoader } from "./ModuleRegistry";
+import { resolveLoader, pluginHost } from "./ModuleRegistry";
 import { useDesktopStore, workspaceOf, zIndexOf } from "./store";
 import { useDragMove } from "./useDragMove";
 import { useResize, type ResizeDir } from "./useResize";
@@ -23,7 +23,10 @@ const FALLBACK_MANIFEST = {
 };
 
 /** 模块入口加载/渲染失败时的占位（容错：只影响这一扇窗，桌面不白屏）。
- *  V5：区分「后端模块（合法无 UI，仅 API）」与「真缺失」——薄壳≠未接入。 */
+ *  V5：区分「后端模块（合法无 UI，仅 API）」与「真缺失」——薄壳≠未接入。
+ *  r8：后端薄壳从「死窗口」升级为「诚实的占位 + 可行动的出口」——
+ *      纯 API 插件（entry 空 + api.base 存在，如校园同步类插件）点坞图标后
+ *      打开的是说明页而非错误，且给一条去插件管理页的路（能力发现，内核不认 id）。 */
 function ModulePlaceholder({
   moduleId,
   reason,
@@ -50,6 +53,16 @@ function ModulePlaceholder({
         ? "该模块当前已停用：界面代码已停止对外服务。"
         : "模块入口缺失或加载失败。";
   const icon = variant === "backend" ? "⚙" : variant === "disabled" ? "⏸" : "⚠";
+  // 「插件管理」页的落点用**能力发现**（provides 含 plugin.manage 的启用模块）：
+  // 内核不认识任何具体插件 id，找不到提供者就退化为纯文案（按钮不渲染）。
+  const managerId = useDesktopStore((s) => {
+    for (const reg of Object.values(s.modules)) {
+      if (!reg.enabled) continue;
+      const caps = (reg.manifest.provides ?? []) as readonly string[];
+      if (caps.includes("plugin.manage")) return reg.manifest.id;
+    }
+    return undefined;
+  });
   return (
     <div className="win__placeholder" role="alert">
       <div className="win__placeholder-icon" aria-hidden="true">
@@ -57,6 +70,16 @@ function ModulePlaceholder({
       </div>
       <div className="win__placeholder-title">{title}</div>
       <div className="win__placeholder-text">{reason ?? fallbackText}</div>
+      {variant === "backend" && managerId ? (
+        <button
+          type="button"
+          className="win__placeholder-action"
+          data-testid="placeholder-open-plugin-manager"
+          onClick={() => pluginHost.open(managerId)}
+        >
+          打开插件管理
+        </button>
+      ) : null}
       <div className="win__placeholder-meta">module: {moduleId}</div>
     </div>
   );
@@ -160,6 +183,8 @@ export function WindowFrame({ instanceId }: Props) {
     }
     if (!entry) {
       // V5：有 API 无 UI = 后端模块（薄壳≠未接入）——类型安全取 api.base
+      // ★ r8：文案升级为「纯 API 插件怎么用」——薄壳要指路（AI 对话 / 插件管理页），
+      //   不能让用户点开一个只报 API 路径的死窗口（N2 判据：打开的要么是真东西，要么是诚实的出口）。
       const apiBase = (manifest?.api as { base?: string } | undefined)?.base;
       const isBackendOnly = !!apiBase;
       return lazy(() =>
@@ -168,7 +193,11 @@ export function WindowFrame({ instanceId }: Props) {
             <ModulePlaceholder
               moduleId={win?.moduleId ?? ""}
               variant={isBackendOnly ? "backend" : "missing"}
-              reason={isBackendOnly ? `已接入 · 后端服务：${apiBase}` : "清单缺少 entry 字段"}
+              reason={
+                isBackendOnly
+                  ? `纯 API 插件：没有桌面窗口界面，数据与能力由后端服务提供（${apiBase}）。可通过 AI 对话使用它的能力，或在「插件管理」页查看状态与权限。`
+                  : "清单缺少 entry 字段"
+              }
             />
           ),
         }),

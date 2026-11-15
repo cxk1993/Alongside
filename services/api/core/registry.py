@@ -133,6 +133,17 @@ class ModuleRegistry:
     def mounted(self) -> list[str]:
         return list(self._mounted.keys())
 
+    def invalidate_openapi(self) -> None:
+        """公开入口：让 OpenAPI 快照失效（`mount`/`unmount` 内部已自动调，见 `_invalidate_openapi`）。
+
+        ★ 为什么还要有公开版（r8）：`reload` 走的是「先撤后装」，两条路各自都会
+          触发一次失效——但如果插件当前**没有挂载**（例如 FAILED 态升上来），
+          两条路都不会跑，而 `/api/v1/modules` 里的 manifest 已换成新版本
+          （响应模型可能变了）⇒ 快照仍是旧的。调用方显式清一次才是「不管
+          这一轮有没有挂载动作，文档都得对上磁盘」。
+        """
+        self._invalidate_openapi()
+
     # ── 注册表同步（r5 热插拔 · 层3.4）──────────────────────────────
     def register_module(self, plugin_id: str, manifest: dict[str, Any]) -> None:
         """把模块登记进 `app.state.modules`（`/api/v1/modules` 的数据源）。

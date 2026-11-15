@@ -25,7 +25,7 @@ from sqlmodel import select
 
 from core.logging import get_logger
 from core.deps import kernel_session
-from core.errors import ConflictError, ForbiddenError, NotFoundError
+from core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
 from core.events import event_bus
 from core.kernel import EffectKind, get_kernel
 from core.plugins import discover as discover_mod
@@ -38,7 +38,7 @@ from core.plugins.migrations import (
     run_migrations,
 )
 from core.plugins.permissions import is_valid_permission, normalize_permissions
-from core.plugins.phase import Phase, PhaseReason
+from core.plugins.phase import Phase, PhaseReason, is_legal
 from core.plugins.settings import read_settings, write_settings
 from db.models.system import PluginSetting, PluginState
 
@@ -791,6 +791,199 @@ class PluginManager:
         _notify_dependencies(registry)
         return self.get_plugin(plugin_id)
 
+
+    # ───────────────────────── 原地升级（热重载） ─────────────────────────
+    #: reload 允许的起点阶段。
+    #:
+    #: ★ 为什么**不含 PAUSED**（看起来最该含的一个）：
+    #:   PAUSED 的语义是「人有意停的」。reload 的终点是 ACTIVE（装载成功即服务），
+    #:   从 PAUSED 出发跑一遍 reload，等于**顺手把用户停掉的插件拉起来了**——
+    #:   而调用方说的是「升级」，没说要启用。
+    #:   ⇒ 停用态升级请走 `enable`（它本来就会重新装载）或先 enable 再 reload。
+    #:   宁可少一条边，也不要一条语义会偷改别的开关的边。
+    RELOADABLE: frozenset[Phase] = frozenset({Phase.ACTIVE, Phase.FAILED})
+
+    def reload(
+        self, plugin_id: str, registry: Any, *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        """原地升级一个插件：撤销运行时 → 重新 exec 代码 → 重新装载。
+
+        ★ 路径（状态机的五步，见 `core.plugins.phase`）
+            ACTIVE/FAILED → RELOADING → PENDING → LOADING → ACTIVE
+
+        ★ 「卸载走既有 effect 逆序回放，不另写累加器」
+        ------------------------------------------------
+        撤销这一步**只**调 `kernel.replay_runtime()` —— 与 disable 完全同一条路径。
+        本函数不记录、不重排、不手写任何逆：逆从哪来、按什么序跑，仍由
+        `core.kernel` 一处决定。这也是为什么 reload 不会「漏撤某个 effect」：
+        它根本没有自己的 effect 列表可以漏。
+
+        ★ 为什么撤销只用 replay_runtime（保留 DATA 迁移），但随后要 retain({})
+        ------------------------------------------------------------------
+        语义上 reload **不删数据**，所以迁移不能回滚 —— 这正是 RUNTIME/DATA
+        的划分。但 DATA 条目里捕获的 `undo` 拿着的是**上一次装载时**的台账快照；
+        重装会写入新快照，旧条目留着就成了定时炸弹（未来回放会用过期 before
+        集合算出「全部版本」并回滚）。
+        ⇒ 撤完 RUNTIME 后显式 `retain({})` 把过期的 DATA 条目摘掉（不执行逆），
+          让重装那一步重新登记一份干净的。这条不做就会出现「升级几次之后，
+          某次卸载把表删多了」——最难查的那种。
+
+        ★ 「绝不半提交」落在哪
+        --------------------
+        三处硬闸，任何一处不过就进 FAILED、留 last_error、**不继续**：
+          1. 撤销阶段的任一逆失败（`replay_runtime` 返回失败清单，r8 新增）；
+          2. 代码重新 exec 失败（`load_plugin_router` 抛 ManifestError）；
+          3. 重新装载本身失败（复用 `enable()`，它内部已有完整的可逆回滚）。
+        第 2/3 处失败时**旧代码已经被清出 sys.modules**，所以无法「回到旧版本」——
+        这正是为什么必须落 FAILED 而不是假装还在跑：留下的必须是「它现在不工作」
+        这个事实，而不是一份看着 ACTIVE、实际路由已摘的假象。
+
+        ★ dry_run
+        ---------
+        只算差异、不动任何东西。给管理面「先看会动什么」。
+
+        ★ 返回
+        ------
+        与 enable/disable 同形（插件视图 dict）+ 两个诊断字段：
+        `reloaded`（是否真的跑过）与 `steps`（实际走过的阶段序列）。
+        """
+        info = self._require(plugin_id)
+        if info.kind == "core":
+            raise ForbiddenError(f"内核插件「{plugin_id}」不可重载（kind=core）")
+
+        cur = self._phase_of(plugin_id)
+        steps: list[str] = []
+        if dry_run:
+            return {
+                "id": plugin_id,
+                "dry_run": True,
+                "from_phase": cur.value,
+                "reloadable": cur in self.RELOADABLE,
+                "source": info.source,
+                "version": info.manifest.get("version"),
+                "will_steps": [p.value for p in self._reload_path(cur)],
+            }
+        if cur not in self.RELOADABLE:
+            raise ConflictError(
+                f"插件「{plugin_id}」当前阶段 {cur.value} 不能原地升级"
+                f"（只允许 {'/'.join(sorted(p.value for p in self.RELOADABLE))}）；"
+                "停用态请用 enable 重新装载。"
+            )
+        # ★ 状态行快照（r8）：撤销阶段会回放 install/enable 当年登记的
+        #   「状态行逆」——install 的逆是**删行**（回到「未安装」）、enable 的逆是
+        #   恢复快照。不管哪种，撤销之后行里的值都不可预期。
+        #   reload 的语义是「升级，不改别的开关」，所以撤销完必须把行**恢复到
+        #   reload 开始时的样子**，否则：
+        #     · `_transition(PENDING)` 会因「行不存在」被跳过（阶段历史断档）；
+        #     · 撤销失败时连 FAILED 都写不进去 —— 失败变得不可诊断。
+        prev_state = self._state_snapshot(plugin_id)
+
+        # ── ① 进入 RELOADING ────────────────────────────────────────────
+        _transition(plugin_id, Phase.RELOADING, PhaseReason.RELOAD)
+        steps.append(Phase.RELOADING.value)
+
+        # ── ② 撤销运行时（既有原语，不另写累加器）──────────────────────
+        #    ★ on_disable 必须先跑（插件撤自己的东西时，它的路由应该还在）——
+        #      与 disable() 同序，见那里的说明。
+        #    ★ 但 on_disable 失败**不算** reload 失败：它是软失败
+        #      （lifecycle.run_lifecycle_hook 吞异常并返回错误串），
+        #      与 disable 的处理口径一致（写 last_error，不回滚）。
+        hook_err: str | None = None
+        try:
+            with kernel_session() as db:
+                hook_err = run_lifecycle_hook(info, "disable", db=db)
+            failed = get_kernel().replay_runtime(plugin_id)
+            if failed:
+                raise AppError(
+                    f"插件「{plugin_id}」重载撤销未干净：{len(failed)} 个 effect 撤销失败"
+                    f"（{', '.join(failed)}）——拒绝继续装载（不半提交）"
+                )
+            # ★ 过期的 DATA（迁移）条目：摘掉、不执行逆（见 docstring）
+            get_kernel().retain(plugin_id, set())
+            # ★ 事件订阅 / 生命周期模块缓存 / sys.modules 的包：都要清，
+            #   否则「重新 exec」拿到的仍是旧兄弟模块（uninstall 处的长注释同理）。
+            event_bus.unsubscribe_declared(plugin_id)
+            invalidate_lifecycle_cache(plugin_id)
+            if info.source == "third-party":
+                # ★ 顺序：摘表 → 清字节码 → 清模块。
+                #   摘表要在清模块之前（清完就找不到「哪些表属于它」）；
+                #   清字节码要在重新 exec 之前（同秒同长度的改写会命中旧 .pyc，
+                #   见 purge_plugin_bytecode 的实测说明）——这三步谁先谁后有讲究，
+                #   顺序错了的表现都是「改了代码没生效」。
+                saved_tables = discover_mod.detach_plugin_tables(plugin_id)
+                discover_mod.purge_plugin_bytecode(Path(info.directory))
+                discover_mod.unload_thirdparty_modules(plugin_id)
+            else:
+                saved_tables = {"tables": {}, "module_names": []}
+            # ★ 状态行归位：撤销回放了当年登记的「状态行逆」，值已不可预期。
+            #   reload 不改启用意图，故按 reload 开始的快照精确恢复
+            #   （无行则删行——那边不该发生，reload 只从 ACTIVE/FAILED 起）。
+            self._restore_state(plugin_id, prev_state)
+        except Exception as exc:  # noqa: BLE001 —— 撤销没干净：落 FAILED，绝不往下走
+            # ★ 先尽力把行放回来，否则 FAILED 都写不进去（apply_transition 对
+            #   无行只告警跳过），失败就变成「静默消失」。
+            try:
+                self._restore_state(plugin_id, prev_state)
+            except Exception:  # noqa: BLE001
+                pass
+            self.note_activation_error(plugin_id, f"reload 撤销阶段失败：{exc}")
+            _transition(plugin_id, Phase.FAILED, PhaseReason.LOAD_ERROR)
+            raise
+
+        # ── ③ 回 PENDING（运行时已撤净，等重新装载）─────────────────────
+        _transition(plugin_id, Phase.PENDING, PhaseReason.RELOAD)
+        steps.append(Phase.PENDING.value)
+
+        # ── ④ 重新装载（复用 enable 的全套可逆流程 + 阶段转移 LOADING→ACTIVE）
+        #    ★ 为什么调 self.enable 而不是另写一份装载：装载的步骤顺序、
+        #      每步的逆、失败回滚，已经在 enable() 里被验证过一遍。
+        #      复制一份 = 两个真相源，迟早分叉。
+        #    ★ enable 失败时它自己已转 FAILED 并写 last_error；这里只需把
+        #      摘下的表放回 metadata（旧代码对象已不在，但表结构描述还得留着，
+        #      否则 create_all / 字典校验会静默漏掉这些表）。
+        try:
+            result = self.enable(plugin_id, registry)
+        except Exception:
+            discover_mod.restore_plugin_tables(saved_tables)
+            raise
+        steps.extend([Phase.LOADING.value, Phase.ACTIVE.value])
+        if hook_err:
+            # 撤销期钩子的错误已写进 last_error；装载成功后清掉它
+            # （与 enable 的成功路径同口径：装载成功即 last_error=None）。
+            self.note_activation_error(plugin_id, None)
+        # ★ OpenAPI 快照失效：本次一定经过了挂载（mount 内部已清一次），
+        #   但显式再清一次是给「将来某条不挂载的重载路径」留的不变量——
+        #   见 ModuleRegistry.invalidate_openapi 的说明。
+        invalidate = getattr(registry, "invalidate_openapi", None)
+        if callable(invalidate):
+            invalidate()
+        # ★ 依赖重算已在 enable 尾部做过（它提供的能力可能让别人恢复）。
+        out = self.get_plugin(plugin_id)
+        out["reloaded"] = True
+        out["steps"] = steps
+        return out
+
+    def _phase_of(self, plugin_id: str) -> Phase:
+        """读当前阶段（无状态行 → PENDING，与 state_store 口径一致）。"""
+        from core.plugins.state_store import read_phase
+
+        raw = read_phase(plugin_id)
+        if not raw:
+            return Phase.PENDING
+        try:
+            return Phase(raw)
+        except ValueError:
+            return Phase.PENDING
+
+    @staticmethod
+    def _reload_path(frm: Phase) -> list[Phase]:
+        """reload 会走过的阶段序列（dry_run 用；单一真相是同一条路径）。"""
+        return [
+            Phase.RELOADING,
+            Phase.PENDING,
+            Phase.LOADING,
+            Phase.ACTIVE,
+        ]
 
     # ───────────────────────── 安装 / 卸载（仅 third-party） ─────────────────────────
     def install(self, plugin_id: str, registry: Any) -> dict[str, Any]:

@@ -187,11 +187,16 @@ class _EffectHandle:
         return len(self._disposers)
 
 
-def _safe_call(undo: Callable[[], None], label: str) -> None:
-    """执行一个逆，失败只记日志、绝不上抛。
+def _safe_call(undo: Callable[[], None], label: str) -> bool:
+    """执行一个逆，失败只记日志、绝不上抛。返回是否成功。
 
     ★ 一个逆失败不应该阻止其余逆执行 —— 否则一个坏 effect 会把整个
     插件的清理过程卡死（而且原始异常会被掩盖）。
+
+    ★ 为什么要返回成败（r8）：`reload` 必须先撤干净再重装，若某条逆失败
+      而调用方不知道，就会出现「旧路由还挂着、新路由又挂上去」的双份状态，
+      且阶段仍会被标成 ACTIVE —— 一次**假成功**，比失败难查得多。
+      返回清单让调用方能据此判 FAILED。
     """
     try:
         undo()
@@ -200,6 +205,8 @@ def _safe_call(undo: Callable[[], None], label: str) -> None:
             "effect 撤销失败（已记录，不中断其余撤销）",
             extra={"effect": label, "error": f"{type(exc).__name__}: {exc}"},
         )
+        return False
+    return True
 
 
 @dataclass
@@ -209,14 +216,18 @@ class EffectStack:
     plugin_id: str
     entries: list[EffectEntry] = field(default_factory=list)
 
-    def replay(self, *, kinds: set[EffectKind] | None = None) -> None:
-        """逆序回放已施加的逆。
+    def replay(self, *, kinds: set[EffectKind] | None = None) -> list[str]:
+        """逆序回放已施加的逆。返回**失败**的 effect 标签列表（全部成功则空）。
 
         `kinds` 为 None 表示全撤；给了集合则只撤这些种类
         （PAUSED 只撤 RUNTIME 走这条路径）。
 
         ★ 必须逆序：effect 的施加顺序是 A→B→C，撤销就只能是 C→B→A。
         正序撤会出现「B 依赖 A 的资源、但 A 已经先撤了」这类问题。
+
+        ★ 为什么返回失败清单而不是静默（r8）：`reload` 的「绝不半提交」
+          这条要求落地的位置就在这里——撤销没干净就不能往下装载。
+          以前只有日志，调用方看不见。
         """
         # ★ 先把要撤的取出来并从栈里移除，再回放 —— 这样回放过程中若
         #   触发新的 effect 登记，不会被这一轮误撤。
@@ -226,11 +237,14 @@ class EffectStack:
         else:
             victims = [e for e in reversed(self.entries) if e.kind in kinds]
             self.entries = [e for e in self.entries if e.kind not in kinds]
+        failed: list[str] = []
         for entry in victims:
             if entry._replayed:
                 continue
             entry._replayed = True
-            _safe_call(entry.undo, entry.label)
+            if not _safe_call(entry.undo, entry.label):
+                failed.append(entry.label)
+        return failed
 
     def retain(self, kinds: set[EffectKind]) -> None:
         """只保留这些种类的 effect（其余从栈里摘掉，但**不执行**其逆）。"""
@@ -341,32 +355,54 @@ class Kernel:
             stack = self._stacks.get(plugin_id)
             return len(stack.entries) if stack else 0
 
-    def replay_all(self, plugin_id: str) -> None:
-        """全撤某插件的 effect（UNLOADING / TERMINATED 用）。"""
+    def replay_all(self, plugin_id: str) -> list[str]:
+        """全撤某插件的 effect（RELOADING / UNLOADING / TERMINATED 用）。
+
+        返回失败的 effect 标签（见 `EffectStack.replay`）。
+        """
         with self._lock:
             stack = self._stacks.get(plugin_id)
             if stack is None:
-                return
-            stack.replay(kinds=None)
+                return []
+            failed = stack.replay(kinds=None)
             self._stacks.pop(plugin_id, None)
+            return failed
 
-    def replay_runtime(self, plugin_id: str) -> None:
+    def replay_runtime(self, plugin_id: str) -> list[str]:
         """只撤 RUNTIME 类 effect（PAUSED 用），DATA 类留在栈上。
 
         ★ 要对栈做**持久化改写**（把已撤的 RUNTIME 从栈里摘掉）：
           恢复时只需要重建 RUNTIME，如果栈里还留着已经撤过的 RUNTIME 逆，
           恢复时会重复撤销或者撤错对象。
+
+        返回失败的 effect 标签（见 `EffectStack.replay`）。
         """
         with self._lock:
             stack = self._stacks.get(plugin_id)
             if stack is None:
-                return
-            stack.replay(kinds={EffectKind.RUNTIME})
+                return []
+            return stack.replay(kinds={EffectKind.RUNTIME})
 
     def drop_stack(self, plugin_id: str) -> None:
         """丢弃某插件的 effect 栈（不执行逆）——仅供测试与诊断。"""
         with self._lock:
             self._stacks.pop(plugin_id, None)
+
+    def retain(self, plugin_id: str, kinds: set[EffectKind]) -> None:
+        """只保留指定种类的 effect（其余从栈里摘掉，但**不执行**其逆）。
+
+        ★ 用途（r8）：`reload` 撤完 RUNTIME 后，栈里剩下的 DATA（迁移）条目
+          其 `undo` 捕获的是**上一次装载时**的台账快照。快照一旦过期，
+          未来某次回放会用「旧 before 集合」算出「本次执行的全部版本」并
+          把它们回滚掉——那是删表，不是回滚。
+          reload 的语义是「保留数据」，所以这些过期条目必须**丢弃而不是留着**。
+          （`replay_runtime` 有意保留 DATA，是为了 PAUSED 恢复时不必重跑迁移；
+            reload 用它之后必须自己收尾，两件事不能混。）
+        """
+        with self._lock:
+            stack = self._stacks.get(plugin_id)
+            if stack is not None:
+                stack.retain(kinds)
 
     def stacks(self) -> dict[str, EffectStack]:
         """当前所有 effect 栈的快照（诊断用）。"""

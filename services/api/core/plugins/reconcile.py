@@ -6,16 +6,30 @@
 但**崩溃是没有顺序的**：进程可能在任何一个中间步骤上消失，
 于是数据库里留下的就是一个「半截」的状态。
 
-★ 六种遗留状态，六种处置
+★ 七种遗留状态，七种处置
 -------------------------
 | 上次退出时 | 本次启动应做 | 为什么 |
 |---|---|---|
 | ACTIVE | 回退到 PENDING，重新加载 | 不能假定「上次是 ACTIVE、这次也还是」——代码可能更新了、依赖可能不再满足 |
 | PAUSED | 回退到 PENDING，重新加载 | 但恢复后仍应回到 PAUSED 而非 ACTIVE（PAUSED 是「人有意停的」） |
 | LOADING | **先补偿 → 回 PENDING → 再 LOADING** | ★ 最危险：上次加载没完成，可能留下部分 effect |
+| RELOADING | **同 LOADING 处置：补偿 → 回 PENDING → 再加载** | ★ 上次升级没完成。`RELOADING` 与 `UNLOADING` 处置**相反**，见下 |
 | FAILED | 保持 FAILED，**不自动重试** | 失败原因通常是配置错误，重试一百次结果相同 |
 | UNLOADING | **强制跑完卸载 → TERMINATED** | 卸载不能半途而废，残留的 effect 永远不会被清理 |
 | TERMINATED | 保持不变 | 终态 |
+
+★ 为什么 RELOADING 与 UNLOADING 必须分开处置（r8 加 RELOADING 的唯一理由）
+---------------------------------------------------------------------------
+这两个阶段在库里长得几乎一样（都是「正在撤 effect」），但**目标相反**：
+`UNLOADING` 奔着删除去（数据表要回收），`RELOADING` 奔着回来去（数据必须保留）。
+
+处置也必须相反：
+  · 遗留 UNLOADING ⇒ 跑完卸载。它本来就是一次删除，停下才是错的。
+  · 遗留 RELOADING ⇒ 补偿后重新加载。它本来就是一次升级，删掉才是错的。
+
+如果省掉 RELOADING、让 `UNLOADING → PENDING` 走重载，那么「升级中途崩溃」
+会被当成「卸载中途崩溃」→ 强制跑完卸载 → **数据表被删**。
+一次升级变成一次数据丢失，而且用户是在睡醒之后才发现。这就是加态的代价换来的东西。
 
 ★ 「遗留 LOADING」的补偿到底撤什么 —— 一个必须讲清的风险判断
 ------------------------------------------------------------
@@ -65,6 +79,9 @@ class ReconcilePlan:
     reload: list[str] = field(default_factory=list)
     #: 遗留 LOADING：需要先做补偿（摘路由）再重新加载
     compensate: list[str] = field(default_factory=list)
+    #: 遗留 RELOADING：升级中途崩了 —— 同 LOADING，补偿后回 PENDING 重新加载。
+    #: ★ 绝不能进 finish_unload（那会删表）。
+    reload_interrupted: list[str] = field(default_factory=list)
     #: 遗留 UNLOADING：需要强制跑完卸载
     finish_unload: list[str] = field(default_factory=list)
     #: 遗留 FAILED：不自动重试，**需人工确认**
@@ -77,6 +94,8 @@ class ReconcilePlan:
         parts = [f"重新加载 {len(self.reload)} 个"]
         if self.compensate:
             parts.append(f"其中 {len(self.compensate)} 个需先补偿")
+        if self.reload_interrupted:
+            parts.append(f"其中 {len(self.reload_interrupted)} 个是升级中断（数据保留）")
         if self.finish_unload:
             parts.append(f"强制完成卸载 {len(self.finish_unload)} 个")
         if self.needs_human:
@@ -100,6 +119,14 @@ def plan_reconcile(states: list[dict[str, Any]]) -> ReconcilePlan:
             #   顺序不能变——先补偿，再回 PENDING，再加载。
             #   （若先进 LOADING 再补补偿，新加载的 effect 会和残留的混在
             #     一起，那时再也分不清哪些是这次的、哪些是上次的。）
+            plan.compensate.append(plugin_id)
+            plan.reload.append(plugin_id)
+        elif phase == Phase.RELOADING.value:
+            # ★ 上次原地升级崩在中途。**数据一定还在**（reload 不回滚迁移），
+            #   所以处置是「补偿 + 重新加载」，与 LOADING 相同。
+            #   ★ 绝不能落到 finish_unload：那会跑完卸载、删表，
+            #     把一次没做完的升级变成一次数据丢失。
+            plan.reload_interrupted.append(plugin_id)
             plan.compensate.append(plugin_id)
             plan.reload.append(plugin_id)
         elif phase in (Phase.ACTIVE.value, Phase.PAUSED.value):

@@ -539,6 +539,34 @@ def create_app(
                         extra={"module": _info.id},
                     )
                     _compensated.append(_info.id)
+                if _phase == "RELOADING":
+                    # ★ 遗留 RELOADING（r8）：上次原地升级崩在中途。
+                    #   处置与 LOADING **同**：回到 PENDING 重新加载。
+                    #   ★ 绝不能当 UNLOADING 处理（跑完卸载 = 删表）——
+                    #   这两种遗留的处置相反，正是 r8 给它们两个不同阶段的原因。
+                    #   数据保留：reload 撤的只是运行时 effect，迁移留在台账上。
+                    log.warning(
+                        "第三方插件上次崩在原地升级中途（phase=RELOADING），"
+                        "回到 PENDING 重新加载（数据保留）",
+                        extra={"module": _info.id},
+                    )
+                    try:
+                        from core.plugins.phase import Phase as _Phase
+                        from core.plugins.phase import PhaseReason as _PhaseReason
+                        from core.plugins.state_store import (
+                            apply_transition as _apply_transition,
+                        )
+
+                        _apply_transition(
+                            _info.id, _Phase.PENDING, reason=_PhaseReason.STARTUP_RECONCILE
+                        )
+                        _phase = "PENDING"
+                    except Exception as _recon_exc:  # noqa: BLE001 —— 对账失败不阻断启动
+                        log.warning(
+                            "遗留 RELOADING 回 PENDING 失败（已记，不影响加载）",
+                            extra={"module": _info.id, "error": str(_recon_exc)},
+                        )
+                    _compensated.append(_info.id)
                 if _prev_error:
                     log.warning(
                         "第三方插件上次启用留有错误，本次将重试",

@@ -15,7 +15,8 @@
   PATCH  /{id}/settings       写设置（按 settingsSchema 校验）
   GET    /{id}/health         单插件健康
   GET    /slots/{slotName}    某扩展点的全部贡献
-  POST   /reload              重载（v0.1：返回需要重启才能生效的差异）
+  POST   /{id}/reload         原地升级（真 reload，不重启进程；?dry_run=true 只算差异）
+  POST   /reload              批量：缺省只算差异（dry-run），body {ids, dry_run:false} 才真重载
 """
 from __future__ import annotations
 
@@ -233,14 +234,58 @@ def slot_contributions(
     }
 
 
+@router.post("/{plugin_id}/reload")
+def reload_plugin(
+    plugin_id: Annotated[str, FPath(description="插件 id（目录名）—— 从 GET /plugins 列表里取")],
+    request: Request,
+    _user: User = Depends(get_current_user),  # noqa: B008
+    dry_run: bool = Query(
+        default=False,
+        description="true = 只报告会动什么，不执行（先看后动）",
+    ),
+) -> dict[str, Any]:
+    """原地升级一个插件（真 reload，不重启进程）。
+
+    ★ 撤销走既有 effect 逆序回放（`kernel.replay_runtime`），代码重新 exec，
+      数据与迁移台账**保留**。失败任一步 → 插件落 FAILED 并留 last_error
+      （绝不半提交；失败后再修代码、再 reload/enable 即可恢复）。
+
+    ★ `dry_run=true`：只算差异（当前阶段、可否升级、将走的阶段序列），
+      不撤任何 effect —— 给管理面「先看后动」。
+    """
+    reg = _registry(request)
+    return MGR.reload(plugin_id, reg, dry_run=dry_run)
+
+
 @router.post("/reload")
 def reload_plugins(
-    request: Request, _user: User = Depends(get_current_user)
+    request: Request,
+    body: dict[str, Any] | None = Body(default=None),
+    _user: User = Depends(get_current_user),  # noqa: B008
 ) -> dict[str, Any]:
-    """v0.1：扫描磁盘与运行时差异，返回需要重启才能生效的插件（v0.2 再做零重启）。"""
+    """批量重载入口。
+
+    ★ 语义分两半（r8 起）：
+      · **dry-run（缺省）**：保持 r5 之前的行为 —— 只扫「磁盘与运行时的差异」，
+        返回 `reload_required`（需要重启/重载才能生效的插件清单）。
+        这是管理面「先看后动」的只读视图，不做任何事。
+      · **真重载**：body 里给 `{"ids": [...], "dry_run": false}` 时，
+        对指定插件逐个执行真 reload（复用单插件入口）。ids 缺省 = 全部
+        **可重载**（ACTIVE/FAILED）的插件。
+
+    ★ 为什么缺省仍是 dry-run：不带参数的 POST /reload 是既有调用方
+      （前端 / MCP 面）的存量入口，把「扫差异」悄悄变成「重启所有插件」
+      是一次静默的语义升级——那类升级必须显式，否则第一次误触就是全量停机。
+    """
     reg = _registry(request)
+    body = body or {}
+    dry_run = bool(body.get("dry_run", True))
+    ids = body.get("ids")
+
+    # ── 差异视图（两个模式都返回，供调用方对照）───────────────────────
     mounted = set(reg.mounted())
     diffs: list[dict[str, Any]] = []
+    reloadable_ids: list[str] = []
     for item in MGR.list_plugins():
         pid = item.get("id")
         if not pid:
@@ -251,4 +296,28 @@ def reload_plugins(
             diffs.append(
                 {"id": pid, "enabled": enabled, "mounted": is_mounted, "needs_restart": True}
             )
-    return {"reload_required": diffs, "count": len(diffs)}
+        if item.get("phase") in ("ACTIVE", "FAILED") and item.get("kind") != "core":
+            reloadable_ids.append(pid)
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "reload_required": diffs,
+            "count": len(diffs),
+            "reloadable": reloadable_ids,
+        }
+
+    target_ids = [str(i) for i in ids] if ids else reloadable_ids
+    results: list[dict[str, Any]] = []
+    for pid in target_ids:
+        try:
+            out = MGR.reload(pid, reg, dry_run=False)
+            results.append({"id": pid, "ok": True, "phase": out.get("phase")})
+        except Exception as exc:  # noqa: BLE001 —— 单个失败不影响其余（与启动恢复同口径）
+            results.append({"id": pid, "ok": False, "error": f"{type(exc).__name__}: {exc}"})
+    return {
+        "dry_run": False,
+        "reload_required": diffs,
+        "applied": results,
+        "count": len(results),
+    }

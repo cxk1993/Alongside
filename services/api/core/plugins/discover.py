@@ -356,6 +356,11 @@ def unload_thirdparty_modules(plugin_id: str) -> None:
       sys.modules 里 —— 旧代码仍可被调用，且同 id 重装时会拿到**上一版的
       兄弟模块**（router 每次重新 exec，models 却复用缓存）⇒ 新路由配旧表模型，
       是最难查的一类不一致。清掉之后重装是一次干净的新加载。
+
+    ★ reload 也用这个（r8）：不清就等于「只重载了 router.py，models/service
+      还是旧的」，而那恰恰是升级最常改的文件。
+      清之前请先 `detach_plugin_tables()`，否则重新 exec models.py 会撞
+      「表已定义」——见那个函数的说明。
     """
     pkg_name = thirdparty_package_name(plugin_id)
     prefix = pkg_name + "."
@@ -363,6 +368,139 @@ def unload_thirdparty_modules(plugin_id: str) -> None:
         sys.modules.pop(name, None)
     # 旧命名（层3.6 之前）留下的条目也一并清，避免升级后残留。
     sys.modules.pop(f"{pkg_name}_router", None)
+
+
+def _plugin_module_names(plugin_id: str) -> list[str]:
+    """该第三方插件当前在 sys.modules 里的全部模块名（包 + 子模块）。"""
+    pkg_name = thirdparty_package_name(plugin_id)
+    prefix = pkg_name + "."
+    return [n for n in list(sys.modules) if n == pkg_name or n.startswith(prefix)]
+
+
+def detach_plugin_tables(plugin_id: str) -> dict[str, Any]:
+    """把该插件已注册到 `SQLModel.metadata` 里的表摘下来，返回可恢复的现场。
+
+    ★ 为什么重新加载前必须摘（r8 实测，不是推理）
+    ------------------------------------------------
+    `SQLModel.metadata` 是**进程级全局**的（db/base.py 的单一 metadata 设计）。
+    `api/models.py` 里每个 `class X(table=True)` 在 exec 时把表注册进去。
+    于是「清 sys.modules + 重新 exec models.py」会撞：
+
+        InvalidRequestError: Table 'xxx' is already defined for
+        this MetaData instance.
+
+    ⇒ 热重载在**改动了 models.py 的插件**上一律失败，而那正是升级最需要的场景。
+      实测复现：造一个两表（带外键）的插件连续 exec 两次 → 第二次必炸；
+      先 `metadata.remove(table)` 再 exec → 成功，且外键目标重建正确。
+
+    ★ 归属判据为什么用「模块归属」而不是「表名前缀」
+    ------------------------------------------------
+    表名前缀（`table_prefix(plugin_id)`）有包含关系：插件 `foo` 的前缀 `foo_`
+    会匹配到插件 `foo-bar` 的表 `foo_bar_x` —— 摘错人的表，比不摘更糟。
+    而 `cls.__module__ == plugin_thirdparty_<id>.models` 是**精确**归属，
+    与「代码是谁 exec 出来的」这一事实同源。
+
+    ★ 返回值的用途：装载失败时把表放回去（`restore_plugin_tables`），
+      否则 metadata 里永久少几张表（`create_all` / 字典校验会静默漏掉它们）。
+    """
+    saved: dict[str, Any] = {"tables": {}, "module_names": _plugin_module_names(plugin_id)}
+    names = set(saved["module_names"])
+    if not names:
+        return saved
+    try:
+        from sqlmodel import SQLModel
+    except Exception:  # noqa: BLE001 —— sqlmodel 不在场时无表可摘（不该发生，但不拦）
+        return saved
+    meta = SQLModel.metadata
+    for mod_name in names:
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        for attr in list(vars(mod).values()):
+            table = getattr(attr, "__table__", None)
+            # ★ 只收「归属这个插件、且真的在这个 metadata 里」的表。
+            if table is None or getattr(table, "metadata", None) is not meta:
+                continue
+            if getattr(attr, "__module__", None) not in names:
+                continue
+            if table.name in saved["tables"]:
+                continue
+            saved["tables"][table.name] = table
+    for table_name, table in list(saved["tables"].items()):
+        try:
+            meta.remove(table)
+        except Exception as exc:  # noqa: BLE001 —— 一张摘不掉不该阻断其余
+            log.warning(
+                "插件表从 metadata 摘除失败（已跳过该表）",
+                extra={"plugin_id": plugin_id, "table": table_name, "error": str(exc)},
+            )
+            saved["tables"].pop(table_name, None)
+    return saved
+
+
+def restore_plugin_tables(saved: dict[str, Any]) -> None:
+    """把 `detach_plugin_tables` 摘下来的表放回 `SQLModel.metadata`（幂等）。
+
+    ★ 只在**重新装载失败**时调用：那是唯一「旧代码还要继续用这些表描述」
+      的场合。装载成功时新代码已经把自己的表注册好了，再放回去就是重复注册
+      （`to_metadata` 对同名表会抛）。
+    """
+    tables = saved.get("tables") or {}
+    if not tables:
+        return
+    try:
+        from sqlmodel import SQLModel
+    except Exception:  # noqa: BLE001
+        return
+    meta = SQLModel.metadata
+    for table_name, table in tables.items():
+        if table_name in meta.tables:
+            continue
+        try:
+            table.to_metadata(meta)
+        except Exception as exc:  # noqa: BLE001 —— 恢复失败只记，不掩盖原始错误
+            log.warning(
+                "插件表恢复到 metadata 失败",
+                extra={"table": table_name, "error": str(exc)},
+            )
+
+
+def purge_plugin_bytecode(directory: Path) -> int:
+    """删掉插件目录树里的 `__pycache__`（reload 前置），返回删掉的文件数。
+
+    ★ 为什么必须删（r8 实测，不是推理）
+    ----------------------------------
+    Python 的源加载器按「mtime(秒) + 字节数」判断 .pyc 是否新鲜。
+    于是「同一秒内、且字节数恰好相同」的改写（最典型：改一个返回值 `v1` →
+    `v2`）会**命中过期的字节码**：
+
+        v1 → v2（同秒同长度）→ 重新 exec → 拿到的还是 v1 的 .pyc
+        `importlib.invalidate_caches()` 救不了（它只清 finder 的目录缓存），
+        只有把 __pycache__ 删掉才认新源码。
+
+    这是「改了代码没生效」的经典表象，而且**几乎必踩**：
+    用户改一行常量再点升级，编辑器写盘和 reload 请求常落在同一秒。
+
+    ★ 为什么放在 reload 而不是 uninstall：卸载是删整棵目录，
+      .pyc 跟着一起走。reload 是「原地换血」，目录还在，
+      旧字节码不删就一直在 —— 所以这条纪律必须由 reload 自己执行。
+    """
+    import shutil
+
+    removed = 0
+    try:
+        for pyc_dir in sorted(directory.rglob("__pycache__")):
+            shutil.rmtree(pyc_dir, ignore_errors=True)
+            removed += 1
+    except OSError as exc:
+        log.warning(
+            "插件字节码缓存清理失败（已记，不阻断）",
+            extra={"directory": str(directory), "error": str(exc)},
+        )
+    import importlib
+
+    importlib.invalidate_caches()
+    return removed
 
 
 def load_plugin_router(info: PluginInfo) -> Any:

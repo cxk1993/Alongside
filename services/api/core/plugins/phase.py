@@ -26,24 +26,45 @@
 这四个问题的共同根源是同一个：**状态没有被显式记录，所以系统不知道
 自己在哪一步**。补上「状态」这个信息，四个问题会同时消解。
 
-★ 七个阶段
+★ 八个阶段
 ----------
 | 阶段 | 含义 | 怎么进入 | 怎么离开 |
 |---|---|---|---|
 | `PENDING` | 已发现，等待前置条件 | 发现阶段结束 | 条件满足→LOADING；出错→FAILED；不启用→TERMINATED |
 | `LOADING` | 正在装载 | 前置条件满足 | 全成功→ACTIVE；任一步失败→FAILED |
-| `ACTIVE` | 正常工作 | 装载全部成功 | 暂停→PAUSED；出错→FAILED；卸载→UNLOADING |
+| `ACTIVE` | 正常工作 | 装载全部成功 | 暂停→PAUSED；出错→FAILED；卸载→UNLOADING；原地升级→RELOADING |
 | `PAUSED` | 数据保留，停止对外服务 | 从 ACTIVE 暂停 | 恢复→LOADING；卸载→UNLOADING |
-| `FAILED` | 出错停住，保留现场 | 装载失败 / 运行时致命错误 | 重置→PENDING；重试→LOADING；放弃→TERMINATED |
+| `FAILED` | 出错停住，保留现场 | 装载失败 / 运行时致命错误 | 重置→PENDING；重试→LOADING；放弃→TERMINATED；原地升级→RELOADING |
+| `RELOADING` | 正在撤运行时、准备原地重装 | 从 ACTIVE/FAILED 发起 reload | 撤销完成→PENDING；撤销中出错→FAILED |
 | `UNLOADING` | 正在撤销 effect | 从 ACTIVE/PAUSED 卸载 | 撤销完成→TERMINATED |
-| `TERMINATED` | 已卸载，资源回收 | 卸载完成 | **无出口**（终态） |
+| `TERMINATED` | 已卸载，资源回收 | 卸载完成 | **无出口**（终态）
 
-★ 为什么恰好七个（不多不少）
----------------------------
-每多一个阶段，合法转移表的规模就扩大一圈（n 个阶段有 n² 个组合，
-七态是 49 个），而这 49 个组合大多数需要人工判断合法性、写成代码、
-写测试覆盖。七态是在「能表达所有需要区分的情形」和「转移表仍然可以
-人工穷举校验」之间的平衡点。
+★ 为什么是八个（第八个 = RELOADING）
+-----------------------------------
+原文档写的是七个，且论证「七态是平衡点」。加 RELOADING 是把那个论证**推翻一次**，
+所以必须给出比「更好看」更硬的理由——否则它只是一次凭感觉的膨胀。
+
+真正的原因只有一个：**崩溃语义在 UNLOADING 与 RELOADING 上相反，而状态机必须能区分。**
+复用 `UNLOADING → PENDING` 走完重载确实「表更小」，但代价是致命的：
+
+  进程在重载中途死掉 → 库里留着 `phase=UNLOADING` → 启动对账按既有规则
+  「**强制跑完卸载 → TERMINATED**」（见 `core.plugins.reconcile`）→
+  一次「升级」被解释成「删除」，**迁移全量回滚、数据表消失**。
+  用户只是想换个版本，醒来发现数据没了。这不是理论风险，是这张表唯一的分歧点。
+
+换成 RELOADING 之后，两种遗留的处置明确相反且都不会错：
+  · 遗留 `UNLOADING` ⇒ 强制跑完卸载（它本来就是奔着删除去的）
+  · 遗留 `RELOADING` ⇒ 回 PENDING 重新装载（它本来就是奔着回来去的）
+
+次要理由（都成立，但单独不足以支撑加态）：
+  · 诊断：运维在面板上看见 `UNLOADING` 会以为要删库，看见 `RELOADING` 知道是升级；
+  · 可观测：`phase_reason=reload` 与 `uninstall` 分离，审计能算出「升级次数」；
+  · `FAILED → RELOADING` 给出「修好代码后一键复活」的正路
+    （`FAILED → LOADING` 也合法，但那条路不撤残留 effect，从坏状态直接重装）。
+
+代价（诚实记账）：组合从 7²=49 涨到 8²=64，多出的 15 个组合要人工判断合法性，
+转移表不再是「一眼扫完」的规模，故 `tests/test_plugin_reload.py` 对整张表做穷举断言
+（不是只测用到的那几条边）——加态的账必须用测试还上。
 
 刻意多加阶段（比如把 LOADING 拆成「跑迁移」「挂路由」）会让转移表膨胀到
 无法维护，而收益只是诊断粒度更细 —— 那个需求可以用日志解决。
@@ -101,7 +122,7 @@ log = get_logger("kernel.phase")
 
 
 class Phase(StrEnum):
-    """插件生命周期的七个阶段。
+    """插件生命周期的八个阶段。
 
     ★ 为什么用 `StrEnum` 而不是 `str, Enum`：
       `str, Enum` 的 `str(Phase.ACTIVE)` 是 `'Phase.ACTIVE'`（类名.成员名），
@@ -118,6 +139,7 @@ class Phase(StrEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
     FAILED = "FAILED"
+    RELOADING = "RELOADING"
     UNLOADING = "UNLOADING"
     TERMINATED = "TERMINATED"
 
@@ -155,11 +177,15 @@ class PhaseReason(StrEnum):
     AI_REQUEST = "ai-request"
     UNINSTALL = "uninstall"
     RUNTIME_ERROR = "runtime-error"
+    #: 原地升级（reload）：与 UNINSTALL 必须分开——两者在库里都是「正在撤」，
+    #: 但一个奔着删、一个奔着回来。启动对账读的是 phase，而审计/统计读的是
+    #: reason；把升级记成 uninstall 会让「这周卸载了几次」这个指标说谎。
+    RELOAD = "reload"
 
 
 #: 合法转移表。行是起点，列是终点。
 #:
-#: ★ 三个最需要机器强制的禁止转移：
+#: ★ 四个最需要机器强制的禁止转移：
 #:   1. `LOADING → PAUSED` —— 加载中间状态无法被安全地暂停（可能迁移执行了
 #:      一半、路由挂了一半、订阅了一半），暂停后「该恢复哪些」无法回答。
 #:      正确做法是让加载要么跑完、要么失败，然后对终态执行暂停。
@@ -168,16 +194,36 @@ class PhaseReason(StrEnum):
 #:      只用一次」这条约束失效。
 #:   3. `ACTIVE → LOADING` —— 这对应「热重载」的自然想法，但旧的 effect 还没
 #:      撤、新的就开始登记，路由会挂两次、订阅会注册两次，且无法区分哪些是
-#:      新的、哪些是旧的。正确的重载路径是四步：
-#:      `ACTIVE → UNLOADING → PENDING → LOADING → ACTIVE`。
+#:      新的、哪些是旧的。正确的重载路径是五步：
+#:      `ACTIVE → RELOADING → PENDING → LOADING → ACTIVE`。
+#:   4. `UNLOADING → PENDING` —— 看起来能省掉 RELOADING，但它会让「遗留
+#:      UNLOADING」的两种可能（卸载崩了 / 重载崩了）失去区分，而启动对账
+#:      对它们必须做**相反**的事（跑完卸载 vs 重新装载）。
+#:      详见本模块 docstring「为什么是八个」。
+#:
+#: ★ 阅读顺序建议：只看下面这个 dict 就能知道状态图的全部边；
+#:   `is_legal()` 直接读它，测试对它做穷举（64 个组合逐个断言），
+#:   没有第二份「合法边」清单——单一真相。
 LEGAL: dict[Phase, frozenset[Phase]] = {
     Phase.PENDING: frozenset({Phase.LOADING, Phase.FAILED, Phase.TERMINATED}),
     Phase.LOADING: frozenset({Phase.ACTIVE, Phase.FAILED, Phase.TERMINATED}),
-    Phase.ACTIVE: frozenset({Phase.PAUSED, Phase.FAILED, Phase.UNLOADING}),
+    Phase.ACTIVE: frozenset(
+        {Phase.PAUSED, Phase.FAILED, Phase.UNLOADING, Phase.RELOADING}
+    ),
     Phase.PAUSED: frozenset(
         {Phase.LOADING, Phase.ACTIVE, Phase.FAILED, Phase.UNLOADING}
     ),
-    Phase.FAILED: frozenset({Phase.PENDING, Phase.LOADING, Phase.TERMINATED}),
+    Phase.FAILED: frozenset(
+        {Phase.PENDING, Phase.LOADING, Phase.TERMINATED, Phase.RELOADING}
+    ),
+    # ★ RELOADING 只能去两处：
+    #   · PENDING  —— 运行时 effect 已全部撤回，干净地重新走装载流程
+    #   · FAILED   —— 撤销途中就错了（例如 on_disable 抛异常、某条逆失败），
+    #                 此时**绝不能**进 PENDING：残留的 effect 会和下一次装载
+    #                 的混在一起，之后再也分不清哪些是谁的（ADR-0005 的教训）。
+    #   刻意不允许 `RELOADING → ACTIVE`：那等于「什么都没撤就宣称已重载」，
+    #   是「假成功」，比失败更难查。
+    Phase.RELOADING: frozenset({Phase.PENDING, Phase.FAILED}),
     Phase.UNLOADING: frozenset({Phase.TERMINATED}),
     Phase.TERMINATED: frozenset(),
 }

@@ -1,4 +1,4 @@
-﻿"""WE Learn 表模型。
+"""WE Learn 表模型。
 
 ★ 表名前缀 = 插件 id：welearn_*（见 core/db_scope.py 的 table_prefix()）。
 """

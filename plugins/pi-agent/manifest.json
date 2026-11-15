@@ -37,8 +37,14 @@
   "emits": [],
   "consumes": [],
   "absorbs": [
-    "agents",
     "ai-chat"
+  ],
+  "tabs": [
+    {
+      "key": "agents",
+      "label": "AI 编排",
+      "entry": "agents"
+    }
   ],
   "permissions": [
     "fs:plugin",

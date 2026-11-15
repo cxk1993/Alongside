@@ -67,7 +67,8 @@ function realWorldModules(): GraphModuleLike[] {
     { id: "knowledge", name: "知识库", kind: "container", tabs: KNOWLEDGE_TABS },
     { id: "growth", name: "成长罗盘", kind: "container", tabs: GROWTH_TABS },
     { id: "schedule", name: "日程待办", kind: "container", tabs: SCHEDULE_TABS },
-    { id: "pi-agent", name: "Pi 智能体", kind: "third-party", absorbs: ["agents", "ai-chat"] },
+    { id: "pi-agent", name: "Pi 智能体", kind: "third-party", absorbs: ["ai-chat"],
+      tabs: [{ key: "agents", label: "AI 编排", entry: "agents" }] },
     ...["catalog", "mcp", "push", "export", "query", "plugins", "auth"].map(leaf),
     ...["review", "notes", "docs", "diary"].map(leaf),
     ...["habits", "persona", "health"].map(leaf),
@@ -465,9 +466,10 @@ describe("★ 容器迁 useContainerPages 的前置条件（不满足就是静�
     expect(canResolveLoader("@/apps/study")).toBe(false);
   });
 
-  it("pi-agent 吸收了 agents/ai-chat 但 manifest 零页签 —— 迁容器页会落「未声明页签」空壳", () => {
+  it("pi-agent 吸收 agents/ai-chat 且页签归口（r8 修复：agents 走 tabs 有页归口、ai-chat 走 absorbs 无页归口）", () => {
     const g = buildModuleGraph(realWorldModules());
-    expect(g.absorbedBy("pi-agent")).toEqual(["agents", "ai-chat"]);
-    expect(g.tabsOf("pi-agent")).toEqual([]);
+    // 两者的吸收来源互补：absorbs(ai-chat) ∪ tabs(agents)
+    expect(new Set(g.absorbedBy("pi-agent"))).toEqual(new Set(["agents", "ai-chat"]));
+    expect(g.tabsOf("pi-agent").map((t) => t.entry ?? t.key)).toEqual(["agents"]);
   });
 });

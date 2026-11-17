@@ -47,7 +47,12 @@ API = ROOT / "services" / "api"
 VENV = API / ".venv"
 
 WEB_PORT = 5173
-API_PORT = 8000
+# ★ 端口可被环境变量覆盖：Windows 上 Python 进程被强杀后，其监听 socket 可能
+#   残留一段时间（进程已不在进程表、Get-Process/psutil/taskkill 全查不到，
+#   但 netstat 仍显示 LISTENING 且能响应请求）。这种「幽灵监听」只能等系统回收，
+#   期间必须能换端口继续开发，否则每次都要重装环境绕路。
+API_PORT = int(os.environ.get("ALONGSIDE_API_PORT", "8000"))
+WEB_PORT = int(os.environ.get("ALONGSIDE_WEB_PORT", str(WEB_PORT)))
 IS_WIN = os.name == "nt"
 
 

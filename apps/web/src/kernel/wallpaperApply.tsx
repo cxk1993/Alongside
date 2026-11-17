@@ -105,7 +105,11 @@ function SettingsPanel({ host }: { host: SettingsHost }) {
               if (f) void host.onPick(f);
             },
           }),
-          createElement("span", { className: "wp-settings__hint" }, "图片仅存本机（IndexedDB），不上传"),
+          createElement(
+            "span",
+            { className: "wp-settings__hint" },
+            "图片仅存本机（IndexedDB），不上传",
+          ),
         )
       : null,
     cfg.mode === "color"
@@ -150,7 +154,10 @@ function SettingsPanel({ host }: { host: SettingsHost }) {
 
 export function openWallpaperSettings(host: SettingsHost): void {
   closeSettings();
-  // 点面板外关闭（面板内 click 已 stopPropagation；once 触发后自清，activeHost 空时安全跳过）
+  // 点面板外关闭（面板内 click 已 stopPropagation）。
+  // ★ 监听必须延迟到下一拍再挂：本函数常由 click 处理器调用（外观窗按钮），
+  //   同一次 click 还会继续冒泡到 document——同步挂上的 dismiss 会把刚开的面板
+  //   当成「面板外点击」立刻关掉（右键 contextmenu 来路无此问题，故旧入口没暴露）。
   const dismiss = (e: MouseEvent) => {
     if (activeHost && !activeHost.contains(e.target as Node)) closeSettings();
   };
@@ -159,6 +166,11 @@ export function openWallpaperSettings(host: SettingsHost): void {
   document.body.appendChild(activeHost);
   activeRoot = createRoot(activeHost);
   activeRoot.render(createElement(SettingsPanel, { host }));
-  dismissListener = dismiss;
-  document.addEventListener("click", dismiss);
+  const hostAtOpen = activeHost;
+  setTimeout(() => {
+    // 面板若已被关闭/重开，这次挂载作废（防陈旧 dismiss 泄漏）
+    if (activeHost !== hostAtOpen) return;
+    dismissListener = dismiss;
+    document.addEventListener("click", dismiss);
+  }, 0);
 }

@@ -53,7 +53,7 @@ export default function ToolExplorer() {
               <tr>
                 <th>工具名</th>
                 <th>调用</th>
-                <th>scope</th>
+                <th>权限范围</th>
                 <th>说明</th>
               </tr>
             </thead>

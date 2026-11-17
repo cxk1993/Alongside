@@ -15,7 +15,7 @@ import { Skeleton } from "@/shared/components/Skeleton";
 import { Tabs } from "@/shared/components/Tabs";
 import { ApiError } from "@/shared/api/client";
 import { usePluginEvent } from "@/shared/api/events";
-import { webApi, webKeys, type WebEntry } from "./api";
+import { webApi, webKeys, WEB_KIND_LABEL, type WebEntry } from "./api";
 import WebFrame from "./WebFrame";
 import WebEntriesPanel from "./WebEntriesPanel";
 
@@ -123,7 +123,7 @@ export default function WebApp() {
                   title={e.title}
                 >
                   <span className="web-rail__name">{e.title}</span>
-                  <span className="web-rail__kind">{e.kind}</span>
+                  <span className="web-rail__kind">{WEB_KIND_LABEL[e.kind] ?? e.kind}</span>
                 </button>
               ))
             )}

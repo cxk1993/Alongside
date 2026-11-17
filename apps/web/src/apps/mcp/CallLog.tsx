@@ -37,7 +37,7 @@ export default function CallLog() {
             <td className="mcp-mono">{r.actor}</td>
             <td>
               {r.action === "denied" ? (
-                <span className="mcp-badge mcp-badge--delete">denied</span>
+                <span className="mcp-badge mcp-badge--delete">已拒绝</span>
               ) : (
                 <span className="mcp-mono">{r.action}</span>
               )}

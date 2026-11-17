@@ -70,18 +70,18 @@ beforeEach(() => {
 describe("AgentsApp 冒烟", () => {
   it("空态显示添加入口", async () => {
     render(<AgentsApp />, { wrapper: makeWrapper() });
-    expect(screen.getByLabelText("agent 名称")).toBeTruthy();
-    expect(screen.getByLabelText("agent 描述")).toBeTruthy();
+    expect(screen.getByLabelText("智能体名称")).toBeTruthy();
+    expect(screen.getByLabelText("智能体描述")).toBeTruthy();
     expect(screen.getByRole("button", { name: "添加" })).toBeTruthy();
   });
 
   it("输入后提交 create", async () => {
     const { agentsApi } = await import("./api");
     render(<AgentsApp />, { wrapper: makeWrapper() });
-    fireEvent.change(screen.getByLabelText("agent 名称"), {
+    fireEvent.change(screen.getByLabelText("智能体名称"), {
       target: { value: "写作助手" },
     });
-    fireEvent.change(screen.getByLabelText("agent 描述"), {
+    fireEvent.change(screen.getByLabelText("智能体描述"), {
       target: { value: "写文案" },
     });
     fireEvent.click(screen.getByRole("button", { name: "添加" }));
@@ -157,7 +157,7 @@ describe("DashboardCard", () => {
     render(<DashboardCard />, { wrapper: makeWrapper() });
     expect(screen.getByText("AI 编排")).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText("还没有 agent / 任务")).toBeTruthy();
+      expect(screen.getByText("还没有智能体 / 任务")).toBeTruthy();
     });
   });
 

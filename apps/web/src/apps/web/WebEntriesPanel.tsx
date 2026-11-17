@@ -13,7 +13,15 @@ import { EmptyState } from "@/shared/components/EmptyState";
 import { Modal } from "@/shared/components/Modal";
 import { toast } from "@/shared/components/Toast";
 import { ApiError } from "@/shared/api/client";
-import { WEB_KINDS, webApi, webKeys, type WebEntry, type WebEntryInput, type WebKind } from "./api";
+import {
+  WEB_KINDS,
+  WEB_KIND_LABEL,
+  webApi,
+  webKeys,
+  type WebEntry,
+  type WebEntryInput,
+  type WebKind,
+} from "./api";
 
 interface FormState {
   slug: string;
@@ -172,7 +180,7 @@ export default function WebEntriesPanel({ entries }: { entries: WebEntry[] }) {
                 </div>
               </div>
               <span className={`web-panel__kind web-panel__kind--${e.kind.replace("+", "-")}`}>
-                {e.kind}
+                {WEB_KIND_LABEL[e.kind] ?? e.kind}
               </span>
               <Button
                 onClick={() => {
@@ -295,7 +303,9 @@ export default function WebEntriesPanel({ entries }: { entries: WebEntry[] }) {
           </label>
 
           <label className="web-form__field web-form__field--wide">
-            <span>★ 凭据引用 auth_ref（**只写引用，不写明文**）</span>
+            <span>
+              ★ 凭据引用 <code>auth_ref</code>（只写引用，不写明文）
+            </span>
             <input
               value={form.authRef}
               onChange={(e) => set("authRef", e.target.value)}
@@ -323,7 +333,7 @@ export default function WebEntriesPanel({ entries }: { entries: WebEntry[] }) {
 
           {/* ★ 输入端 → 输出端 的当场可见：这就是它会以什么形状进能力目录 */}
           <div className="web-form__preview">
-            <div className="web-form__preview-title">它将这样进入能力目录（T20）</div>
+            <div className="web-form__preview-title">它将这样进入能力目录</div>
             <pre className="web-form__preview-json">
               {JSON.stringify(
                 {

@@ -9,6 +9,13 @@ export type WebKind = "web" | "web+rest" | "web+mcp";
 
 export const WEB_KINDS: WebKind[] = ["web", "web+rest", "web+mcp"];
 
+/** 入口类型枚举 → 用户可见中文（与 CatalogApp 的 KIND_LABEL 同口径）。 */
+export const WEB_KIND_LABEL: Record<WebKind, string> = {
+  web: "网页",
+  "web+rest": "REST API",
+  "web+mcp": "MCP",
+};
+
 /**
  * ★ 能力条目形状 —— 与后端 schema.CapabilityEntry 及 T20 能力目录**同一份字段**。
  *   source：web_entry（本插件产出）| plugin（T20 自动）| kernel（T20 内核基础）

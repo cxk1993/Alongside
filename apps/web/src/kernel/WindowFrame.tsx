@@ -80,7 +80,7 @@ function ModulePlaceholder({
           打开插件管理
         </button>
       ) : null}
-      <div className="win__placeholder-meta">module: {moduleId}</div>
+      <div className="win__placeholder-meta">模块：{moduleId}</div>
     </div>
   );
 }
@@ -151,9 +151,7 @@ export function WindowFrame({ instanceId }: Props) {
   // ★ r5-P0（G3）：manifest 必须**响应式**读 —— 旧写法用 getState() 是一次性快照，
   //   运行时同步/热插拔覆盖同 id 的 manifest（换 entry）不会触发本窗重渲染，
   //   「装上没生效」会变成查不出的悬案。改成订阅 store，manifest 一变就重渲染。
-  const manifest = useDesktopStore((s) =>
-    win ? s.modules[win.moduleId]?.manifest : undefined,
-  );
+  const manifest = useDesktopStore((s) => (win ? s.modules[win.moduleId]?.manifest : undefined));
   // ★ r5：启用态也**响应式**读 —— 运行时停用一个插件后本窗必须诚实反映
   //   （资产端点已 404、界面代码停止服务），不留一张过期界面在屏幕上。
   const enabled = useDesktopStore((s) => (win ? s.modules[win.moduleId]?.enabled : undefined));

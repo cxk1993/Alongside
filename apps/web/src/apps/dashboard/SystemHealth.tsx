@@ -1,6 +1,13 @@
 /** 模块健康列表：底部小灯，一眼看出哪个模块坏了。 */
 import type { CardHint, SystemEntry } from "./api";
 
+/** 后端健康状态枚举 → 用户可见中文。 */
+const STATUS_LABEL: Record<string, string> = {
+  ok: "正常",
+  timeout: "超时",
+  error: "异常",
+};
+
 export default function SystemHealth({
   system,
   cards,
@@ -26,7 +33,7 @@ export default function SystemHealth({
             >
               <span className="dash-health__dot" aria-hidden="true" />
               {s.name}
-              <span className="dash-muted">{s.status}</span>
+              <span className="dash-muted">{STATUS_LABEL[s.status] ?? s.status}</span>
             </span>
           ))}
         </div>

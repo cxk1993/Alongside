@@ -190,7 +190,11 @@ describe("WebFrame", () => {
     });
     render(
       <WebFrame
-        entry={entry({ slug: "secret", url: "https://secret.invalid/pi/", auth_ref: "token:env:PI_WEB_TOKEN" })}
+        entry={entry({
+          slug: "secret",
+          url: "https://secret.invalid/pi/",
+          auth_ref: "token:env:PI_WEB_TOKEN",
+        })}
       />,
     );
     await act(async () => {});
@@ -207,7 +211,11 @@ describe("WebFrame", () => {
     frameMock.mockRejectedValue(new Error("凭据解析失败：环境变量 PI_WEB_TOKEN 未设置。"));
     render(
       <WebFrame
-        entry={entry({ slug: "broken", url: "https://broken.invalid/", auth_ref: "token:env:PI_WEB_TOKEN" })}
+        entry={entry({
+          slug: "broken",
+          url: "https://broken.invalid/",
+          auth_ref: "token:env:PI_WEB_TOKEN",
+        })}
       />,
     );
     await act(async () => {});
@@ -287,7 +295,7 @@ describe("WebEntriesPanel", () => {
     render(<WebEntriesPanel entries={[]} />, { wrapper: wrapper() });
     fireEvent.click(screen.getByRole("button", { name: /新建入口/ }));
 
-    expect(screen.getByText("它将这样进入能力目录（T20）")).toBeTruthy();
+    expect(screen.getByText("它将这样进入能力目录")).toBeTruthy();
     const pre = document.querySelector(".web-form__preview-json");
     expect(pre?.textContent).toContain('"source": "web_entry"');
 

@@ -48,7 +48,7 @@ export default function AgentRow({ agent }: Props) {
         className="btn btn--danger"
         aria-label={`删除 ${agent.name}`}
         onClick={() => {
-          if (window.confirm(`删除 agent「${agent.name}」？`)) {
+          if (window.confirm(`删除智能体「${agent.name}」？`)) {
             delMut.mutate();
           }
         }}

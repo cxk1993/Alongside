@@ -101,7 +101,7 @@ export default function PatManager() {
             <tr>
               <th>名字</th>
               <th>前缀</th>
-              <th>scopes</th>
+              <th>权限范围</th>
               <th>最后使用</th>
               <th>状态</th>
               <th>操作</th>

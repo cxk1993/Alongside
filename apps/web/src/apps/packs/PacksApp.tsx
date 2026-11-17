@@ -76,6 +76,20 @@ const PHASE_LABEL: Record<PackPhase, string> = {
   discovered: "可发现",
 };
 
+/** 装配报告/成员结论的状态枚举（后端 LoadStatus + 整包 loaded/failed/aborted）。 */
+const LOAD_STATUS_LABEL: Record<string, string> = {
+  loaded: "已装入",
+  reused: "复用",
+  skipped: "跳过",
+  degraded: "降级",
+  failed: "失败",
+  aborted: "中止",
+};
+
+function statusText(status: string): string {
+  return LOAD_STATUS_LABEL[status] ?? status;
+}
+
 function errText(e: unknown): string {
   if (e instanceof ApiError) return e.detail || e.title;
   return e instanceof Error ? e.message : "请求失败";
@@ -166,7 +180,9 @@ export default function PacksApp() {
                   </td>
                   <td>{row.source || "—"}</td>
                   <td>
-                    <span className={`packs-phase packs-phase--${phase}`}>{PHASE_LABEL[phase]}</span>
+                    <span className={`packs-phase packs-phase--${phase}`}>
+                      {PHASE_LABEL[phase]}
+                    </span>
                   </td>
                   <td className="packs-actions">
                     <button
@@ -208,7 +224,7 @@ export default function PacksApp() {
         <section className="packs-report" aria-label="装配报告">
           <h3 className="packs-report__title">
             {report.kind === "dry" ? "试装结果（未改动任何插件）" : "装配结果"} ·{" "}
-            <code>{report.pack.pack_id}</code> · {report.pack.status}
+            <code>{report.pack.pack_id}</code> · {statusText(report.pack.status)}
           </h3>
           {report.pack.error && (
             <div className="packs-err" role="alert">
@@ -232,7 +248,7 @@ export default function PacksApp() {
                     <td>
                       <code>{m.id}</code>
                     </td>
-                    <td>{m.status}</td>
+                    <td>{statusText(m.status)}</td>
                     <td>{m.reason || "—"}</td>
                   </tr>
                 ))}

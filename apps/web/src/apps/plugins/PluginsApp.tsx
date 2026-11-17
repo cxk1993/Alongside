@@ -11,6 +11,14 @@ interface PluginRow {
   version?: string;
 }
 
+/** 插件类型枚举（后端 discover.py: core | builtin | third-party | container）→ 中文。 */
+const KIND_LABEL: Record<string, string> = {
+  core: "内核",
+  builtin: "内置",
+  "third-party": "第三方",
+  container: "容器",
+};
+
 function errText(e: unknown): string {
   if (e instanceof ApiError) return e.detail || e.title;
   return e instanceof Error ? e.message : "请求失败";
@@ -24,12 +32,15 @@ export default function PluginsApp() {
   const qc = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ["plugins", "list"],
-    queryFn: () => api.get<PluginRow[] | { items?: PluginRow[]; plugins?: PluginRow[] }>("/api/v1/plugins"),
+    queryFn: () =>
+      api.get<PluginRow[] | { items?: PluginRow[]; plugins?: PluginRow[] }>("/api/v1/plugins"),
   });
 
   const rows: PluginRow[] = Array.isArray(data)
     ? data
-    : ((data as { items?: PluginRow[] })?.items ?? (data as { plugins?: PluginRow[] })?.plugins ?? []);
+    : ((data as { items?: PluginRow[] })?.items ??
+      (data as { plugins?: PluginRow[] })?.plugins ??
+      []);
 
   const toggle = useMutation({
     mutationFn: ({ id, enable }: { id: string; enable: boolean }) =>
@@ -85,7 +96,7 @@ export default function PluginsApp() {
                 <td>
                   <code>{p.id}</code>
                 </td>
-                <td>{p.kind || "—"}</td>
+                <td>{p.kind ? (KIND_LABEL[p.kind] ?? p.kind) : "—"}</td>
                 <td>{p.version || "—"}</td>
                 <td>
                   <span className={p.enabled === false ? "plugins-off" : "plugins-on"}>

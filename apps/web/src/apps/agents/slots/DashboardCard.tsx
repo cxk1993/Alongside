@@ -24,7 +24,7 @@ export default function DashboardCard() {
             <span className="agents-dash__num">
               {agentsTotal ? `${agentsEnabled}/${agentsTotal}` : "—"}
             </span>
-            <span className="agents-dash__lbl">启用 agent</span>
+            <span className="agents-dash__lbl">启用智能体</span>
           </div>
           <div className="agents-dash__stat">
             <span className="agents-dash__num">{tasksTotal ? `${done}/${tasksTotal}` : "—"}</span>
@@ -37,7 +37,7 @@ export default function DashboardCard() {
         </div>
         {agentsTotal === 0 && tasksTotal === 0 ? (
           <div className="tiny" style={{ color: "var(--txt-faint)" }}>
-            还没有 agent / 任务
+            还没有智能体 / 任务
           </div>
         ) : null}
       </div>

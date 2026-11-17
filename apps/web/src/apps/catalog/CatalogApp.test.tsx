@@ -464,7 +464,7 @@ describe("CatalogApp", () => {
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "web+rest" } });
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     expect(await screen.findByText(/url 格式不正确/)).toBeTruthy();
-    expect(screen.getByText(/REST API 必填 endpoint/)).toBeTruthy();
+    expect(screen.getByText(/REST API 必填端点/)).toBeTruthy();
     expect(apiMock.createManual).not.toHaveBeenCalled();
   });
 
@@ -478,7 +478,7 @@ describe("CatalogApp", () => {
       target: { value: "bad!!chars" },
     });
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
-    expect(await screen.findByText(/capabilities 用逗号分隔/)).toBeTruthy();
+    expect(await screen.findByText(/能力清单用逗号分隔/)).toBeTruthy();
     // 修正后提交成功
     fireEvent.change(screen.getByPlaceholderText("capabilities，逗号分隔"), {
       target: { value: "myapi.read, myapi.list" },

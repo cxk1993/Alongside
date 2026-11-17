@@ -50,15 +50,15 @@ export default function AgentsApp() {
           className="agents-add__input"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="agent 名称，如：研究员 / 写作助手"
-          aria-label="agent 名称"
+          placeholder="智能体名称，如：研究员 / 写作助手"
+          aria-label="智能体名称"
         />
         <input
           className="agents-add__input agents-add__input--desc"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="描述（可选）"
-          aria-label="agent 描述"
+          aria-label="智能体描述"
         />
         <button
           className="btn btn--primary"
@@ -83,8 +83,8 @@ export default function AgentsApp() {
             <div className="empty__icon" aria-hidden>
               ◎
             </div>
-            <div className="empty__text">还没有 agent</div>
-            <div className="empty__hint">在上方注册一个 agent，任务块才能派发出去</div>
+            <div className="empty__text">还没有智能体</div>
+            <div className="empty__hint">在上方注册一个智能体，任务块才能派发出去</div>
           </div>
         ) : (
           list.map((a) => <AgentRow key={a.id} agent={a} />)

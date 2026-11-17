@@ -61,7 +61,7 @@ export default function AppearanceApp() {
     document.documentElement.setAttribute("data-skin", "custom");
     skinRef.current = next;
     setSkin(next);
-    setSavedAt(new Date().toLocaleTimeString());
+    setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
   }, []);
 
   const update = useCallback(
@@ -74,7 +74,7 @@ export default function AppearanceApp() {
   const reset = useCallback(() => {
     clearSkin();
     setSkin(defaultSkin());
-    setSavedAt(new Date().toLocaleTimeString());
+    setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
   }, []);
 
   const applyHex = useCallback(

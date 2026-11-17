@@ -47,6 +47,14 @@ function errText(e: unknown): string {
   return String(e);
 }
 
+/** Notification.permission 枚举 → 用户可见中文。 */
+const PERM_LABEL: Record<string, string> = {
+  granted: "已授权",
+  denied: "已拒绝",
+  default: "未授权",
+  unsupported: "不支持",
+};
+
 export default function PushApp() {
   const qc = useQueryClient();
   const [msg, setMsg] = useState<string | null>(null);
@@ -210,7 +218,7 @@ export default function PushApp() {
               <Flag ok={swReady} label="Service Worker" hint="sw.js 已接管本页" />
               <Flag
                 ok={perm === "granted"}
-                label={`通知权限：${perm === "unsupported" ? "不支持" : perm}`}
+                label={`通知权限：${PERM_LABEL[perm] ?? perm}`}
                 hint="浏览器站点设置"
               />
             </div>
@@ -244,13 +252,14 @@ export default function PushApp() {
             </div>
             {!pushSupported() && (
               <p className="push-warn">
-                当前浏览器不支持 Web Push。桌面通知仍可走桥（日历提醒链路），本插件负责浏览器/PWA 通道。
+                当前浏览器不支持 Web Push。桌面通知仍可走桥（日历提醒链路），本插件负责浏览器/PWA
+                通道。
               </p>
             )}
             {h && !h.vapid_ready && (
               <p className="push-warn">
-                服务端未配置 VAPID 密钥：订阅会失败。请在部署的 `.env` 里补 `PUSH_VAPID_PUBLIC_KEY` /
-                `PUSH_VAPID_PRIVATE_KEY` 后重启后端。
+                服务端未配置 VAPID 密钥：订阅会失败。请在部署的 `.env` 里补 `PUSH_VAPID_PUBLIC_KEY`
+                / `PUSH_VAPID_PRIVATE_KEY` 后重启后端。
               </p>
             )}
           </section>

@@ -2,6 +2,13 @@
 import type { ReviewBlock } from "./api";
 import { isDegraded } from "./api";
 
+/** 取数路径：后端枚举 direct/bridge/mock → 用户可见中文。 */
+const PATH_LABEL: Record<string, string> = {
+  direct: "直连",
+  bridge: "桥接",
+  mock: "内置",
+};
+
 export default function ReviewPanel({ review }: { review: ReviewBlock }) {
   const source = review.source ?? {};
   const down = isDegraded(String(source.status ?? "ok"));
@@ -37,7 +44,7 @@ export default function ReviewPanel({ review }: { review: ReviewBlock }) {
               </div>
             </div>
             <div className="dash-muted">
-              path={path}
+              取数路径：{PATH_LABEL[path] ?? path}
               {lastSync ? ` · 最近同步 ${lastSync}` : ""}
               {message ? ` · ${message}` : ""}
             </div>

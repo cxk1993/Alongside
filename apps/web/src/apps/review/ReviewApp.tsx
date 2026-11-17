@@ -5,9 +5,16 @@ import { formatSeconds, reviewApi, type DayDetail, type NamedRow, type SourceInf
 import ReviewCalendar from "./ReviewCalendar";
 import "./review.css";
 
+/** 取数路径：后端枚举 direct/bridge/mock → 用户可见中文。 */
+const PATH_LABEL: Record<string, string> = {
+  direct: "直连",
+  bridge: "桥接",
+  mock: "内置",
+};
+
 function sourceLine(src: SourceInfo | null | undefined): string {
   if (!src) return "数据源：Work-Review · 读取中…";
-  const pathLabel = src.path === "bridge" ? "bridge" : src.path === "mock" ? "mock" : "direct";
+  const pathLabel = PATH_LABEL[src.path] ?? src.path;
   let sync = "尚无同步";
   if (src.last_sync_at) {
     const mins = Math.max(
@@ -160,7 +167,6 @@ export default function ReviewApp() {
       qc.invalidateQueries({ queryKey: ["review"] });
     },
   });
-
 
   const src = sourceQ.data ?? dayQ.data?.source ?? null;
   const offline = isBridgeOffline(src);

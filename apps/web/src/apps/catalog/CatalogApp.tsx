@@ -575,7 +575,7 @@ function McpToolsSection({
                     <tr>
                       <th>工具名</th>
                       <th>调用</th>
-                      <th>scope</th>
+                      <th>权限范围</th>
                       <th>说明</th>
                     </tr>
                   </thead>
@@ -648,11 +648,11 @@ function ManualForm({ onDone }: { onDone: () => void }) {
       }
     }
     if (kind !== "web" && !endpoint.trim())
-      errors.endpoint = `${kind === "web+rest" ? "REST API" : "MCP"} 必填 endpoint`;
+      errors.endpoint = `${kind === "web+rest" ? "REST API" : "MCP"} 必填端点`;
     if (endpoint.trim() && !/^\/|^https?:\/\//.test(endpoint.trim()))
       errors.endpoint = "endpoint 需以 / 或 http(s):// 开头";
     if (caps.trim() && !/^[A-Za-z0-9_.:+-]+(?:[,，\s]+[A-Za-z0-9_.:+-]+)*$/.test(caps.trim()))
-      errors.caps = "capabilities 用逗号分隔，只含字母/数字/._:+-";
+      errors.caps = "能力清单用逗号分隔，只含字母/数字/._:+-";
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }

@@ -2,6 +2,11 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 import pkg from "./package.json";
 
+// ★ 本文件要被 tsc 检查（tsconfig include 含 vite.config.ts），而项目**没有**
+//   @types/node（也不想为一个环境变量读取引入整包 node 类型）。这里只声明
+//   用到的那一个形状 —— 够 tsc 过、运行时由 Node 真实提供。
+declare const process: { env: Record<string, string | undefined> };
+
 // ★ 2026-09-27（主人「正式版 1.0.0」）：把版本号 + **构建时刻**注入前端。
 //   构建时刻是关键 —— 它能一眼区分「跑的是新版还是被 PWA 缓存的旧版」。
 const BUILD_AT = new Date().toISOString().slice(0, 16).replace("T", " ");
@@ -65,9 +70,12 @@ function kernelRuntimeImportMap() {
  * ★ r5：dev/preview 同源于后端。前端所有 API 走根相对路径（/api/…、/plugin-assets/…），
  * 开发态把这两个前缀代理到本机后端，登录与插件资产才可达（否则 5173 直连 /api 会 404）。
  * 生产由 nginx 反代（deploy/nginx/alongside.conf，归 bidiu），此处只管 dev/preview。
- * 目标固定为 task.py dev 的后端端口（README 口径：前端 5173 / 后端 8000）。
+ * 目标跟随 task.py dev 的后端端口（README 口径默认：前端 5173 / 后端 8000）。
+ * ★ 两侧都读 ALONGSIDE_API_PORT：后端被「幽灵监听」占住端口时，用
+ *   `ALONGSIDE_API_PORT=8010 python tools/task.py dev` 一条命令整体换端口；
+ *   只改 task.py 不改这里，前端代理会照旧打 8000，表现为页面能开但全 500。
  */
-const PROXY_TARGET = "http://localhost:8000";
+const PROXY_TARGET = `http://localhost:${process.env.ALONGSIDE_API_PORT ?? "8000"}`;
 const devProxy = {
   "/api": { target: PROXY_TARGET, changeOrigin: true },
   "/plugin-assets": { target: PROXY_TARGET, changeOrigin: true },
@@ -86,7 +94,9 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    // ★ 与 PROXY_TARGET 同源读 ALONGSIDE_WEB_PORT，让 `task.py dev` 换端口时
+    //   前端port 也跟着变；不设置时仍是文档口径的 5173。
+    port: Number(process.env.ALONGSIDE_WEB_PORT ?? 5173),
     // 端口被占时直接报错，不要偷偷换端口 —— 否则主人按文档访问会打不开
     strictPort: true,
     proxy: devProxy,

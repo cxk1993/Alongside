@@ -47,7 +47,12 @@ API = ROOT / "services" / "api"
 VENV = API / ".venv"
 
 WEB_PORT = 5173
-API_PORT = 8000
+# ★ 端口可被环境变量覆盖：Windows 上 Python 进程被强杀后，其监听 socket 可能
+#   残留一段时间（进程已不在进程表、Get-Process/psutil/taskkill 全查不到，
+#   但 netstat 仍显示 LISTENING 且能响应请求）。这种「幽灵监听」只能等系统回收，
+#   期间必须能换端口继续开发，否则每次都要重装环境绕路。
+API_PORT = int(os.environ.get("ALONGSIDE_API_PORT", "8000"))
+WEB_PORT = int(os.environ.get("ALONGSIDE_WEB_PORT", str(WEB_PORT)))
 IS_WIN = os.name == "nt"
 
 
@@ -288,6 +293,13 @@ def cmd_dev(_: argparse.Namespace) -> None:
     # ★ 插件的跨插件 HTTP 调用默认打 127.0.0.1:18000（生产端口），
     #   dev 下后端在 8000 ⇒ 不设这一条，所有 get_plugin_client 都会 ConnectError。
     env["INTERNAL_API_BASE"] = f"http://127.0.0.1:{API_PORT}"
+    # ★ 还有两个「默认 18000」的自环地址，dev 下必须一起覆盖。
+    #   只设 INTERNAL_API_BASE 会出现「各源单点都是 200，但聚合全是 unavailable」的假象：
+    #   1) BFF 今日摘要（/summary/today）自环取各模块 today-summary；
+    #   2) dashboard 日聚合（x.day.peek 能力发现后 HTTP 回打各模块）。
+    #   三处默认值统一为 18000，属于同一批「写死生产端口」的存量债。
+    env["LIFE_SUMMARY_INTERNAL_PORT"] = str(API_PORT)
+    env["DASHBOARD_SELF_BASE"] = f"http://127.0.0.1:{API_PORT}"
 
     specs = [
         ("web", npm_cmd(["run", "dev"]), WEB),

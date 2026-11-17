@@ -1,13 +1,13 @@
 {
   "packId": "official.life-tasks",
   "packVersion": "1.0.0",
-  "generatedAt": "2026-11-15T02:27:48.696440+00:00",
+  "generatedAt": "2026-11-17T11:43:25.029481+00:00",
   "selfDigest": "sha256:b5a019c4081d2e85aea547d35aca119f7378b2eea9cb5520f5743b595ff57560",
   "members": [
     {
       "id": "finance",
       "version": "0.2.0",
-      "digest": "sha256:20bafda9f758428a7ecf23b0f6f898098af4ec3556ee05fdf0afb2e83cf2b41b",
+      "digest": "sha256:f509697fc8dd2a40d9500d4eada82dfedaf6895e0562debf9097ea29ce873b86",
       "fromPacks": [
         "official.life-tasks"
       ]
@@ -39,7 +39,7 @@
     {
       "id": "push",
       "version": "0.1.0",
-      "digest": "sha256:44b45e22ba778d5b264a844aa385849e0536a0bb41759e568bf519e9b1f27f81",
+      "digest": "sha256:7ec1b2c983dde3f81e809f41cbe3b2dec9f7e0d2d2e24d95f57ee940137e9294",
       "fromPacks": [
         "official.life-tasks"
       ]

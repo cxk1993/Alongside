@@ -8,9 +8,12 @@ import "@/shared/styles/components.css";
 import "@/kernel/desktop.css";
 import "./index.css";
 import { initTheme } from "@/shared/styles/theme";
+import { initSkin } from "@/shared/styles/skin";
 
 // 在首次渲染前确定主题并写到 <html>，避免闪烁。
 initTheme();
+// 皮肤（若有持久化）也在首帧前应用 —— 否则会先看到默认皮肤再跳变。
+initSkin();
 
 // 服务端状态统一由 TanStack Query 管；窗口/UI 状态由 Zustand 管（内核 store）。
 const queryClient = new QueryClient({

@@ -1,0 +1,31 @@
+{
+  "id": "appearance",
+  "name": "外观与皮肤",
+  "version": "0.1.0",
+  "kind": "builtin",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "palette",
+  "description": "自定义皮肤：主色、圆角、密度、字体、阴影，明暗双主题下即时生效并持久化在本机；壁纸沿用桌面个性化。",
+  "author": "wangyuxiang",
+  "window": {
+    "w": 520,
+    "h": 720,
+    "minW": 360,
+    "minH": 420
+  },
+  "entry": "@/apps/appearance",
+  "api": {
+    "base": "/api/v1/appearance",
+    "openapi": "/api/v1/appearance/openapi.json",
+    "health": "/api/v1/appearance/health"
+  },
+  "provides": [],
+  "requires": [],
+  "slots": [],
+  "emits": [],
+  "consumes": [],
+  "permissions": [],
+  "migrations": null,
+  "settingsSchema": null
+}

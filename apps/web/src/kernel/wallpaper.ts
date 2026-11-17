@@ -87,6 +87,42 @@ export async function loadWallpaperImage(): Promise<Blob | null> {
 
 let objectUrl: string | null = null;
 
+/**
+ * 打开「桌面个性化」面板。
+ *
+ * ★ 右键菜单与「外观与皮肤」设置窗共用这一个入口 —— 两处各写一份 onPick/onChange
+ *   必然会分叉（图片 objectURL 的回收最容易被漏），所以只留一份。
+ */
+export function openDesktopPersonalization(): void {
+  openWallpaperSettings({
+    current: readWallpaperConfig(),
+    onPick: async (file: File) => {
+      await saveWallpaperImage(file);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(file);
+      const cfg: WallpaperConfig = { mode: "image", color: "", resolvedUrl: objectUrl };
+      saveWallpaperConfig(cfg);
+      applyWallpaper(cfg);
+    },
+    onChange: (cfg: WallpaperConfig) => {
+      saveWallpaperConfig(cfg);
+      if (cfg.mode === "image") {
+        void loadWallpaperImage().then((blob) => {
+          if (blob) {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            objectUrl = URL.createObjectURL(blob);
+            applyWallpaper({ ...cfg, resolvedUrl: objectUrl });
+          } else {
+            applyWallpaper(DEFAULT_CFG);
+          }
+        });
+      } else {
+        applyWallpaper(cfg);
+      }
+    },
+  });
+}
+
 /** 启动时调用一次：应用持久化壁纸 + 注册桌面空白右键菜单。返回清理函数。 */
 export function initWallpaper(): () => void {
   void (async () => {
@@ -110,33 +146,7 @@ export function initWallpaper(): () => void {
     // 仅桌面空白（.desktop 本体）接管；窗口/坞/顶栏内放行默认
     if (!target || !target.classList.contains("desktop")) return;
     e.preventDefault();
-    openWallpaperSettings({
-      current: readWallpaperConfig(),
-      onPick: async (file: File) => {
-        await saveWallpaperImage(file);
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-        objectUrl = URL.createObjectURL(file);
-        const cfg: WallpaperConfig = { mode: "image", color: "", resolvedUrl: objectUrl };
-        saveWallpaperConfig(cfg);
-        applyWallpaper(cfg);
-      },
-      onChange: (cfg: WallpaperConfig) => {
-        saveWallpaperConfig(cfg);
-        if (cfg.mode === "image") {
-          void loadWallpaperImage().then((blob) => {
-            if (blob) {
-              if (objectUrl) URL.revokeObjectURL(objectUrl);
-              objectUrl = URL.createObjectURL(blob);
-              applyWallpaper({ ...cfg, resolvedUrl: objectUrl });
-            } else {
-              applyWallpaper(DEFAULT_CFG);
-            }
-          });
-        } else {
-          applyWallpaper(cfg);
-        }
-      },
-    });
+    openDesktopPersonalization();
   };
 
   window.addEventListener("contextmenu", onContextMenu);

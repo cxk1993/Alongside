@@ -73,6 +73,22 @@
   --focus-ring: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent);
   --win-min-w: 360px;
   --win-min-h: 240px;
+
+  /* —— 皮肤（Skin）：预设色板 / 衬线字体 / 阴影档位 ——
+     组件不得写死十六进制；色板与阴影都从这里取，皮肤引擎只往 <html> 写内联变量。 */
+  --skin-swatch-blue: #5b8cff;
+  --skin-swatch-violet: #a78bfa;
+  --skin-swatch-teal: #2dd4bf;
+  --skin-swatch-green: #4ade80;
+  --skin-swatch-amber: #fbbf24;
+  --skin-swatch-rose: #fb7185;
+  --skin-swatch-cyan: #38bdf8;
+  --skin-swatch-slate: #94a3b8;
+  --font-serif: Georgia, "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+  --skin-shadow-1-soft: 0 1px 2px #00000040;
+  --skin-shadow-1-strong: 0 2px 6px #00000080;
+  --skin-shadow-2-soft: 0 8px 24px #00000059;
+  --skin-shadow-2-strong: 0 18px 56px #000000cc;
 }
 
 [data-theme="light"] {
@@ -102,5 +118,11 @@
   --danger-fg: #ffffff;
 
   --shadow-1: 0 1px 2px #1a22331f;
+
+  /* 皮肤阴影在亮色下更淡（同一档位，两套主题各自给值） */
+  --skin-shadow-1-soft: 0 1px 2px #1a223314;
+  --skin-shadow-1-strong: 0 2px 6px #1a223340;
+  --skin-shadow-2-soft: 0 8px 24px #1a22331f;
+  --skin-shadow-2-strong: 0 18px 56px #1a223333;
   --shadow-2: 0 12px 40px #1a22333d;
 }

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 外观与皮肤插件入口（manifest.entry = "@/apps/appearance"）。
  *
  * 内核的模块加载器按 `import.meta.glob("../apps/<id>/index.tsx")` 发现入口，

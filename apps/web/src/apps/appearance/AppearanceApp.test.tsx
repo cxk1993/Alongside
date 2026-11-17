@@ -1,4 +1,4 @@
-﻿/** 外观与皮肤面板：分区渲染、改动即时落变量、恢复默认。 */
+/** 外观与皮肤面板：分区渲染、改动即时落变量、恢复默认。 */
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 

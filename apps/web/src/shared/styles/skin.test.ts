@@ -1,4 +1,4 @@
-﻿/** 皮肤引擎单测：规范化、对比色、应用与撤销、旧配置兼容。 */
+/** 皮肤引擎单测：规范化、对比色、应用与撤销、旧配置兼容。 */
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {

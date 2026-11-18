@@ -68,7 +68,7 @@
 }
 .query-table th,
 .query-table td {
-  border: 1px solid var(--border, #30363d);
+  border: 1px solid var(--line);
   padding: 4px 8px;
   text-align: left;
   vertical-align: top;
@@ -86,7 +86,7 @@
 
 .query-export {
   appearance: none;
-  border: 1px solid var(--border, #30363d);
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--txt-dim, #8b949e);
   border-radius: var(--r-pill, 999px);

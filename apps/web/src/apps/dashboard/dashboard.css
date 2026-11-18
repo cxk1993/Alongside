@@ -39,7 +39,7 @@
   margin-left: auto;
   font-size: 10px;
   color: var(--txt-faint);
-  border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0 4px;
 }

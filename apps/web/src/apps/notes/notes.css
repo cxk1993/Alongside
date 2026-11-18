@@ -15,7 +15,7 @@
 .notes-search {
   flex: 1;
   padding: 6px 10px;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--line);
   border-radius: 6px;
   background: transparent;
   color: inherit;
@@ -75,7 +75,7 @@
   flex: 1;
   overflow: auto;
   padding: 8px;
-  border-left: 1px solid var(--border, #333);
+  border-left: 1px solid var(--line);
   min-width: 0;
 }
 

@@ -42,9 +42,9 @@
   align-items: center;
   gap: var(--sp-2);
   padding: 4px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--panel);
+  background: var(--surface-2);
   color: var(--fg);
   font-size: var(--fs-xs, 12px);
   cursor: pointer;
@@ -1394,7 +1394,7 @@
   display: flex;
   gap: 2px;
   padding: 0 var(--sp-2);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   overflow-x: auto;
   align-items: flex-end;
 }
@@ -1418,7 +1418,7 @@
 .mtab__tab--active {
   background: var(--bg-elev, var(--bg));
   color: var(--txt);
-  border-color: var(--border);
+  border-color: var(--line);
   font-weight: 500;
 }
 .mtab__body {
@@ -1478,7 +1478,7 @@
 }
 .wp-settings {
   background: var(--surface, #161b22);
-  border: 1px solid var(--border, #30363d);
+  border: 1px solid var(--line);
   border-radius: var(--r-md, 10px);
   padding: var(--sp-4, 16px);
   min-width: 320px;
@@ -1499,7 +1499,7 @@
 }
 .wp-settings__mode {
   appearance: none;
-  border: 1px solid var(--border, #30363d);
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--txt-dim, #8b949e);
   border-radius: var(--r-md, 10px);
@@ -1536,7 +1536,7 @@
 .wp-settings__reset,
 .wp-settings__close {
   appearance: none;
-  border: 1px solid var(--border, #30363d);
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--txt, #e6edf3);
   border-radius: var(--r-pill, 999px);
@@ -1568,7 +1568,7 @@
   padding: 0;
   max-height: 180px;
   overflow: auto;
-  border: 1px solid var(--border, #30363d);
+  border: 1px solid var(--line);
   border-radius: var(--r-md, 10px);
 }
 .wp-misc__item {
@@ -1578,7 +1578,7 @@
   gap: var(--sp-2, 8px);
   padding: 4px var(--sp-2, 8px);
   font-size: 12px;
-  border-bottom: 1px solid var(--border, #30363d);
+  border-bottom: 1px solid var(--line);
 }
 .wp-misc__item:last-child {
   border-bottom: none;
@@ -1589,7 +1589,7 @@
 }
 .wp-misc__actions button {
   appearance: none;
-  border: 1px solid var(--border, #30363d);
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--txt, #e6edf3);
   border-radius: var(--r-pill, 999px);
@@ -1612,7 +1612,7 @@
 /* —— 顶栏「跨插件查询」快捷入口（主人 09-25 · Zcode 会签 workbuddy 壳层）—— */
 .topbar__query {
   appearance: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--txt-dim);
   border-radius: var(--r-pill);

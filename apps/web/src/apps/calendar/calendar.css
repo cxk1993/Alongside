@@ -21,7 +21,7 @@
   gap: 16px;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   background: var(--bg-elev);
   flex-wrap: wrap;
 }
@@ -45,7 +45,7 @@
 .cal-toolbar button {
   background: var(--bg-elev-2, var(--bg));
   color: var(--fg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 4px 10px;
   cursor: pointer;
@@ -86,7 +86,7 @@
   display: grid;
   align-items: center;
   height: 40px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   background: var(--bg-elev);
 }
 .cal-grid-corner {
@@ -94,7 +94,7 @@
 }
 .cal-grid-daylabel {
   text-align: center;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   line-height: 1.1;
@@ -121,12 +121,12 @@
 .cal-timeaxis {
   position: relative;
   flex: 0 0 64px;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--line);
 }
 .cal-hour {
   position: absolute;
   width: 64px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
   box-sizing: border-box;
 }
 .cal-hour-label {
@@ -144,7 +144,7 @@
 .cal-col {
   position: absolute;
   top: 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--line);
   box-sizing: border-box;
 }
 .cal-col.today {
@@ -152,7 +152,7 @@
 }
 .cal-rowline {
   position: absolute;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
   opacity: 0.5;
 }
 
@@ -292,7 +292,7 @@
 .cal-month-weekday {
   text-align: center;
   padding: 6px 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   color: var(--muted-fg);
 }
 .cal-month-grid {
@@ -300,8 +300,8 @@
   grid-auto-rows: 1fr;
 }
 .cal-month-cell {
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   padding: 4px;
   min-height: 0;
   overflow: hidden;
@@ -348,7 +348,7 @@
   top: 6px;
   width: 220px;
   background: var(--bg-elev);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
@@ -420,7 +420,7 @@
 .cal-quickcard-actions button {
   flex: 1;
   min-width: 48px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   background: var(--bg);
   color: var(--fg);
   border-radius: 6px;
@@ -435,7 +435,7 @@
 /* —— Inspector —— */
 .cal-inspector {
   flex: 0 0 280px;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--line);
   background: var(--bg-elev);
   padding: 12px;
   overflow-y: auto;
@@ -487,7 +487,7 @@
 .cal-field input,
 .cal-field textarea {
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--fg);
   padding: 5px 7px;
@@ -500,7 +500,7 @@
   margin-bottom: 10px;
 }
 .cal-children {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
   padding-top: 8px;
 }
 .cal-children-head {
@@ -562,7 +562,7 @@
   padding: 8px 14px;
   border-radius: 8px;
   background: var(--bg-elev);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
   font-size: 12px;
 }

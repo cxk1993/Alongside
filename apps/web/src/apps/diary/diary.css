@@ -11,12 +11,12 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--line);
 }
 
 .diary-tabs button {
   background: transparent;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 3px 12px;
@@ -157,7 +157,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid var(--line);
 }
 
 .diary-inbox-name {
@@ -173,7 +173,7 @@
 
 .diary-inbox-actions button {
   background: transparent;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 2px 8px;
@@ -183,7 +183,7 @@
 
 .diary-consolidate-date {
   background: var(--surface, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 2px 6px;

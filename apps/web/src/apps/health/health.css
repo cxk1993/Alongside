@@ -51,7 +51,7 @@
   align-items: center;
   text-align: left;
   padding: 8px 10px;
-  border: 1px solid var(--border, color-mix(in srgb, var(--txt) 12%, transparent));
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: transparent;
   color: inherit;
@@ -82,8 +82,8 @@
   top: 0;
   bottom: 0;
   width: min(360px, 90%);
-  background: var(--panel, var(--bg));
-  border-left: 1px solid var(--border, color-mix(in srgb, var(--txt) 12%, transparent));
+  background: var(--surface-2);
+  border-left: 1px solid var(--line);
   padding: 12px;
   display: flex;
   flex-direction: column;

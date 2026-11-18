@@ -44,14 +44,14 @@
   display: flex;
   gap: 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--line);
 }
 
 .docs-tree-toolbar button,
 .docs-tree-new-root,
 .docs-tree-menu button {
   background: transparent;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 2px 8px;
@@ -127,7 +127,7 @@
   flex-direction: column;
   gap: 2px;
   background: var(--surface-raised, #222);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 4px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -154,7 +154,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--line);
 }
 
 .docs-viewer-back {
@@ -181,7 +181,7 @@
 
 .docs-viewer-format {
   background: transparent;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 2px 6px;
@@ -229,7 +229,7 @@
   display: flex;
   gap: 4px;
   padding: 4px 10px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--line);
 }
 
 .docs-md-btn {
@@ -279,7 +279,7 @@
 
 .docs-md-render th,
 .docs-md-render td {
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.2));
+  border: 1px solid var(--line);
   padding: 4px 10px;
 }
 
@@ -294,13 +294,13 @@
   gap: 8px;
   align-items: center;
   padding: 6px 10px;
-  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--line);
 }
 
 .docs-search-input {
   flex: 1;
   background: var(--surface, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 4px 10px;
@@ -309,7 +309,7 @@
 
 .docs-footer button {
   background: transparent;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 3px 10px;
@@ -343,7 +343,7 @@
 
 .docs-trash-header button {
   background: transparent;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 2px 8px;
@@ -356,7 +356,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid var(--line);
 }
 
 .docs-trash-item span {
@@ -365,7 +365,7 @@
 
 .docs-trash-item button {
   background: transparent;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line);
   color: var(--text, #eee);
   border-radius: 6px;
   padding: 2px 8px;

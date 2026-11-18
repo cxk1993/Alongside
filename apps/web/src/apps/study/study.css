@@ -63,7 +63,7 @@
 /* 已完成折叠 */
 .study-done {
   margin-top: 10px;
-  border-top: 1px solid var(--border, rgba(127, 127, 127, 0.18));
+  border-top: 1px solid var(--line);
   padding-top: 8px;
 }
 

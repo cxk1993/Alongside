@@ -198,7 +198,7 @@
    用 dim 色而非强调色：这是「信息标注」，不是「警报」，与主人极简不扰的偏好一致。 */
 .todo-pill--ai {
   color: var(--txt-dim);
-  border-color: var(--border);
+  border-color: var(--line);
   background: transparent;
 }
 
@@ -317,7 +317,7 @@
   line-height: 22px;
   padding: 0 10px;
   border-radius: 11px;
-  border: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -346,7 +346,7 @@
   line-height: 22px;
   padding: 0 10px;
   border-radius: 11px;
-  border: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -370,7 +370,7 @@
   min-width: 14ch;
   padding: 0 6px;
   border-radius: 6px;
-  border: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  border: 1px solid var(--line);
   background: transparent;
   color: inherit;
 }
@@ -379,7 +379,7 @@
   line-height: 18px;
   padding: 0 6px;
   border-radius: 9px;
-  border: 1px dashed var(--border, rgba(127, 127, 127, 0.35));
+  border: 1px dashed var(--line);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;

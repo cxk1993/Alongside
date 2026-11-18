@@ -1,0 +1,35 @@
+{
+  "alongsideSkin": 1,
+  "meta": {
+    "name": "高对比",
+    "author": "Alongside 官方示例",
+    "license": "Apache-2.0"
+  },
+  "skin": {
+    "version": 2,
+    "base": "dark",
+    "tokens": {
+      "theme": {
+        "--bg": "#000000",
+        "--bg-grid": "#141414",
+        "--surface": "#0a0a0a",
+        "--surface-2": "#141414",
+        "--surface-3": "#1f1f1f",
+        "--overlay": "#000000e6",
+        "--txt": "#ffffff",
+        "--txt-dim": "#d4d4d4",
+        "--txt-faint": "#a3a3a3",
+        "--line": "#5a5a5a",
+        "--line-strong": "#8a8a8a",
+        "--accent": "#ffe066",
+        "--radius": "4px",
+        "--shadow-strength": "2"
+      }
+    },
+    "meta": {
+      "name": "高对比",
+      "author": "Alongside 官方示例",
+      "license": "Apache-2.0"
+    }
+  }
+}

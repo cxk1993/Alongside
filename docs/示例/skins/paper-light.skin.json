@@ -1,0 +1,45 @@
+{
+  "alongsideSkin": 1,
+  "meta": {
+    "name": "纸白",
+    "author": "Alongside 官方示例",
+    "license": "Apache-2.0"
+  },
+  "skin": {
+    "version": 2,
+    "base": "light",
+    "tokens": {
+      "theme": {
+        "--accent": "#2f6bff",
+        "--radius": "8px",
+        "--shadow-strength": "0.7"
+      },
+      "light": {
+        "--bg": "#e9e7e0",
+        "--bg-grid": "#e2dfd6",
+        "--surface": "#f0eee8",
+        "--surface-2": "#f6f4ee",
+        "--surface-3": "#fdfcf8",
+        "--txt": "#22201c",
+        "--txt-dim": "#5b5852",
+        "--txt-faint": "#8b877e",
+        "--line": "#dcd9d0",
+        "--line-strong": "#c6c2b6"
+      },
+      "dark": {
+        "--bg": "#1a1917",
+        "--surface": "#232220",
+        "--surface-2": "#2c2a27",
+        "--surface-3": "#383530",
+        "--txt": "#f0eee8",
+        "--txt-dim": "#a8a49b",
+        "--line": "#3a3733"
+      }
+    },
+    "meta": {
+      "name": "纸白",
+      "author": "Alongside 官方示例",
+      "license": "Apache-2.0"
+    }
+  }
+}

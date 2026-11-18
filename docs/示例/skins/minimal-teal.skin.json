@@ -1,0 +1,25 @@
+{
+  "alongsideSkin": 1,
+  "meta": {
+    "name": "极简·青",
+    "author": "Alongside 官方示例",
+    "license": "Apache-2.0"
+  },
+  "skin": {
+    "version": 2,
+    "base": "dark",
+    "tokens": {
+      "theme": {
+        "--bg": "#0e1312",
+        "--txt": "#e6f2ef",
+        "--accent": "#2dd4bf",
+        "--radius": "10px"
+      }
+    },
+    "meta": {
+      "name": "极简·青",
+      "author": "Alongside 官方示例",
+      "license": "Apache-2.0"
+    }
+  }
+}

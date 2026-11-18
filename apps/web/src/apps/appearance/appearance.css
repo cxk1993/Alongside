@@ -217,3 +217,51 @@
     display: none;
   }
 }
+
+/* ── 我的皮肤（本地皮肤库）───────────────────────────────── */
+.appearance__lib {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.appearance__lib-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.appearance__lib-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-1);
+}
+
+.appearance__lib-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--txt);
+}
+
+.appearance__btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.appearance__btn--danger:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}

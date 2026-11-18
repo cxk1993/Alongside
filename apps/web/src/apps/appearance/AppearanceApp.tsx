@@ -34,7 +34,22 @@ import {
   type SkinChoices,
 } from "@/shared/styles/skin";
 import { openDesktopPersonalization } from "@/kernel/wallpaper";
-import { commitSkin, resetSkin, subscribeSkin } from "@/shared/styles/skin-runtime";
+import {
+  applyFromLibrary,
+  exportFromLibrary,
+  importToLibrary,
+  loadLibrary,
+  removeFromLibrary,
+  safeFileName,
+  saveCurrentToLibrary,
+  type SkinEntry,
+} from "@/shared/styles/skin-library";
+import {
+  commitSkin,
+  resetSkin,
+  subscribeSkin,
+  type AlongsideSkinApi,
+} from "@/shared/styles/skin-runtime";
 
 import "./appearance.css";
 
@@ -47,6 +62,81 @@ export default function AppearanceApp() {
   const [hexDraft, setHexDraft] = useState(() => toHex6(choicesFromSkin(loadSkin()).accent));
   const [savedAt, setSavedAt] = useState<string>("");
   const swatches = useMemo(() => readSwatches(), []);
+
+  // ── 本地皮肤库（收藏 / 分享 / 切换）────────────────────────────
+  const [library, setLibrary] = useState<SkinEntry[]>(() => loadLibrary());
+  const [libMsg, setLibMsg] = useState<string>("");
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const skinApi = (): AlongsideSkinApi | null =>
+    (typeof window === "undefined"
+      ? null
+      : (window as unknown as { AlongsideSkin?: AlongsideSkinApi }).AlongsideSkin) ?? null;
+
+  const refreshLibrary = useCallback(() => setLibrary(loadLibrary()), []);
+  const flash = useCallback((msg: string) => {
+    setLibMsg(msg);
+    window.setTimeout(() => setLibMsg(""), 4000);
+  }, []);
+
+  const saveToLib = useCallback(() => {
+    const api = skinApi();
+    if (!api) return;
+    const entry = saveCurrentToLibrary(api);
+    refreshLibrary();
+    flash(`已存入皮肤库：${entry.name}`);
+  }, [flash, refreshLibrary]);
+
+  const applyLib = useCallback(
+    (id: string) => {
+      const api = skinApi();
+      if (!api) return;
+      const r = applyFromLibrary(id, api);
+      flash(r.ok ? "已应用" : `应用失败：${r.errors[0] ?? "未知错误"}`);
+    },
+    [flash],
+  );
+
+  const exportLib = useCallback(
+    (id: string) => {
+      const pack = exportFromLibrary(id);
+      if (!pack) return;
+      const entry = loadLibrary().find((it) => it.id === id);
+      const blob = new Blob([pack], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safeFileName(entry?.name ?? "skin")}.skin.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flash("已导出皮肤包");
+    },
+    [flash],
+  );
+
+  const deleteLib = useCallback(
+    (id: string) => {
+      removeFromLibrary(id);
+      refreshLibrary();
+      flash("已从皮肤库删除（当前外观不受影响）");
+    },
+    [flash, refreshLibrary],
+  );
+
+  const importFile = useCallback(
+    async (file: File) => {
+      const text = await file.text();
+      const r = importToLibrary(text);
+      if (!r.ok) {
+        flash(`导入失败：${r.errors[0] ?? "未知错误"}`);
+        return;
+      }
+      refreshLibrary();
+      flash(`已导入：${r.entry?.name ?? "皮肤"}`);
+    },
+    [flash, refreshLibrary],
+  );
+
   // ★ 外部（皮肤插件 / window.AlongsideSkin）改了皮肤时，面板要跟着刷新 —— 同一真相。
   useEffect(
     () =>
@@ -227,6 +317,82 @@ export default function AppearanceApp() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="appearance__section" aria-labelledby="ap-library">
+        <h3 id="ap-library" className="appearance__title">
+          我的皮肤
+          <span className="appearance__value">{library.length} 份</span>
+        </h3>
+        {library.length === 0 ? (
+          <div className="appearance__hint">
+            还没有收藏。调好外观后点「存入皮肤库」，或导入别人分享的 .skin.json。
+          </div>
+        ) : (
+          <ul className="appearance__lib" data-testid="skin-library">
+            {library.map((it) => (
+              <li key={it.id} className="appearance__lib-row">
+                <span
+                  className="appearance__lib-dot"
+                  style={{ background: it.accent ?? "var(--accent)" }}
+                  aria-hidden="true"
+                />
+                <span className="appearance__lib-name" title={it.name}>
+                  {it.name}
+                </span>
+                <button type="button" className="appearance__btn" onClick={() => applyLib(it.id)}>
+                  应用
+                </button>
+                <button type="button" className="appearance__btn" onClick={() => exportLib(it.id)}>
+                  导出
+                </button>
+                <button
+                  type="button"
+                  className="appearance__btn appearance__btn--danger"
+                  aria-label={`删除皮肤 ${it.name}`}
+                  onClick={() => deleteLib(it.id)}
+                >
+                  删除
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="appearance__row">
+          <button
+            type="button"
+            className="appearance__btn"
+            onClick={saveToLib}
+            data-testid="skin-save"
+          >
+            存入皮肤库
+          </button>
+          <button
+            type="button"
+            className="appearance__btn"
+            onClick={() => fileRef.current?.click()}
+            data-testid="skin-import"
+          >
+            导入…
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,application/json"
+            aria-label="选择皮肤包文件"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importFile(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        {libMsg ? (
+          <span className="appearance__hint" role="status">
+            {libMsg}
+          </span>
+        ) : null}
       </section>
 
       <section className="appearance__section" aria-labelledby="ap-wallpaper">

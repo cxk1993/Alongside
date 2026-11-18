@@ -4,6 +4,7 @@ import { PluginBoundary } from "../plugins/PluginBoundary";
 import { useSlotContributions } from "../slots/contributions";
 import { useSummaryToday } from "./summaryToday";
 import { useDesktopStore } from "../store";
+import { Icon } from "../icons/Icon";
 
 /**
  * U3 · 桌面级双侧栏（拍案 1 号：U3 视图侧 → Doubao；schema 知默已会签）。
@@ -80,7 +81,9 @@ export function DesktopSideNav() {
                 onClick={() => openWindow(r.id)}
                 aria-label={`打开${r.manifest.name ?? r.id}`}
               >
-                <span className="desktop-side__today-icon">{r.manifest.icon ?? "·"}</span>
+                <span className="desktop-side__today-icon">
+                  <Icon name={r.manifest.icon} fallback={r.id} />
+                </span>
                 {r.manifest.name ?? r.id}
               </button>
             </li>
@@ -130,7 +133,9 @@ export function DesktopTodaySummary() {
             return (
               <li key={p.id}>
                 <button type="button" onClick={() => openWindow(p.id)} aria-label={`打开${label}`}>
-                  <span className="desktop-side__today-icon">{icon}</span>
+                  <span className="desktop-side__today-icon">
+                    <Icon name={icon} fallback={p.id} />
+                  </span>
                   <span className="desktop-side__today-label">{label}</span>
                   {/* testid 用索引（中性），避免在 kernel 测试里再引入业务词（check_kernel_purity） */}
                   <span className="desktop-side__today-count" data-testid={`today-count-${i}`}>

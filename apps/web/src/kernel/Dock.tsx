@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { buildModuleGraph } from "./moduleGraph";
 import { pluginHost } from "./ModuleRegistry";
 import { useDesktopStore } from "./store";
+import { Icon } from "./icons/Icon";
 
 /**
  * 底部模块坞。列出已注册模块；点图标 → 开窗（singleton 重复点=聚焦）。
@@ -60,9 +61,7 @@ export function Dock() {
               type="button"
               className={cls}
               aria-label={
-                absorbed.length > 0
-                  ? `${m.name}（含 ${absorbed.length} 个并入模块）`
-                  : m.name
+                absorbed.length > 0 ? `${m.name}（含 ${absorbed.length} 个并入模块）` : m.name
               }
               title={absorbed.length > 0 ? `含：${absorbed.join(" / ")}` : m.name}
               disabled={!reg.enabled}
@@ -71,7 +70,9 @@ export function Dock() {
               }}
             >
               {open ? <span className="dock__dot" aria-hidden="true" /> : null}
-              <span className="dock__icon">{m.icon ?? m.name.slice(0, 1)}</span>
+              <span className="dock__icon">
+                <Icon name={m.icon} fallback={m.name} />
+              </span>
               <span className="dock__label">{m.name}</span>
               {absorbed.length > 0 ? (
                 <span className="dock__merged-badge" aria-hidden="true">

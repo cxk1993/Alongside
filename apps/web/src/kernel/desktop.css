@@ -96,7 +96,7 @@
   background: var(--surface-3, rgba(255, 255, 255, 0.06));
 }
 .desktop__compass-btn:focus-visible {
-  outline: 2px solid var(--accent, #4c9aff);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -338,13 +338,13 @@
   flex: 0 0 auto;
 }
 .today-sum__item--due .today-sum__dot {
-  background: var(--warn, #d9a13b);
+  background: var(--warn);
 }
 .today-sum__item--done .today-sum__dot {
-  background: var(--accent, #4a7dff);
+  background: var(--accent);
 }
 .today-sum__item--alert .today-sum__dot {
-  background: var(--danger, #d64545);
+  background: var(--danger);
 }
 .today-sum__txt {
   flex: 1;
@@ -475,13 +475,13 @@
   background: var(--accent);
 }
 .today-sum__cal-dot--todo.is-on {
-  background: var(--warn, #d9a13b);
+  background: var(--warn);
 }
 .today-sum__cal-dot--diary.is-on {
   background: var(--txt-dim);
 }
 .today-sum__cal-dot--review.is-on {
-  background: var(--danger, #d64545);
+  background: var(--danger);
 }
 
 /* —— U3 dock 卡（desktop.dock-right 首例）—— */
@@ -553,7 +553,7 @@
   color: var(--txt);
 }
 .dock-card__item.is-alert .dock-card__txt {
-  color: var(--danger, #d64545);
+  color: var(--danger);
 }
 .dock-card__item.is-due .dock-card__txt {
   color: var(--accent);
@@ -570,7 +570,7 @@
   background: var(--txt-dim);
 }
 .dock-card__item.is-alert .dock-card__dot {
-  background: var(--danger, #d64545);
+  background: var(--danger);
 }
 .dock-card__item.is-due .dock-card__dot {
   background: var(--accent);
@@ -1477,7 +1477,7 @@
   justify-content: center;
 }
 .wp-settings {
-  background: var(--surface, #161b22);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-md, 10px);
   padding: var(--sp-4, 16px);
@@ -1485,7 +1485,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-3, 12px);
-  color: var(--txt, #e6edf3);
+  color: var(--txt);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
 }
 .wp-settings__title {
@@ -1501,7 +1501,7 @@
   appearance: none;
   border: 1px solid var(--line);
   background: transparent;
-  color: var(--txt-dim, #8b949e);
+  color: var(--txt-dim);
   border-radius: var(--r-md, 10px);
   padding: var(--sp-2, 8px) var(--sp-3, 12px);
   cursor: pointer;
@@ -1511,8 +1511,8 @@
   text-align: left;
 }
 .wp-settings__mode--active {
-  border-color: var(--accent, #58a6ff);
-  color: var(--accent, #58a6ff);
+  border-color: var(--accent);
+  color: var(--accent);
   background: var(--accent-soft, rgba(88, 166, 255, 0.12));
 }
 .wp-settings__mode-label {
@@ -1531,14 +1531,14 @@
 }
 .wp-settings__hint {
   font-size: 11px;
-  color: var(--txt-faint, #6e7681);
+  color: var(--txt-faint);
 }
 .wp-settings__reset,
 .wp-settings__close {
   appearance: none;
   border: 1px solid var(--line);
   background: transparent;
-  color: var(--txt, #e6edf3);
+  color: var(--txt);
   border-radius: var(--r-pill, 999px);
   padding: 4px var(--sp-3, 12px);
   cursor: pointer;
@@ -1547,7 +1547,7 @@
 .wp-settings__section-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--txt-dim, #8b949e);
+  color: var(--txt-dim);
 }
 .wp-misc__body {
   display: flex;
@@ -1591,7 +1591,7 @@
   appearance: none;
   border: 1px solid var(--line);
   background: transparent;
-  color: var(--txt, #e6edf3);
+  color: var(--txt);
   border-radius: var(--r-pill, 999px);
   padding: 2px 8px;
   cursor: pointer;

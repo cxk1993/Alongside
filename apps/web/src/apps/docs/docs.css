@@ -61,8 +61,8 @@
 
 .docs-tree-toolbar button:hover,
 .docs-tree-menu button:hover {
-  border-color: var(--accent, #4da3ff);
-  color: var(--accent, #4da3ff);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .docs-tree-empty {
@@ -107,7 +107,7 @@
   flex: 1;
   min-width: 0;
   background: var(--surface, rgba(255, 255, 255, 0.08));
-  border: 1px solid var(--accent, #4da3ff);
+  border: 1px solid var(--accent);
   color: var(--text, #eee);
   border-radius: 4px;
   padding: 1px 4px;
@@ -189,7 +189,7 @@
 }
 
 .docs-viewer-save {
-  background: var(--accent, #4da3ff);
+  background: var(--accent);
   border: none;
   color: #fff;
   border-radius: 6px;
@@ -243,8 +243,8 @@
 }
 
 .docs-md-btn.active {
-  border-color: var(--accent, #4da3ff);
-  color: var(--accent, #4da3ff);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .docs-md-source {

@@ -25,8 +25,8 @@
 }
 
 .diary-tabs button.active {
-  border-color: var(--accent, #4da3ff);
-  color: var(--accent, #4da3ff);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .diary-capture {
@@ -126,15 +126,15 @@
   height: 4px;
   margin-left: -2px;
   border-radius: 50%;
-  background: var(--accent, #4da3ff);
+  background: var(--accent);
 }
 
 .diary-cal-day.selected {
-  border-color: var(--accent, #4da3ff);
+  border-color: var(--accent);
 }
 
 .diary-cal-day.today {
-  color: var(--accent, #4da3ff);
+  color: var(--accent);
   font-weight: 700;
 }
 

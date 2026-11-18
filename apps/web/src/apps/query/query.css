@@ -75,26 +75,26 @@
 }
 .query-table th {
   background: var(--accent-soft, rgba(88, 166, 255, 0.12));
-  color: var(--accent, #58a6ff);
+  color: var(--accent);
   font-weight: 600;
   position: sticky;
   top: 0;
 }
 .query-table td.query-table__empty {
-  color: var(--txt-faint, #6e7681);
+  color: var(--txt-faint);
 }
 
 .query-export {
   appearance: none;
   border: 1px solid var(--line);
   background: transparent;
-  color: var(--txt-dim, #8b949e);
+  color: var(--txt-dim);
   border-radius: var(--r-pill, 999px);
   padding: 1px 8px;
   cursor: pointer;
   font-size: 11px;
 }
 .query-export:hover {
-  color: var(--txt, #e6edf3);
-  border-color: var(--accent, #58a6ff);
+  color: var(--txt);
+  border-color: var(--accent);
 }

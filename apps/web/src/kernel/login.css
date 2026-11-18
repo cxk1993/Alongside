@@ -6,14 +6,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg, #0f1115);
+  background: var(--bg);
   z-index: 9999;
 }
 
 .login__card {
   width: min(360px, 90vw);
   padding: 32px 28px;
-  border: 1px solid var(--line, #262a33);
+  border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface-2);
   box-shadow: 0 18px 50px rgb(0 0 0 / 35%);
@@ -26,7 +26,7 @@
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: var(--txt, #e8eaf0);
+  color: var(--txt);
   text-align: center;
 }
 
@@ -45,17 +45,17 @@
 .login__input {
   height: 38px;
   padding: 0 12px;
-  border: 1px solid var(--line, #262a33);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--bg, #0f1115);
-  color: var(--txt, #e8eaf0);
+  background: var(--bg);
+  color: var(--txt);
   font-size: 14px;
   outline: none;
   transition: border-color 0.15s ease;
 }
 
 .login__input:focus {
-  border-color: var(--accent, #4d9fff);
+  border-color: var(--accent);
 }
 
 .login__input--totp {
@@ -69,7 +69,7 @@
   border: none;
   padding: 2px 0;
   font-size: 12px;
-  color: var(--accent, #4d9fff);
+  color: var(--accent);
   cursor: pointer;
 }
 
@@ -82,7 +82,7 @@
   border: 1px solid rgb(255 99 99 / 35%);
   border-radius: 8px;
   background: rgb(255 99 99 / 8%);
-  color: var(--danger, #ff7a7a);
+  color: var(--danger);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -92,7 +92,7 @@
   height: 40px;
   border: none;
   border-radius: 8px;
-  background: var(--accent, #4d9fff);
+  background: var(--accent);
   color: #fff;
   font-size: 14px;
   font-weight: 600;

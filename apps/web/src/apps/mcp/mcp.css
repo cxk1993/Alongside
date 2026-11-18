@@ -39,8 +39,8 @@
 }
 
 .mcp-note--warn {
-  color: var(--danger, #c0392b);
-  border-color: var(--danger, #c0392b);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .mcp-mono {
@@ -108,8 +108,8 @@
 }
 
 .mcp-badge--get {
-  color: var(--ok, #2e7d32);
-  border-color: var(--ok, #2e7d32);
+  color: var(--ok);
+  border-color: var(--ok);
 }
 
 .mcp-badge--post {
@@ -118,13 +118,13 @@
 }
 
 .mcp-badge--put {
-  color: var(--warn, #b8860b);
-  border-color: var(--warn, #b8860b);
+  color: var(--warn);
+  border-color: var(--warn);
 }
 
 .mcp-badge--delete {
-  color: var(--danger, #c0392b);
-  border-color: var(--danger, #c0392b);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 /* PAT 创建区 */
@@ -199,8 +199,8 @@
 
 .mcp-btn--danger {
   background: transparent;
-  border-color: var(--danger, #c0392b);
-  color: var(--danger, #c0392b);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* 明文一次性弹层 */

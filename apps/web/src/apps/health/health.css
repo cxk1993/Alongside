@@ -150,20 +150,20 @@
   height: auto;
 }
 .health-trend__bar {
-  fill: var(--accent, #4a7dff);
+  fill: var(--accent);
   opacity: 0.85;
 }
 .health-trend__sev-line {
-  stroke: var(--danger, #d64545);
+  stroke: var(--danger);
   stroke-width: 1.5;
   fill: none;
 }
 .health-trend__sev-dot {
-  fill: var(--danger, #d64545);
+  fill: var(--danger);
 }
 .health-trend__lbl {
   font-size: 9px;
-  fill: var(--txt-faint, #888);
+  fill: var(--txt-faint);
 }
 .health-trend__legend {
   display: flex;
@@ -182,10 +182,10 @@
   color: var(--txt-dim);
 }
 .health-trend__insight--up {
-  border-color: var(--warn, #d9a13b);
-  color: var(--warn, #d9a13b);
+  border-color: var(--warn);
+  color: var(--warn);
 }
 .health-trend__insight--down {
-  border-color: var(--accent, #4a7dff);
-  color: var(--accent, #4a7dff);
+  border-color: var(--accent);
+  color: var(--accent);
 }

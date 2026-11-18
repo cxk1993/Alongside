@@ -107,7 +107,7 @@
 }
 
 .isdu__error {
-  color: var(--danger, #e5484d);
+  color: var(--danger);
   font-size: 12px;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -314,7 +314,7 @@
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
-  background: var(--surface, #1a1d24);
+  background: var(--surface);
 }
 
 .gr__table td {
@@ -415,7 +415,7 @@
 .cls__table th {
   position: sticky;
   top: 0;
-  background: var(--surface, #1a1d24);
+  background: var(--surface);
   color: var(--txt-faint);
   font-weight: 500;
   padding: 6px 4px;
@@ -512,7 +512,7 @@
   padding: 0 5px;
   border-radius: 5px;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
   color: var(--txt-faint);
   font-size: 10.5px;
 }
@@ -542,7 +542,7 @@
   background: color-mix(in srgb, #2fb344 40%, transparent);
 }
 .lib__legend--used {
-  background: color-mix(in srgb, var(--danger, #e5484d) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 40%, transparent);
 }
 .lib__legend--temp {
   background: color-mix(in srgb, #f6bd16 40%, transparent);
@@ -681,7 +681,7 @@
 
 .cal__tag {
   font-size: 10.5px;
-  color: var(--danger, #e5484d);
+  color: var(--danger);
   border: 1px solid currentColor;
   border-radius: 4px;
   padding: 0 4px;

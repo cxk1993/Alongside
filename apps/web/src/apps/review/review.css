@@ -29,7 +29,7 @@
 }
 
 .review-source--offline {
-  color: var(--warn, #b8860b);
+  color: var(--warn);
 }
 
 .review-body {
@@ -308,19 +308,19 @@
 
 /* 有日报：可点、高亮 */
 .review-cal__cell--has {
-  background: color-mix(in srgb, var(--accent, #4c8dff) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--txt);
-  border-color: color-mix(in srgb, var(--accent, #4c8dff) 45%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   cursor: pointer;
 }
 
 .review-cal__cell--has:hover {
-  background: color-mix(in srgb, var(--accent, #4c8dff) 28%, transparent);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 /* 选中 */
 .review-cal__cell--active {
-  outline: 2px solid var(--accent, #4c8dff);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
   font-weight: 700;
 }
@@ -347,7 +347,7 @@
 }
 
 .review-cal__dot--has {
-  background: color-mix(in srgb, var(--accent, #4c8dff) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 .review-cal__dot--today {

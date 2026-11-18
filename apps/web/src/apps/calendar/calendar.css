@@ -630,12 +630,12 @@
   overflow: auto;
 }
 .cal-fullcal .fc {
-  --fc-border-color: var(--line, #333);
+  --fc-border-color: var(--line);
   --fc-page-bg-color: transparent;
   --fc-neutral-bg-color: rgba(255, 255, 255, 0.03);
   --fc-today-bg-color: rgba(76, 141, 255, 0.08);
-  --fc-event-bg-color: var(--accent, #4c8dff);
-  --fc-event-border-color: var(--accent, #4c8dff);
+  --fc-event-bg-color: var(--accent);
+  --fc-event-border-color: var(--accent);
   --fc-event-text-color: #fff;
   font-size: 12px;
 }

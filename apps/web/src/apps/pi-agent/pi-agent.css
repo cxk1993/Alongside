@@ -25,8 +25,8 @@
   border: 1px solid transparent;
 }
 .pi-agent__level.is-L1 {
-  border-color: var(--ok, #3fb950);
-  color: var(--ok, #3fb950);
+  border-color: var(--ok);
+  color: var(--ok);
 }
 /* ★ 2026-09-28（方案 A）：L0「待命」= 懒启动正常态（从未启动，不是故障）——
    用中性灰，与 L2 的警告黄明确区分开。 */
@@ -104,7 +104,7 @@
 }
 
 .pi-agent__msg.is-user .pi-agent__bubble {
-  background: color-mix(in srgb, var(--accent, #4c8dff) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .pi-agent__msg.is-assistant .pi-agent__bubble {
   background: color-mix(in srgb, var(--txt) 8%, transparent);

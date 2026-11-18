@@ -31,15 +31,21 @@ const TABS = [
 type Tab = (typeof TABS)[number];
 const DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const ALL_TERMS = "__all__";
+/**
+ * 课表分类色：值是 **CSS 变量名**，不是色值 —— 色值唯一真源在 tokens.css 的 --chart-1..8。
+ * ★ 为什么不直接写 hex：写死 hex 会让「换主题 / 换皮肤」管不到图表，
+ *   而这套色板是数据可辨识度问题（与用户审美偏好解耦，见 tokens.css 注释）。
+ * ★ 消费端必须是 CSS 里 `var(--chart-n)`；若某处要 JS 取真值，用 getComputedStyle 读。
+ */
 const COLORS = [
-  "#5b8ff9",
-  "#61ddaa",
-  "#f6bd16",
-  "#e8684a",
-  "#9270ca",
-  "#6dc8ec",
-  "#ff9d4d",
-  "#5d7092",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--chart-6)",
+  "var(--chart-7)",
+  "var(--chart-8)",
 ];
 
 interface Notice {

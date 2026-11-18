@@ -622,7 +622,6 @@
   white-space: nowrap;
 }
 
-
 /* —— V8 FullCalendar 原型视图 —— */
 .cal-fullcal {
   height: 100%;
@@ -643,5 +642,5 @@
   opacity: 0.75;
 }
 .cal-fullcal .fc-timegrid-now-indicator-line {
-  border-color: #e05561;
+  border-color: var(--danger);
 }

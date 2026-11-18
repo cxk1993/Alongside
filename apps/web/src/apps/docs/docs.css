@@ -134,7 +134,7 @@
 }
 
 .docs-tree-menu .danger {
-  color: #ff6b6b;
+  color: var(--danger);
 }
 
 .docs-tree-node.dragging .docs-tree-row {
@@ -374,7 +374,7 @@
 }
 
 .docs-trash-item button.danger {
-  color: #ff6b6b;
+  color: var(--danger);
 }
 
 .docs-search-hit {

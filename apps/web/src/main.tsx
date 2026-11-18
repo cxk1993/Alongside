@@ -102,8 +102,11 @@ function showUpdateBar(onRefresh: () => void): void {
     "gap:12px",
     "padding:10px 16px",
     "border-radius:10px",
-    "background:#1f2430",
-    "color:#f2f4f8",
+    // ★ 用 token 而不是写死：这一条通知条出现在「新版本已就绪」时，属于正常 UI，
+    //   必须跟随主题/皮肤；只有 tokens.css 尚未加载的极端情况才需要兜底，
+    //   而那时这两种颜色也不重要（整页都还没样式）。
+    "background:var(--surface-2)",
+    "color:var(--txt)",
     "font:13px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif",
     "box-shadow:0 6px 24px rgba(0,0,0,.35)",
   ].join(";");
@@ -113,7 +116,7 @@ function showUpdateBar(onRefresh: () => void): void {
   btn.type = "button";
   btn.textContent = "刷新";
   btn.style.cssText =
-    "cursor:pointer;border:0;border-radius:6px;padding:4px 12px;font:inherit;background:#4c8dff;color:#fff";
+    "cursor:pointer;border:0;border-radius:var(--r-sm);padding:4px 12px;font:inherit;background:var(--accent);color:var(--accent-fg)";
   btn.addEventListener("click", () => {
     bar.remove();
     onRefresh(); // → sw.js 收 SKIP_WAITING → controllerchange → reload

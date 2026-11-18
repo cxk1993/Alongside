@@ -7,6 +7,13 @@ import { createElement } from "react";
 import { MiscFolderSection } from "./miscFolder";
 import { createRoot, type Root } from "react-dom/client";
 
+/** 读令牌当前颜色（取色器默认值用；读不到才用兜底）。 */
+function readTokenColor(name: string, fallback: string): string {
+  if (typeof document === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
 export interface WallpaperConfig {
   mode: "grid" | "image" | "color" | "off";
   /** color 模式的自定义色（css color 值）；image/其余态忽略。 */
@@ -119,7 +126,7 @@ function SettingsPanel({ host }: { host: SettingsHost }) {
           createElement("input", {
             type: "color",
             "aria-label": "选择背景颜色",
-            defaultValue: cfg.color || "#0e1116",
+            defaultValue: cfg.color || readTokenColor("--bg", "#0e1116"),
             onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
               host.onChange({ ...cfg, color: e.target.value }),
           }),

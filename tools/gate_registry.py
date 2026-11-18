@@ -201,7 +201,7 @@ GATES: tuple[Gate, ...] = (
         path="tools/gates/verify_source_hygiene.py",
         description=(
             "G18 · 源码卫生：UTF-8 BOM 零容忍（blocking —— BOM 让 AST / 行首判据类工具静默跳文件），"
-            "外加前端组件写死十六进制色值（默认只报告，--strict 才拦；颜色只该来自 tokens.css）。"
+            "外加前端组件写死十六进制色值（**阶段二已开：默认阻断**；颜色只该来自 tokens.css）。"
             "逐文件逐行流式扫 apps/web/src/**/*.{ts,tsx,css} 与 plugins/*/web/src/**；"
             "扫到零个文件即判红（防根算错的假绿）。"
         ),

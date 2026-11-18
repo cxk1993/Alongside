@@ -194,7 +194,7 @@
 
 .catalog-auth {
   font-size: 11px;
-  color: #b8860b;
+  color: var(--warn);
 }
 
 .catalog-caps {
@@ -264,7 +264,7 @@
 }
 
 .catalog-dot.on {
-  background: #4caf50;
+  background: var(--ok);
 }
 
 .catalog-dot.off {
@@ -417,19 +417,19 @@
 }
 
 .catalog-mcp-badge--get {
-  background: #2f7d4f;
+  background: var(--method-get);
 }
 
 .catalog-mcp-badge--post {
-  background: #2d5f9e;
+  background: var(--method-post);
 }
 
 .catalog-mcp-badge--put {
-  background: #9a6a1f;
+  background: var(--method-put);
 }
 
 .catalog-mcp-badge--delete {
-  background: #a03a2e;
+  background: var(--method-delete);
 }
 
 /* ─────────── ★ E2 权限徽标（令19 三裁：核心 5 枚常显 + 细节 4 枚进 hover） ─────────── */
@@ -456,19 +456,19 @@
 
 /* 风险配色：绿=安全/只读/无网，橙=本机能力，红=外网/子进程，蓝=数据，紫=桥/通知 */
 .catalog-pbadge--safe {
-  color: #2f8f5b;
+  color: var(--ok);
 }
 .catalog-pbadge--warn {
-  color: #b07a1c;
+  color: var(--warn);
 }
 .catalog-pbadge--danger {
-  color: #c0453a;
+  color: var(--danger);
 }
 .catalog-pbadge--info {
-  color: #2d6fb5;
+  color: var(--chart-1);
 }
 .catalog-pbadge--violet {
-  color: #8a5cc4;
+  color: var(--chart-5);
 }
 
 /* hover/focus 触发的「权限明细」气泡 */

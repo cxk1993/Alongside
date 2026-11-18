@@ -336,15 +336,35 @@ def iter_files(
             yield path
 
 
-def is_hex_exempt(label: str, name: str, allow: tuple[str, ...]) -> bool:
-    """hex 免查判定。`label` 是**相对扫描根**的 POSIX 路径，`name` 是文件名。
+# ── 内置豁免：为什么这两处 hex 不是「样式写死」 ─────────────────────
+#   豁免必须有理由，且理由写在这里而不是命令行的 --allow 里 —— 否则下一次
+#   有人跑门禁时不带参数，就会把这两处重新报成问题，然后被当成噪音忽略。
+BUILTIN_ALLOW: tuple[tuple[str, str], ...] = (
+    (
+        "apps/web/src/kernel/wallpaperApply.tsx",
+        "取色器 defaultValue 的 JS 兜底：'读不到 --bg 才用它' 是刻意的降级路径，"
+        "不是样式写死。CSS 侧颜色全部走 var()。",
+    ),
+    (
+        "apps/web/src/shared/styles/skin.ts",
+        "toHex6() 的 #000000 是算法中性值（颜色解析失败时的返回值），"
+        "属于计算常量而非设计色值；该文件不产生任何 CSS。",
+    ),
+)
 
-    ★ 必须用相对路径匹配 glob：拿绝对路径去 fnmatch `apps/web/src/chart/*` 永远不命中，
+
+def is_hex_exempt(label: str, name: str, allow: tuple[str, ...]) -> bool:
+    """某文件是否免查 hex。
+
+    ★ 判据走**相对仓库根的 POSIX 路径**（label），不是裸文件名 —— 文件名会重名，
       而症状是「--allow 写了但没生效」——比报错更难发现。
+    ★ 另外 HEX_ALLOW_BASENAMES 是按文件名的老判据（tokens.css 靠它免查），
+      两者都要认：删了它 = 令牌文件自己被判成违规。
     """
     if name in HEX_ALLOW_BASENAMES:
         return True
-    return any(fnmatch(label, pat) or fnmatch(name, pat) for pat in allow)
+    builtin = tuple(pat for pat, _why in BUILTIN_ALLOW)
+    return any(fnmatch(label, pat) or fnmatch(name, pat) for pat in (*builtin, *allow))
 
 
 # ─────────────────────────── 主流程 ───────────────────────────
@@ -524,7 +544,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="写死色值也算失败（默认只报告：存量需要时间清）。",
+        default=True,
+        help=(
+            "写死色值也算失败。★ 2026-11-18 起**默认开启**：存量 139 处已清零"
+            "（A 类删死兜底 85 / B 类修真 bug 11 / C 类映射语义色 43）。"
+        ),
+    )
+    parser.add_argument(
+        "--no-strict",
+        dest="strict",
+        action="store_false",
+        help="只报告不阻断（临时排查存量时用；CI 与门禁清单必须走默认的 strict）。",
     )
     parser.add_argument(
         "--include-tests", action="store_true", help="连 *.test.* / *.spec.* / __tests__ 一起查"

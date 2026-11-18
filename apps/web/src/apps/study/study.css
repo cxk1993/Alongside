@@ -47,12 +47,12 @@
 
 .study-badge--over {
   background: rgba(220, 60, 60, 0.16);
-  color: #d24a4a;
+  color: var(--danger);
 }
 
 .study-badge--soon {
   background: rgba(230, 160, 40, 0.18);
-  color: #b5771f;
+  color: var(--warn);
 }
 
 .study-badge--normal {

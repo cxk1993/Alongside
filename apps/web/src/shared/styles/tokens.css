@@ -94,6 +94,24 @@
   --skin-swatch-rose: #fb7185;
   --skin-swatch-cyan: #38bdf8;
   --skin-swatch-slate: #94a3b8;
+
+  /* —— 图表 / 标签色板（数据可视化需要一组可辨识色；皮肤插件可整包替换）——
+     ★ 为什么不复用 --skin-swatch-*：色板是「用户审美偏好」，这里是「数据可辨识度」，
+       两者解耦才能既不干扰换肤、又保证图表在任意 accent 下都能分辨。 */
+  --chart-1: #5b8ff9;
+  --chart-2: #61ddaa;
+  --chart-3: #f6bd16;
+  --chart-4: #e8684a;
+  --chart-5: #9270ca;
+  --chart-6: #6dc8ec;
+  --chart-7: #ff9d4d;
+  --chart-8: #5d7092;
+
+  /* —— HTTP 方法徽标（语义稳定：GET 绿 / POST 蓝 / PUT 黄 / DELETE 红）—— */
+  --method-get: #2f7d4f;
+  --method-post: #2d5f9e;
+  --method-put: #9a6a1f;
+  --method-delete: #a03a2e;
   --font-serif: Georgia, "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
 }
 
@@ -131,4 +149,13 @@
   --shadow-color: 26 34 51;
   --shadow-1: 0 1px 2px rgb(var(--shadow-color) / calc(0.121569 * var(--shadow-strength)));
   --shadow-2: 0 12px 40px rgb(var(--shadow-color) / calc(0.239216 * var(--shadow-strength)));
+  /* 亮色下同一组色板压深一档，保证在白底上仍可辨识（hue 不动，只降明度） */
+  --chart-1: #3f6fd8;
+  --chart-2: #1f9d70;
+  --chart-3: #b8860b;
+  --chart-4: #c8512f;
+  --chart-5: #6f4fa8;
+  --chart-6: #2b8fb8;
+  --chart-7: #c9762d;
+  --chart-8: #4a5c78;
 }

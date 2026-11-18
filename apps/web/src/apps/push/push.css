@@ -77,11 +77,11 @@
 }
 
 .push-dot--ok {
-  background: #3fa96b;
+  background: var(--ok);
 }
 
 .push-dot--bad {
-  background: #c2543f;
+  background: var(--danger);
 }
 
 .push-meta {
@@ -95,20 +95,20 @@
   font-size: 12px;
   padding: 6px 8px;
   border-radius: 6px;
-  border: 1px solid color-mix(in srgb, #c2543f 40%, transparent);
-  background: color-mix(in srgb, #c2543f 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 .push-ok {
   margin: 0;
   font-size: 13px;
-  color: #3fa96b;
+  color: var(--ok);
 }
 
 .push-err {
   margin: 0;
   font-size: 13px;
-  color: #c2543f;
+  color: var(--danger);
   word-break: break-all;
 }
 

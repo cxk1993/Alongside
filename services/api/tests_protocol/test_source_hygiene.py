@@ -226,7 +226,9 @@ def test_regex_literal_lines_are_not_hex(tmp_path: Path) -> None:
     root = _mkroot(tmp_path)
     _write(
         root,
-        "apps/web/src/shared/styles/skin.ts",
+        # ★ 刻意不叫 skin.ts / wallpaperApply.tsx —— 那是内置豁免文件（有理由的例外），
+        #   拿它们当样本等于在豁免区里测规则，测不出东西。
+        "apps/web/src/apps/demo/regex-sample.ts",
         "const HEX6 = /^#[0-9a-f]{6}$/i;\n"
         "export const isHex = (s: string) => HEX6.test(s);\n"
         "export const strip = (s: string) => s.replace(/#5b8cff/g, '');\n"
@@ -418,7 +420,10 @@ def test_real_repo_is_not_zero_scan() -> None:
     assert result["scanned"]["files"] >= 100, f"真仓库只扫到 {result['scanned']['files']} 个文件"
     assert result["missing_roots"] == []
     assert result["scanned"]["hex_exempt_files"], "tokens.css 没被识别成令牌文件"
-    assert result["hex"], "真仓库此刻确有写死色值存量，一处都没报说明判据失效"
+    # ★ 2026-11-18：存量已清零（139 → 0），这条断言跟着反转 ——
+    #   以前用它证明「判据没失效」，现在用「必须为 0」证明「清理没回退」，
+    #   同时靠上面 hex_exempt_files 非空证明门禁不是扫空目录。
+    assert result["hex"] == [], f"出现了新的写死色值：{result['hex']}"
 
 
 def test_main_json_is_machine_readable(tmp_path: Path, capsys) -> None:
@@ -428,13 +433,15 @@ def test_main_json_is_machine_readable(tmp_path: Path, capsys) -> None:
     root = _mkroot(tmp_path)
     _write(root, "apps/web/src/a.css", ".x { color: #4caf50; }\n")
 
-    assert gate.main(["--root", str(root), "--json"]) == 0, "默认只报告，不该拦"
+    # ★ 2026-11-18 起默认 strict（存量已清零）：默认必须拦
+    assert gate.main(["--root", str(root), "--json"]) == 1, "默认 strict 应当拦下写死色值"
     payload = json.loads(capsys.readouterr().out)
-    assert payload["ok"] is True
-    assert payload["strict"] is False
+    assert payload["ok"] is False
+    assert payload["strict"] is True
     assert len(payload["hex"]) == 1
 
-    assert gate.main(["--root", str(root), "--json", "--strict"]) == 1
-    strict_payload = json.loads(capsys.readouterr().out)
-    assert strict_payload["ok"] is False
-    assert strict_payload["exit_code"] == 1
+    # 逃生门：--no-strict 只报告不拦（临时排查存量用）
+    assert gate.main(["--root", str(root), "--json", "--no-strict"]) == 0
+    lenient = json.loads(capsys.readouterr().out)
+    assert lenient["ok"] is True
+    assert lenient["strict"] is False

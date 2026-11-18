@@ -99,7 +99,7 @@ permissions
 
 | 字段 | 类型 | 必填 | 约束 | 说明 |
 |---|:--:|:--:|---|---|
-| `icon` | `string` |  | — | 从内核图标表挑选的图标名。 |
+| `icon` | `string` |  | — | 内核语义名（取值见 apps/web/src/kernel/icons/default-set.tsx 的键集合； |
 | `description` | `string` |  | — | 一句话描述（20 字内）。 |
 | `author` | `string` |  | — | — |
 | `window` | `object` |  | 需: w, h；不许额外字段 | — |
@@ -698,7 +698,7 @@ permissions
     },
     "icon": {
       "type": "string",
-      "description": "从内核图标表挑选的图标名。"
+      "description": "内核语义名（取值见 apps/web/src/kernel/icons/default-set.tsx 的键集合；别名见 registry.ts 的 ALIASES；允许单个汉字/字母走字形兜底）。门禁 G19 会拦不在表里的名字。"
     },
     "description": {
       "type": "string",

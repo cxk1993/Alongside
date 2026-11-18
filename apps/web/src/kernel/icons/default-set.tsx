@@ -297,10 +297,32 @@ export const DEFAULT_ICON_SET: Record<string, ReactElement> = {
       <rect width={7} height={7} x={3} y={14} rx={1} />
     </>
   ),
+
+  star: (
+    <>
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.12 2.12 0 0 0 1.597-1.16z"
+      />
+    </>
+  ),
+
+  rss: (
+    <>
+      <path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16" />
+      <circle cx={5} cy={19} r={1} />
+    </>
+  ),
 };
 
 /** 语义名 → 库内名（供审计与文档用；渲染走 DEFAULT_ICON_SET） */
 export const DEFAULT_ICON_LIBRARY_MAP: Record<string, string> = {
+  star: "star",
+  rss: "rss",
   bot: "bot",
   palette: "palette",
   shield: "shield",

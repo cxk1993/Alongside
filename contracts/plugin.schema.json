@@ -75,7 +75,7 @@
     },
     "icon": {
       "type": "string",
-      "description": "从内核图标表挑选的图标名。"
+      "description": "内核语义名（取值见 apps/web/src/kernel/icons/default-set.tsx 的键集合；别名见 registry.ts 的 ALIASES；允许单个汉字/字母走字形兜底）。门禁 G19 会拦不在表里的名字。"
     },
     "description": {
       "type": "string",

@@ -185,6 +185,18 @@ GATES: tuple[Gate, ...] = (
         test_ref="services/api/tests_protocol/test_db_scope_wiring.py",
     ),
     Gate(
+        id="icon-coverage",
+        path="tools/gates/verify_icon_coverage.py",
+        description=(
+            "G19 · 图标契约：manifest.icon 必须是内核图标表里的语义名（或别名 / 单字兜底）。"
+            "合法集合从 apps/web/src/kernel/icons/default-set.tsx 与 registry.ts 的 ALIASES 解析，"
+            "不信任文档清单；图标表解析不到即判红（表没了比值错了更严重）。"
+        ),
+        blocking=True,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_icon_coverage_gate.py",
+    ),
+    Gate(
         id="source-hygiene",
         path="tools/gates/verify_source_hygiene.py",
         description=(

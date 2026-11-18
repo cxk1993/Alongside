@@ -12,6 +12,9 @@
 
 :root,
 [data-theme="dark"] {
+  /* 原生控件（滚动条 / 日期选择器 / 自动填充底色）跟着走 —— 三家宿主都做这一步。 */
+  color-scheme: dark;
+
   /* —— 表面 / 背景 —— */
   --bg: #0e1116;
   --bg-grid: #1b2130;
@@ -42,15 +45,22 @@
   --danger: #f0556b;
   --danger-fg: #ffffff;
 
-  /* —— 阴影 —— */
-  --shadow-1: 0 1px 2px #00000080;
-  --shadow-2: 0 12px 40px #00000099;
+  /* —— 阴影（单一真源：--shadow-color 颜色 + --shadow-strength 倍率）——
+     几何只写一次，两个主题各自只给「基准不透明度」。
+     0.501961 = 128/255（原 #00000080）、0.6 = 153/255（原 #00000099），
+     因此拆开后渲染结果与改造前逐像素一致。 */
+  --shadow-color: 0 0 0;
+  --shadow-strength: 1;
+  --shadow-1: 0 1px 2px rgb(var(--shadow-color) / calc(0.501961 * var(--shadow-strength)));
+  --shadow-2: 0 12px 40px rgb(var(--shadow-color) / calc(0.6 * var(--shadow-strength)));
 
-  /* —— 圆角 —— */
-  --r-xs: 4px;
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  /* —— 圆角（单一真源：只写 --radius，四档乘法派生）——
+     乘法而非加减：直角主题把 --radius 设成 0 时，各档一起变 0，不会算出负值。 */
+  --radius: 10px;
+  --r-xs: calc(var(--radius) * 0.4);
+  --r-sm: calc(var(--radius) * 0.6);
+  --r-md: var(--radius);
+  --r-lg: calc(var(--radius) * 1.4);
   --r-pill: 999px;
 
   /* —— 间距（4 的倍数）—— */
@@ -85,13 +95,11 @@
   --skin-swatch-cyan: #38bdf8;
   --skin-swatch-slate: #94a3b8;
   --font-serif: Georgia, "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
-  --skin-shadow-1-soft: 0 1px 2px #00000040;
-  --skin-shadow-1-strong: 0 2px 6px #00000080;
-  --skin-shadow-2-soft: 0 8px 24px #00000059;
-  --skin-shadow-2-strong: 0 18px 56px #000000cc;
 }
 
 [data-theme="light"] {
+  color-scheme: light;
+
   --bg: #eef1f6;
   --bg-grid: #dde3ec;
   --surface: #ffffff;
@@ -117,12 +125,10 @@
   --danger: #d83a52;
   --danger-fg: #ffffff;
 
-  --shadow-1: 0 1px 2px #1a22331f;
-
-  /* 皮肤阴影在亮色下更淡（同一档位，两套主题各自给值） */
-  --skin-shadow-1-soft: 0 1px 2px #1a223314;
-  --skin-shadow-1-strong: 0 2px 6px #1a223340;
-  --skin-shadow-2-soft: 0 8px 24px #1a22331f;
-  --skin-shadow-2-strong: 0 18px 56px #1a223333;
-  --shadow-2: 0 12px 40px #1a22333d;
+  /* 阴影：几何与派生式只在暗色块写一次，亮色只换「颜色分量 + 不透明度」——
+     26 34 51 = 原 #1a2233；0.121569 = 31/255（原 #1a22331f）、
+     0.239216 = 61/255（原 #1a22333d），与改造前逐像素一致。 */
+  --shadow-color: 26 34 51;
+  --shadow-1: 0 1px 2px rgb(var(--shadow-color) / calc(0.121569 * var(--shadow-strength)));
+  --shadow-2: 0 12px 40px rgb(var(--shadow-color) / calc(0.239216 * var(--shadow-strength)));
 }

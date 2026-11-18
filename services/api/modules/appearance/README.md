@@ -24,16 +24,47 @@
 | 变量 | 来源 | 说明 |
 |---|---|---|
 | `--accent` / `--accent-fg` / `--accent-soft` | 用户选择 | fg 自动对比，soft 为 15% 透明 |
-| `--r-xs` … `--r-lg` | 令牌基准 × 圆角系数（0.5–1.5） | |
+| `--radius` | 圆角系数 × 令牌基准（0.5–1.5） | **单一真源**；`--r-xs/sm/md/lg` 由它 `calc()` 派生 |
 | `--sp-1` … `--sp-6` | 令牌基准 × 密度（0.85 / 1 / 1.15） | |
 | `--font-sans` | 无衬线 / 等宽 / 衬线 | |
-| `--shadow-1` / `--shadow-2` | 标准=令牌原值；轻/重来自 `--skin-shadow-*` | |
+| `--shadow-strength` | 阴影档位（0.6 / 1 / 1.6） | **唯一阴影旋钮**；几何与颜色由 `--shadow-color` 派生 |
+
+## 存储格式（v2 三分区）
+
+`localStorage["alongside.skin.v1"]`（键名不变，值结构升级）：
+
+```json
+{
+  "version": 2,
+  "base": "dark",
+  "tokens": {
+    "theme": { "--accent": "#5b8cff", "--radius": "10px" },
+    "light": { "--bg": "#ffffff" },
+    "dark":  { "--bg": "#0e1116" }
+  },
+  "meta": { "name": "…", "author": "…", "license": "…" }
+}
+```
+
+- `tokens.theme` 与明暗无关；`light` / `dark` 按当前 `data-theme` 覆盖前者（换主题会重算）。
+- 与 shadcn `registry-item.json` 的 `cssVars: { theme, light, dark }` 同构，可直接互喂
+  （`--accent` 语义不同：shadcn 是 hover 底色，我们是品牌色，导入侧需映射）。
+- v1（`accent/radius/density/font/shadow` 五标量）读取时**自动幂等迁移**并回写 v2。
+
+## 写前校验 `validateSkinPack()`
+
+| 档 | 判据 |
+|---|---|
+| error 拒收 | 结构不成形；缺 `--bg`/`--txt`；值含 `var(` / `url(` / `!important` / `{` `}` `;`；`--radius` 非 px/rem；表面亮度非单调 |
+| warning 放行 | 未知令牌（保留，本内核暂不消费）；相邻表面亮度差 < 0.002；缺 `meta.name` |
+
+校验不过时 `applySkin()` **一个变量都不写**并返回原因，页面保持默认外观。
 
 ## 验证
 
 ```bash
 cd apps/web
-node node_modules/vitest/vitest.mjs run src/shared/styles/skin.test.ts src/apps/appearance
+node node_modules/vitest/vitest.mjs run src/shared/styles src/apps/appearance
 node node_modules/typescript/bin/tsc --noEmit
 ```
 

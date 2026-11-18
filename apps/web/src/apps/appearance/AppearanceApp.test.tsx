@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { _resetBaseCache, SKIN_KEY } from "@/shared/styles/skin";
+import { SKIN_KEY } from "@/shared/styles/skin";
 
 import AppearanceApp from "./AppearanceApp";
 
@@ -39,7 +39,6 @@ beforeEach(() => {
   window.localStorage.clear();
   document.documentElement.removeAttribute("style");
   document.documentElement.removeAttribute("data-skin");
-  _resetBaseCache();
 });
 
 describe("AppearanceApp", () => {
@@ -50,12 +49,17 @@ describe("AppearanceApp", () => {
     }
   });
 
-  it("点「紧凑」即时改间距变量并持久化", () => {
+  it("点「紧凑」即时改间距变量并持久化（v2 三分区结构）", () => {
     render(<AppearanceApp />);
     fireEvent.click(screen.getByText("紧凑"));
 
     expect(document.documentElement.style.getPropertyValue("--sp-1")).toBe("3px");
-    expect(window.localStorage.getItem(SKIN_KEY)).toContain("compact");
+    const stored = JSON.parse(window.localStorage.getItem(SKIN_KEY) ?? "{}") as {
+      version?: number;
+      tokens?: { theme?: Record<string, string> };
+    };
+    expect(stored.version).toBe(2);
+    expect(stored.tokens?.theme?.["--sp-1"]).toBe("3px");
   });
 
   it("「恢复默认皮肤」清掉内联变量", () => {
@@ -72,5 +76,24 @@ describe("AppearanceApp", () => {
     fireEvent.click(screen.getByText("衬线"));
 
     expect(document.documentElement.style.getPropertyValue("--font-sans")).toContain("serif");
+  });
+
+  it("拖圆角只写一个 --radius 基准（四档由 CSS 派生）", () => {
+    render(<AppearanceApp />);
+    fireEvent.change(screen.getByLabelText("圆角系数"), { target: { value: "1.4" } });
+
+    expect(document.documentElement.style.getPropertyValue("--radius")).toBe("14px");
+    expect(document.documentElement.style.getPropertyValue("--r-lg")).toBe("");
+  });
+
+  it("已存 v1 皮肤时面板按迁移后的值显示（不白屏、不显示乱码）", () => {
+    window.localStorage.setItem(
+      SKIN_KEY,
+      JSON.stringify({ version: 1, accent: "#112233", radius: 1.2, density: "compact" }),
+    );
+    render(<AppearanceApp />);
+
+    expect(screen.getByText("1.20×")).toBeTruthy();
+    expect((screen.getByLabelText("十六进制颜色") as HTMLInputElement).value).toBe("#112233");
   });
 });

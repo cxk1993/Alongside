@@ -153,6 +153,10 @@ export default defineConfig({
     //   某个测试 setState 造了假模块却不清理，就会漏到后面所有测试里
     //   （实测：WindowFrame.caps 的 `@/apps/__t22_none__` 让全量跑 128 项失败、单跑全绿）。
     setupFiles: ["./src/test-setup.ts"],
+    // ★ 设计令牌的「视觉零变化」验收要读 tokens.css 的**源码文本**（`?raw`）。
+    //   默认 `css: false` 会把所有 CSS 模块（含 `?raw`）stub 成空串，读不到声明；
+    //   这里只放开 tokens.css 一个文件，其余 CSS 仍走 stub（不注入 jsdom，不影响既有测试）。
+    css: { include: [/tokens\.css/] },
     // ★ 必须开 globals：@testing-library/react 的自动 cleanup 依赖全局 afterEach，
     //   关掉的话测试之间不会 unmount，上一个测试的 DOM 会残留，
     //   表现为 "Found multiple elements with ..." 这类假失败。

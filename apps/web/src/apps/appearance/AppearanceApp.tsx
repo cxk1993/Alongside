@@ -5,32 +5,36 @@
  * 改一次即时生效、持久化到 localStorage，并在下次启动前由 `initSkin()` 应用。
  *
  * 适配（与需求逐条对应）：
- *   1. 明暗双主题：只写强调色/形状类变量，不碰背景与文字；--accent-fg 按亮度自动取黑/白；
+ *   1. 明暗双主题：默认只写强调色/形状类变量，不碰背景与文字；
+ *      `--accent-fg` 按亮度自动取黑/白；皮肤包若自带 `light`/`dark` 分区则按当前主题选；
  *   2. 小窗口 / 窄屏：栅格 auto-fill + minmax(0,1fr)，360px 宽不溢出，面板整体可滚动；
  *   3. 样式门禁：组件不写十六进制，色板与阴影全部来自 tokens.css 的变量；
- *   4. 旧配置兼容：normalizeSkin() 对缺字段/脏值/旧版本一律回退默认，永不抛错。
+ *   4. 结构：控件仍是五个标量（这是 UI 概念），提交时折算成 v2 的 `tokens.theme` 具体值；
+ *      圆角只写 `--radius` 一个基准，四档由 CSS calc() 派生。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   applySkin,
+  choicesFromSkin,
   clearSkin,
   DENSITY_LABEL,
-  defaultSkin,
+  defaultChoices,
   FONT_LABEL,
   isColor,
   loadSkin,
-  normalizeSkin,
   RADIUS_MAX,
   RADIUS_MIN,
   readSwatches,
   saveSkin,
   SHADOW_LABEL,
+  skinFromChoices,
   toHex6,
   type Density,
   type FontChoice,
   type ShadowChoice,
   type Skin,
+  type SkinChoices,
 } from "@/shared/styles/skin";
 import { openDesktopPersonalization } from "@/kernel/wallpaper";
 
@@ -41,51 +45,53 @@ const FONTS: FontChoice[] = ["sans", "mono", "serif"];
 const SHADOWS: ShadowChoice[] = ["soft", "standard", "strong"];
 
 export default function AppearanceApp() {
-  const [skin, setSkin] = useState<Skin>(() => loadSkin());
-  const [hexDraft, setHexDraft] = useState(() => toHex6(loadSkin().accent));
+  const [choices, setChoices] = useState<SkinChoices>(() => choicesFromSkin(loadSkin()));
+  const [hexDraft, setHexDraft] = useState(() => toHex6(choicesFromSkin(loadSkin()).accent));
   const [savedAt, setSavedAt] = useState<string>("");
   const swatches = useMemo(() => readSwatches(), []);
 
   // ★ 同一 tick 里连点两次（色板 + 密度）时，只靠 state 闭包会丢掉前一次改动：
-  //   第二次用的是旧 skin。用一个 ref 串起来，保证「后一次基于前一次」。
-  const skinRef = useRef(skin);
+  //   第二次用的是旧 choices。用一个 ref 串起来，保证「后一次基于前一次」。
+  const choicesRef = useRef(choices);
 
   // 外部改了强调色（取色器/色板）时同步输入框
   useEffect(() => {
-    setHexDraft(toHex6(skin.accent));
-  }, [skin.accent]);
+    setHexDraft(toHex6(choices.accent));
+  }, [choices.accent]);
 
-  const commit = useCallback((next: Skin) => {
-    applySkin(next);
-    saveSkin(next);
-    document.documentElement.setAttribute("data-skin", "custom");
-    skinRef.current = next;
-    setSkin(next);
+  const commit = useCallback((next: SkinChoices) => {
+    // ★ 落盘的是 v2 皮肤（tokens.theme 里的具体变量值），不是标量 —— 与导入的皮肤包同构。
+    const skin: Skin = skinFromChoices(next);
+    applySkin(skin);
+    saveSkin(skin);
+    choicesRef.current = next;
+    setChoices(next);
     setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
   }, []);
 
   const update = useCallback(
-    (patch: Partial<Skin>) => {
-      commit(normalizeSkin({ ...skinRef.current, ...patch }));
+    (patch: Partial<SkinChoices>) => {
+      commit(choicesRef.current ? { ...choicesRef.current, ...patch } : defaultChoices());
     },
     [commit],
   );
 
   const reset = useCallback(() => {
+    // clearSkin 撤销「皮肤写过的整张变量表」，不只是某几个硬编码名字。
     clearSkin();
-    setSkin(defaultSkin());
+    setChoices(defaultChoices());
     setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
   }, []);
 
   const applyHex = useCallback(
     (value: string) => {
       if (!isColor(value)) {
-        setHexDraft(toHex6(skin.accent));
+        setHexDraft(toHex6(choices.accent));
         return;
       }
       update({ accent: value });
     },
-    [skin.accent, update],
+    [choices.accent, update],
   );
 
   return (
@@ -116,7 +122,7 @@ export default function AppearanceApp() {
               className="appearance__swatch"
               style={{ background: s.value }}
               aria-label={s.label}
-              aria-pressed={skin.accent.toLowerCase() === s.value.toLowerCase()}
+              aria-pressed={choices.accent.toLowerCase() === s.value.toLowerCase()}
               data-testid={`swatch-${s.label}`}
               onClick={() => update({ accent: s.value })}
             />
@@ -126,7 +132,7 @@ export default function AppearanceApp() {
           <input
             type="color"
             aria-label="取色器"
-            value={toHex6(skin.accent)}
+            value={toHex6(choices.accent)}
             onChange={(e) => update({ accent: e.target.value })}
           />
           <input
@@ -145,14 +151,14 @@ export default function AppearanceApp() {
       <section className="appearance__section" aria-labelledby="ap-radius">
         <h3 id="ap-radius" className="appearance__title">
           圆角
-          <span className="appearance__value">{skin.radius.toFixed(2)}×</span>
+          <span className="appearance__value">{choices.radius.toFixed(2)}×</span>
         </h3>
         <input
           type="range"
           min={RADIUS_MIN}
           max={RADIUS_MAX}
           step={0.05}
-          value={skin.radius}
+          value={choices.radius}
           aria-label="圆角系数"
           onChange={(e) => update({ radius: Number(e.target.value) })}
         />
@@ -167,8 +173,8 @@ export default function AppearanceApp() {
             <button
               key={d}
               type="button"
-              aria-pressed={skin.density === d}
-              className={skin.density === d ? "is-active" : ""}
+              aria-pressed={choices.density === d}
+              className={choices.density === d ? "is-active" : ""}
               onClick={() => update({ density: d })}
             >
               {DENSITY_LABEL[d]}
@@ -186,8 +192,8 @@ export default function AppearanceApp() {
             <button
               key={f}
               type="button"
-              aria-pressed={skin.font === f}
-              className={skin.font === f ? "is-active" : ""}
+              aria-pressed={choices.font === f}
+              className={choices.font === f ? "is-active" : ""}
               onClick={() => update({ font: f })}
             >
               {FONT_LABEL[f]}
@@ -205,8 +211,8 @@ export default function AppearanceApp() {
             <button
               key={s}
               type="button"
-              aria-pressed={skin.shadow === s}
-              className={skin.shadow === s ? "is-active" : ""}
+              aria-pressed={choices.shadow === s}
+              className={choices.shadow === s ? "is-active" : ""}
               onClick={() => update({ shadow: s })}
             >
               {SHADOW_LABEL[s]}

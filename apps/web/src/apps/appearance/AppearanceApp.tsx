@@ -45,6 +45,11 @@ import {
   type SkinEntry,
 } from "@/shared/styles/skin-library";
 import {
+  applyPluginSkin,
+  loadPluginSkins,
+  type PluginSkinEntry,
+} from "@/shared/styles/skin-plugin-store";
+import {
   commitSkin,
   resetSkin,
   subscribeSkin,
@@ -65,6 +70,10 @@ export default function AppearanceApp() {
 
   // ── 本地皮肤库（收藏 / 分享 / 切换）────────────────────────────
   const [library, setLibrary] = useState<SkinEntry[]>(() => loadLibrary());
+  // 插件提供的皮肤：只读派生数据，随插件来、随插件走（见 skin-plugin-store.ts）。
+  // 与「我的皮肤」分开渲染 —— 两者归属不同，放在一张列表里会让人以为能删能改名。
+  const [pluginSkins, setPluginSkins] = useState<PluginSkinEntry[]>(() => loadPluginSkins());
+  const refreshPluginSkins = useCallback(() => setPluginSkins(loadPluginSkins()), []);
   const [libMsg, setLibMsg] = useState<string>("");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -78,6 +87,17 @@ export default function AppearanceApp() {
     setLibMsg(msg);
     window.setTimeout(() => setLibMsg(""), 4000);
   }, []);
+
+  const applyPlugin = useCallback(
+    (id: string) => {
+      const api = skinApi();
+      if (!api) return;
+      const r = applyPluginSkin(id, api);
+      flash(r.ok ? "已应用（插件皮肤）" : `应用失败：${r.errors[0] ?? "未知错误"}`);
+      refreshPluginSkins();
+    },
+    [flash, refreshPluginSkins],
+  );
 
   const saveToLib = useCallback(() => {
     const api = skinApi();
@@ -318,6 +338,45 @@ export default function AppearanceApp() {
           ))}
         </div>
       </section>
+
+      {pluginSkins.length > 0 && (
+        <section className="appearance__section" aria-labelledby="ap-plugin-skins">
+          <h3 id="ap-plugin-skins" className="appearance__title">
+            插件皮肤
+            <span className="appearance__value">{pluginSkins.length} 份</span>
+          </h3>
+          <div className="appearance__hint">
+            由已启用的插件提供。这里只能应用，不能改不能删 —— 停用插件它就会消失。
+          </div>
+          <ul className="appearance__lib" data-testid="skin-plugin-library">
+            {pluginSkins.map((it) => (
+              <li key={it.id} className="appearance__lib-row">
+                <span
+                  className="appearance__lib-dot"
+                  style={{ background: it.accent ?? "var(--accent)" }}
+                  aria-hidden="true"
+                />
+                <span className="appearance__lib-name" title={it.name}>
+                  {it.name}
+                </span>
+                <span className="appearance__lib-tag">插件</span>
+                <button
+                  type="button"
+                  className="appearance__btn"
+                  onClick={() => applyPlugin(it.id)}
+                >
+                  应用
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="appearance__row">
+            <button type="button" className="appearance__btn" onClick={refreshPluginSkins}>
+              刷新插件皮肤
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="appearance__section" aria-labelledby="ap-library">
         <h3 id="ap-library" className="appearance__title">

@@ -1,0 +1,31 @@
+{
+  "alongsideSkin": 1,
+  "meta": {
+    "name": "夜紫",
+    "author": "Alongside 官方示例",
+    "license": "Apache-2.0"
+  },
+  "skin": {
+    "version": 2,
+    "base": "dark",
+    "tokens": {
+      "theme": {
+        "--bg": "#0f0d16",
+        "--txt": "#e9e5f5",
+        "--accent": "#a78bfa",
+        "--radius": "12px"
+      },
+      "dark": {
+        "--surface": "#171326",
+        "--surface-2": "#1f1a30",
+        "--line": "#2e2742",
+        "--txt-dim": "#a49dbc"
+      }
+    },
+    "meta": {
+      "name": "夜紫",
+      "author": "Alongside 官方示例",
+      "license": "Apache-2.0"
+    }
+  }
+}

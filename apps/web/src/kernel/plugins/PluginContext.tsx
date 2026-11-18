@@ -18,6 +18,8 @@ import {
   unregisterContributions,
 } from "../slots/contributions";
 import { syncPluginsToStore } from "./PluginRegistry";
+import { syncPluginSkins } from "@/shared/styles/skin-plugin-store";
+import { resetSkin } from "@/shared/styles/skin-runtime";
 import type { PluginContextValue, PluginInfo, SlotContribution, SlotName } from "./types";
 import type { SlotContributionSpec } from "../types";
 
@@ -71,6 +73,12 @@ export function PluginProvider({
       const list = data.plugins;
       setPlugins(list);
       syncPluginsToStore(list);
+      // ★ 皮肤随插件来、随插件走（皮肤插件 v1）。
+      //   传全量让 store 整组重建：卸载/停用插件的皮肤在这里被清掉，
+      //   不会留下「来源已不存在」的孤儿条目。
+      //   若正在用的正是这份已消失的皮肤，回退默认 —— 来源没了就不该继续生效。
+      const skinSync = syncPluginSkins(list);
+      if (skinSync.resetApplied) resetSkin();
       for (const p of list) {
         // ISSUE-012 防御：manifest 缺失（后端曾漏字段）→ 该项无入口可加载，跳过不崩。
         if (p.enabled && p.manifest?.entry) {

@@ -297,6 +297,12 @@ class PluginManager:
             # 旧值恒 True 会造成「MCP 工具已暴露 / 路由未挂载」的幽灵工具
             #（countdown 404 根因之一）。
             enabled = st.enabled if st is not None else p.source != "third-party"
+            # ★ 皮肤只在插件**启用**时对外提供（与 assets.py 的 phase 闸同口径）：
+            #   停用的插件连 UI 都不下发，它的皮肤也不该出现在皮肤库里 ——
+            #   否则「停用」只拔掉了一半，用户库里还留着一个来源已消失的条目。
+            skin_pack, skin_error = (
+                self._resolve_skin(p) if enabled else (None, None)
+            )
             granted = (
                 json.loads(st.granted_permissions)
                 if st and st.granted_permissions
@@ -332,7 +338,9 @@ class PluginManager:
                     # ★ r5 层2.3：第三方插件的 entry 在下发前**规范化成运行时资产 URL**
                     #   （见 _normalize_entry）。磁盘上的 manifest 不改 —— 改写只发生在
                     #   「组装对外清单」这一步，作者写什么仍是磁盘上那份。
-                    "manifest": self._manifest_for_client(p),
+                    "manifest": self._manifest_for_client(
+                        p, skin_pack=skin_pack, skin_error=skin_error
+                    ),
                 }
             )
         # 也列出校验失败但目录存在的插件（让用户知道为什么没起来）
@@ -354,8 +362,83 @@ class PluginManager:
         raise NotFoundError(f"插件不存在：{plugin_id!r}")
 
     # ───────────────────────── 对外 manifest 组装 ─────────────────────────
+    #: 皮肤文件体积上限，与前端皮肤库单条上限一致（64KB）。
+    _SKIN_MAX_BYTES = 64 * 1024
+
     @staticmethod
-    def _manifest_for_client(p: PluginInfo) -> dict[str, Any]:
+    def _resolve_skin(p: PluginInfo) -> tuple[dict[str, Any] | None, str | None]:
+        """把清单里的 `skin` 指针解析成下发给前端的皮肤载荷。
+
+        ★ 为什么后端读文件、前端只收对象
+        --------------------------------
+        皮肤是**数据**，不是前端产物：它不该被塞进 `web/dist/`、也不该让
+        `/plugin-assets` 为它放宽 MIME 白名单（那条白名单按扩展名查表，
+        未知扩展名 404，是穿越防护的一部分）。后端在组装对外清单时读一次、
+        校验一次、内联下发，前端拿到的就是可直接入库的对象。
+
+        ★ 为什么这里只做「浅检」，不做完整校验
+        ----------------------------------
+        完整判据是前端运行时的那一个 `validateSkinPack`（tokens 白名单、
+        亮度单调、半径派生……）。在 Python 侧复刻第二份判据必然漂 ——
+        这条教训已经在示例皮肤包那轮付过学费。
+        真正的严格闸是入库门禁（G20，构建期跑真校验器）；运行期只保证
+        「能拿到一份形状像皮肤的东西」，坏的降级并标记 `skinError`，
+        **绝不因为皮肤坏了而让插件装不上**（对作者严、对用户宽）。
+
+        ★ 路径为什么这么判
+        ------------------
+        与 `entry` 的 `/plugin-assets` 穿越防护同口径：不许绝对路径、不许
+        `..` 段、解析后必须仍在插件目录内（挡符号链接逃逸）。解析用
+        `resolve()` 再比父链，而不是字符串前缀比较 —— `plugins/ab` 与
+        `plugins/abc` 的前缀相同，字符串比较会放过逃逸。
+
+        返回 `(payload, error)`：payload 为 None 表示没有皮肤或解析失败。
+        """
+        rel = p.manifest.get("skin")
+        if not rel:
+            return None, None
+        if not isinstance(rel, str):
+            return None, "skin 必须是字符串（插件目录内的相对路径）"
+        norm = rel.replace("\\", "/")
+        parts = [c for c in norm.split("/") if c]
+        if norm.startswith("/") or not parts or any(c == ".." for c in parts):
+            return None, f"skin 路径不安全：{rel!r}（不许绝对路径与 ../）"
+        if not parts[-1].endswith(".json"):
+            return None, f"skin 必须指向 .json 文件：{rel!r}"
+        try:
+            base = Path(p.directory).resolve()
+            target = (base / norm).resolve()
+            if base != target and base not in target.parents:
+                return None, f"skin 路径逃出插件目录：{rel!r}"
+            if not target.is_file():
+                return None, f"skin 文件不存在：{rel}"
+            raw = target.read_bytes()
+        except OSError as exc:
+            return None, f"skin 读取失败：{exc}"
+        if len(raw) > PluginManager._SKIN_MAX_BYTES:
+            return None, (
+                f"skin 文件 {len(raw)} 字节，超过 "
+                f"{PluginManager._SKIN_MAX_BYTES} 字节上限"
+            )
+        try:
+            payload = json.loads(raw.decode("utf-8-sig"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            return None, f"skin 不是合法 UTF-8 JSON：{exc}"
+        if not isinstance(payload, dict) or payload.get("alongsideSkin") != 1:
+            return None, "skin 缺少 alongsideSkin: 1 外壳"
+        body = payload.get("skin")
+        tokens = body.get("tokens") if isinstance(body, dict) else None
+        if not isinstance(tokens, dict) or not isinstance(tokens.get("theme"), dict):
+            return None, "skin 缺少 tokens.theme 分区"
+        return payload, None
+
+    @staticmethod
+    def _manifest_for_client(
+        p: PluginInfo,
+        *,
+        skin_pack: dict[str, Any] | None = None,
+        skin_error: str | None = None,
+    ) -> dict[str, Any]:
         """下发给前端的 manifest —— 第三方插件的 `entry` 规范化成运行时资产 URL。
 
         ★ 为什么由后端改写而不是让前端拼（r5 契约 v1 · 层2.3）
@@ -381,15 +464,24 @@ class PluginManager:
         （只改顶层 `entry` 一个键，浅拷贝足够；嵌套结构原样共享、只读。）
         """
         manifest = p.manifest
+        # ★ 皮肤载荷随清单一起下发（皮肤插件 v1）。
+        #   为什么并进 manifest 而不是另开端点：前端的插件注册表已经把这个对象
+        #   带给内核，皮肤只是「这个插件还贡献了一份皮肤」的附加信息；多开一个
+        #   端点等于让前端为一份可选数据多跑一次请求，还得自己处理失败态。
+        extras: dict[str, Any] = {}
+        if skin_pack is not None:
+            extras["skinPack"] = skin_pack
+        if skin_error:
+            extras["skinError"] = skin_error
         if p.source != "third-party":
-            return manifest
+            return {**manifest, **extras} if extras else manifest
         try:
             entry_file = Path(p.directory) / "web" / "dist" / "index.js"
             if not entry_file.is_file():
-                return manifest
+                return {**manifest, **extras} if extras else manifest
         except OSError:
             # 目录不可读（权限/竞态删除）⇒ 不改写，保持作者原值。
-            return manifest
+            return {**manifest, **extras} if extras else manifest
         out = dict(manifest)
         # ★ 前缀取自 assets.ASSETS_PREFIX（单一真相源）：
         #   这个字符串同时出现在后端两个模块与 nginx 配置里，任何一处手写
@@ -398,6 +490,7 @@ class PluginManager:
         from core.plugins.assets import ASSETS_PREFIX
 
         out["entry"] = f"{ASSETS_PREFIX}/{p.id}/index.js"
+        out.update(extras)
         return out
 
     def slots(

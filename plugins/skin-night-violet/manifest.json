@@ -1,0 +1,19 @@
+{
+  "id": "skin-night-violet",
+  "name": "夜紫皮肤",
+  "version": "0.1.0",
+  "kind": "third-party",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "palette",
+  "description": "示例皮肤插件：一个不提供任何窗口与接口的插件，只贡献一套皮肤。用来演示「皮肤是插件的一种能力」——装插件即多一份可选皮肤，停用即消失。",
+  "author": "Alongside 官方示例",
+  "entry": "",
+  "skin": "skin.json",
+  "provides": [],
+  "requires": [],
+  "slots": [],
+  "emits": [],
+  "consumes": [],
+  "permissions": []
+}

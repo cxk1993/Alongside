@@ -5,7 +5,7 @@
 
 > **本文档是协议本身。**
 >
-> 契约真相源：`contracts/plugin.schema.json`（599 行，36 个顶层字段）
+> 契约真相源：`contracts/plugin.schema.json`（625 行，37 个顶层字段）
 > 代码真相源：§5 逐字内嵌的九份文件（由脚本从真源码取，不手抄）
 >
 > 协议的**语义与规则**在《Alongside 插件协议技术报告 v1.1》里；
@@ -27,7 +27,7 @@
 | `$schema` | `https://json-schema.org/draft/2020-12/schema` |
 | `$id` | `https://alongside/contracts/plugin.schema.json` |
 | 顶层类型 | `object` |
-| 顶层字段数 | **36** |
+| 顶层字段数 | **37** |
 | 必填字段数 | **11** |
 | 额外字段 | 禁止（`additionalProperties: false`） |
 | 放行模式 | `^x_` |
@@ -58,7 +58,7 @@ permissions
 
 | 条件 | 追加必填 | 说明 |
 |---|---|---|
-| kind ≠ container | `api` | ★ 路径 a：仅 container 型可省 api；其余 kind 必须声明 api。 |
+| {"allOf": [{"properties": {"kind": {"not": {"const": "container"}}}}, {"not": {"properties": {"entry": {"const": ""}, "provides": {"maxItems": 0}}, "required": ["skin", "entry", "provides"]}}]} | `api` | ★ 路径 a：可省 api 的插件只有两类 —— ① container（纯前端编排容器）；② 「纯皮肤插件」：声明了 skin、entry 为空串、provides 为空。后者没有接口可挂，逼它写一个假 api 只会挂出 404 路由（声明与实现不符）。其余 kind 必须声明 api。 |
 
 > ★ 条件必填**不进** `required` 数组：它只在条件成立时生效，
 > 所以上面第 2 节的必填集与这里的追加项要分开看。
@@ -67,7 +67,7 @@ permissions
 
 ## 3 · 字段分组表
 
-全部 **36** 个顶层字段，按阅读顺序分组。
+全部 **37** 个顶层字段，按阅读顺序分组。
 **分组只是阅读顺序，不是判据**——判据永远是 schema 本身。
 
 | 组 | 字段数 | 字段 |
@@ -82,7 +82,8 @@ permissions
 | **调度与输出** | 2 | `schedule`、`outputPolicy` |
 | **设置与生命周期** | 3 | `settingsSchema`、`lifecycle`、`deactivation` |
 | **扩展位** | 1 | `extensions` |
-| **合计** | **36** | |
+| **未分组** | 1 | `skin` |
+| **合计** | **37** | |
 
 ### 3.1 身份与版本（6 个字段）
 
@@ -170,6 +171,12 @@ permissions
 |---|:--:|:--:|---|---|
 | `extensions` | `object` |  | — | 扩展位。 |
 
+### 3.11 未分组（1 个字段）
+
+| 字段 | 类型 | 必填 | 约束 | 说明 |
+|---|:--:|:--:|---|---|
+| `skin` | `string` |  | pattern: ^(?!.*\.\.(?:/\|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*\.json$ | 皮肤文件指针（插件目录内的相对路径，如 skin.json）。 |
+
 ---
 
 ## 4 · 机器可读摘要
@@ -180,9 +187,9 @@ permissions
 ````json
 {
   "source": "contracts/plugin.schema.json",
-  "schema_lines": 599,
+  "schema_lines": 625,
   "title": "Alongside 插件清单（manifest）契约",
-  "field_count": 36,
+  "field_count": 37,
   "required_count": 11,
   "required": [
     "id",
@@ -199,11 +206,11 @@ permissions
   ],
   "conditional_required": [
     {
-      "when": "kind ≠ container",
+      "when": "{\"allOf\": [{\"properties\": {\"kind\": {\"not\": {\"const\": \"container\"}}}}, {\"not\": {\"properties\": {\"entry\": {\"const\": \"\"}, \"provides\": {\"maxItems\": 0}}, \"required\": [\"skin\", \"entry\", \"provides\"]}}]}",
       "required": [
         "api"
       ],
-      "description": "★ 路径 a：仅 container 型可省 api；其余 kind 必须声明 api。"
+      "description": "★ 路径 a：可省 api 的插件只有两类 —— ① container（纯前端编排容器）；② 「纯皮肤插件」：声明了 skin、entry 为空串、provides 为空。后者没有接口可挂，逼它写一个假 api 只会挂出 404 路由（声明与实现不符）。其余 kind 必须声明 api。"
     }
   ],
   "additionalProperties": false,
@@ -296,6 +303,12 @@ permissions
       "fields": [
         "extensions"
       ]
+    },
+    {
+      "name": "未分组",
+      "fields": [
+        "skin"
+      ]
     }
   ],
   "fields": [
@@ -378,6 +391,12 @@ permissions
       "type": "string",
       "required": false,
       "pattern": "^(?:|@/apps/[a-z][a-z0-9-]*|/plugin-assets/[a-z][a-z0-9-]*/(?!\\.\\.(?:/|$))(?!.*/\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*|https?://[^\\s]+|//[^/\\s][^\\s]*)$"
+    },
+    {
+      "name": "skin",
+      "type": "string",
+      "required": false,
+      "pattern": "^(?!.*\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*\\.json$"
     },
     {
       "name": "api",
@@ -606,11 +625,11 @@ permissions
 
 | # | 文件 | 角色 |
 |:--:|---|---|
-| 1 | `contracts/plugin.schema.json`（599 行） | ① 契约本体 |
+| 1 | `contracts/plugin.schema.json`（625 行） | ① 契约本体 |
 | 2 | `services/api/core/manifest.py`（499 行） | ② 运行时数据模型 |
 | 3 | `services/api/core/plugins/validate.py`（466 行） | ③ 校验器第一层（结构）+ 第二层（跨字段） |
 | 4 | `services/api/core/plugins/crosscheck.py`（208 行） | ④ 校验器第三层（跨插件一致性） |
-| 5 | `services/api/core/plugins/discover.py`（555 行） | ⑤ 接入点（发现与挂载） |
+| 5 | `services/api/core/plugins/discover.py`（566 行） | ⑤ 接入点（发现与挂载） |
 | 6 | `services/api/tests_protocol/test_protocol_gates.py`（358 行） | ⑥ 门禁测试网 |
 | 7 | `tools/crosscheck_validator.py`（473 行） | ⑦ 校验器的外部裁判 |
 | 8 | `tools/check_research_alignment.py`（373 行） | ⑧ 调研对齐核查器 |
@@ -618,7 +637,7 @@ permissions
 | 10 | `services/api/core/events.py`（568 行） | ⑩ 事件契约执行点（声明即订阅 / 声明即许可） |
 | 11 | `services/api/core/plugins/lifecycle.py`（179 行） | ⑪ 生命周期宣告契约（固定名钩子 + 声明校验） |
 
-### 5.1 ① 契约本体：`contracts/plugin.schema.json`（599 行）
+### 5.1 ① 契约本体：`contracts/plugin.schema.json`（625 行）
 
 ```json
 {
@@ -643,15 +662,36 @@ permissions
   ],
   "allOf": [
     {
-      "description": "★ 路径 a：仅 container 型可省 api；其余 kind 必须声明 api。",
+      "description": "★ 路径 a：可省 api 的插件只有两类 —— ① container（纯前端编排容器）；② 「纯皮肤插件」：声明了 skin、entry 为空串、provides 为空。后者没有接口可挂，逼它写一个假 api 只会挂出 404 路由（声明与实现不符）。其余 kind 必须声明 api。",
       "if": {
-        "properties": {
-          "kind": {
+        "allOf": [
+          {
+            "properties": {
+              "kind": {
+                "not": {
+                  "const": "container"
+                }
+              }
+            }
+          },
+          {
             "not": {
-              "const": "container"
+              "required": [
+                "skin",
+                "entry",
+                "provides"
+              ],
+              "properties": {
+                "entry": {
+                  "const": ""
+                },
+                "provides": {
+                  "maxItems": 0
+                }
+              }
             }
           }
-        }
+        ]
       },
       "then": {
         "required": [
@@ -746,6 +786,11 @@ permissions
       "type": "string",
       "pattern": "^(?:|@/apps/[a-z][a-z0-9-]*|/plugin-assets/[a-z][a-z0-9-]*/(?!\\.\\.(?:/|$))(?!.*/\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*|https?://[^\\s]+|//[^/\\s][^\\s]*)$",
       "description": "前端入口，三种语义：① 空串 = 纯后端插件，没有前端 UI（ai-chat / summary / auth / countdown 等）；② 构建期别名 @/apps/<id> = UI 已编进前端树，Vite 在构建期按 glob 解析（存量 22 个内置模块与 plugins/pi-agent 都走这条，无需构建期收录之外的任何声明）；③ 运行时资产 URL = 第三方插件把 UI 产物放在插件目录的 web/dist/ 下，由后端资产端点 GET /plugin-assets/{id}/{path} 运行时服务，入口文件为 web/dist/index.js。③ 允许两种写法：根相对 /plugin-assets/<id>/index.js，或绝对/协议相对的 http(s) URL（https://... 或 //host/...）。★ 后端在组装 GET /api/v1/plugins 清单时会对第三方插件做 entry 规范化：只要插件目录下存在 web/dist/index.js，就把该项 entry 改写成 /plugin-assets/<id>/index.js —— 因此第三方插件写不写这段都可以，但写了就必须能对得上（路径里不得含 .. 段，见 pattern）。★ 前端拿到的是已规范化的值，直接 import()/动态加载，不会二次解释 @/apps 别名；非 http(s) 的 scheme（javascript: / data: / file: 等）一律拒绝 —— entry 是 import() 的入参，scheme 白名单是注入面的第一道闸。"
+    },
+    "skin": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*\\.json$",
+      "description": "皮肤文件指针（插件目录内的相对路径，如 skin.json）。★ 这是**指针不是内容**：清单只索引，皮肤本体是独立文件，装载时用与用户导入、示例包**同一个** validateSkinPack 校验（判据不在第二处复刻）。省略 = 这个插件不带皮肤。不许 ../、不许绝对路径、必须 .json 结尾 —— 与 entry 的 /plugin-assets 穿越防护同一口径。"
     },
     "api": {
       "type": "object",
@@ -2410,7 +2455,7 @@ def assert_crosscheck(
         )
 ```
 
-### 5.5 ⑤ 接入点（发现与挂载）：`services/api/core/plugins/discover.py`（555 行）
+### 5.5 ⑤ 接入点（发现与挂载）：`services/api/core/plugins/discover.py`（566 行）
 
 ```python
 # ── 三层校验的串接点 ──
@@ -2955,13 +3000,24 @@ def mount_plugin(info: PluginInfo, registry: Any) -> None:
     """
     if info.id in registry.mounted():
         return
-    router = load_plugin_router(info)
-    registry.mount(
-        info.id,
-        router,
-        prefix=info.manifest["api"]["base"],
-        scoped=(info.kind == "third-party"),
-    )
+    # ★ 纯数据插件（皮肤插件 v1）：清单可以没有 api —— 它没有任何接口要暴露。
+    #   契约层已限定只有「container」或「有 skin、entry=""、provides 为空」的插件
+    #   可以省 api，所以这里不是给任意插件开后门。
+    #   仍然登记为「已挂载」是必须的：否则每次 enable 都会重复尝试挂载、
+    #   每次都撞同一个错（「缺少 api/router.py」），phase 永远起不来。
+    #   空 router + 空 prefix 不产生任何路由，OpenAPI 里也不会多出东西。
+    if "api" not in info.manifest:
+        from fastapi import APIRouter as _APIRouter
+
+        registry.mount(info.id, _APIRouter(), prefix="", scoped=False)
+    else:
+        router = load_plugin_router(info)
+        registry.mount(
+            info.id,
+            router,
+            prefix=info.manifest["api"]["base"],
+            scoped=(info.kind == "third-party"),
+        )
     # ★ 挂载即登记发布端声明（2026-11-10）：运行期 enable / install 的第三方插件
     #   走这条路径进系统，它们的 `emits` 必须在这时进总线注册表，
     #   否则第一条事件就会撞上 UndeclaredPublication。幂等。
@@ -5251,5 +5307,5 @@ python3 tools/gen_protocol_doc.py --check <目标路径>.md
 
 - 生成器：`tools/gen_protocol_doc.py`
 - 真相源：`contracts/plugin.schema.json`
-- 顶层字段数：36　必填字段数：11　条件必填：1
+- 顶层字段数：37　必填字段数：11　条件必填：1
 - 默认输出：stdout（**不会**自动写进任何笔记目录，必须显式 `--out`）

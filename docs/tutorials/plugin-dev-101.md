@@ -9,14 +9,14 @@
 
 ## 0. 验收判据（自评清单）
 
-| # | 判据 | 状态 |
-|:--|:--|:--|
-| 1 | 「5 分钟跑通」：从 `python scripts/create_plugin.py <id> "名称" --kind builtin` 到起服务看到自己插件入口 | 🔜 |
-| 2 | 「薄壳模板」：T16/T17 式最小插件模板（含 manifest 最小字段集） | 🔜 |
-| 3 | 「扩展点地图」：12 个扩展点逐个一句话说明 | 🔜 |
-| 4 | 「陷阱清单」≥5 条 | 🔜 |
-| 5 | 「验收自检」：pytest + tsc + eslint + `check_kernel_purity` | 🔜 |
-| 6 | 交叉核对：文中所有路径/命令/字段名与仓库现状一致 | 🔜 |
+| #   | 判据                                                                                                     | 状态 |
+| :-- | :------------------------------------------------------------------------------------------------------- | :--- |
+| 1   | 「5 分钟跑通」：从 `python scripts/create_plugin.py <id> "名称" --kind builtin` 到起服务看到自己插件入口 | 🔜   |
+| 2   | 「薄壳模板」：T16/T17 式最小插件模板（含 manifest 最小字段集）                                           | 🔜   |
+| 3   | 「扩展点地图」：12 个扩展点逐个一句话说明                                                                | 🔜   |
+| 4   | 「陷阱清单」≥5 条                                                                                        | 🔜   |
+| 5   | 「验收自检」：pytest + tsc + eslint + `check_kernel_purity`                                              | 🔜   |
+| 6   | 交叉核对：文中所有路径/命令/字段名与仓库现状一致                                                         | 🔜   |
 
 ---
 
@@ -80,7 +80,7 @@ apps/web/src/apps/myplugin/
   "emits": [],
   "consumes": [],
   "permissions": [],
-   "migrations": null,
+  "migrations": null,
   "settingsSchema": null
 }
 ```
@@ -113,14 +113,15 @@ node node_modules/vite/bin/vite.js build                         # 构建
 
 **薄壳 = 不建表、不认识业务概念、复用内核能力**。
 
-| 插件 | 内核 | 薄壳姿势 | 不建表 |
-|:--|:--|:--|:--|
+| 插件             | 内核       | 薄壳姿势                                                   | 不建表              |
+| :--------------- | :--------- | :--------------------------------------------------------- | :------------------ |
 | **T16 人格体系** | T15 文档树 | `requires: [docs.node.read, docs.node.write, docs.search]` | ✅ 零 `persona_` 表 |
-| **T17 日记** | T15 文档树 | `requires: [docs.node.read, docs.node.write, docs.search]` | ✅ 零 `diary_` 表 |
+| **T17 日记**     | T15 文档树 | `requires: [docs.node.read, docs.node.write, docs.search]` | ✅ 零 `diary_` 表   |
 
 ### 2.2 薄壳 manifest 最小字段集
 
 **核心特征**：
+
 - `provides: []`（不对外提供新能力，只消费）
 - `requires: ["docs.node.read", "docs.node.write", "docs.search"]`（消费内核）
 - `migrations: null`（无表）
@@ -145,7 +146,7 @@ node node_modules/vite/bin/vite.js build                         # 构建
   "emits": [],
   "consumes": [],
   "permissions": [],
-   "migrations": null,
+  "migrations": null,
   "settingsSchema": null
 }
 ```
@@ -198,36 +199,100 @@ export default function MyPluginApp() {
 
 来源：`contracts/plugin.schema.json` §slots 枚举。
 
-| # | 扩展点 | 一句话说明 | 典型插件 |
-|:--|:--|:--|:--|
-| 1 | `desktop.dock` | 桌面底部停靠栏入口 | docs / persona / diary |
-| 2 | `desktop.widget` | 桌面小组件 | dashboard |
-| 3 | `dashboard.card` | 仪表盘卡片 | docs / persona / diary |
-| 4 | `topbar.action` | 顶部栏动作按钮 | — |
-| 5 | `calendar.block.renderer` | 日历区块渲染器 | — |
-| 6 | `calendar.overlay` | 日历浮层 | — |
-| 7 | `inspector.panel` | 检查器面板 | — |
-| 8 | `settings.page` | 设置页面 | — |
-| 9 | `search.provider` | 搜索提供者 | docs |
-| 10 | `ai.tool` | AI 工具 | — |
-| 11 | `notification.channel` | 通知渠道 | — |
-| 12 | `command.palette` | 命令面板 | — |
+| #   | 扩展点                    | 一句话说明         | 典型插件               |
+| :-- | :------------------------ | :----------------- | :--------------------- |
+| 1   | `desktop.dock`            | 桌面底部停靠栏入口 | docs / persona / diary |
+| 2   | `desktop.widget`          | 桌面小组件         | dashboard              |
+| 3   | `dashboard.card`          | 仪表盘卡片         | docs / persona / diary |
+| 4   | `topbar.action`           | 顶部栏动作按钮     | —                      |
+| 5   | `calendar.block.renderer` | 日历区块渲染器     | —                      |
+| 6   | `calendar.overlay`        | 日历浮层           | —                      |
+| 7   | `inspector.panel`         | 检查器面板         | —                      |
+| 8   | `settings.page`           | 设置页面           | —                      |
+| 9   | `search.provider`         | 搜索提供者         | docs                   |
+| 10  | `ai.tool`                 | AI 工具            | —                      |
+| 11  | `notification.channel`    | 通知渠道           | —                      |
+| 12  | `command.palette`         | 命令面板           | —                      |
 
 **规则**：只能从这 12 个里挑，不能自定义。
 
 ---
 
+## 3.5 皮肤插件：一种「没有 UI 的 UI 插件」
+
+皮肤也是插件。不是插件包里的一节配置，也不是某个专门的主题目录 ——
+**一份皮肤就是一个插件**，跟 finance、todo 平级。
+
+### 3.5.1 为什么做成插件
+
+| 做法             | 问题                                                                                                           |
+| :--------------- | :------------------------------------------------------------------------------------------------------------- |
+| 皮肤放进整合包   | 整合包是「分发容器」，皮肤是「能力」。混在一起后，卸载一个包会连带卸掉皮肤；而且包只管装什么，不该管长什么样。 |
+| 皮肤做成专门目录 | 得为它再造一套安装/停用/卸载/版本/许可，等于把插件系统复制一遍。                                               |
+| **皮肤做成插件** | 安装、停用、卸载、版本、许可、来源标注 —— 全部复用现成机制，零新增概念。                                       |
+
+### 3.5.2 最小形态（两个文件）
+
+```
+plugins/skin-night-violet/
+├── manifest.json     # 清单：多一个 "skin": "skin.json"
+└── skin.json         # 皮肤本体：alongsideSkin:1 格式
+```
+
+`manifest.json` 的关键三行：
+
+```json
+{
+  "id": "skin-night-violet",
+  "kind": "third-party",
+  "entry": "",
+  "skin": "skin.json"
+}
+```
+
+- `entry: ""` —— 没有前端 UI。皮肤插件不加载任何 JS，**它只是数据**。
+- `skin` 是**指针不是内容**：清单只索引，皮肤本体是独立文件。
+  这样以后一个插件带多套皮肤、或皮肤文件按语言拆开，都不用改清单结构。
+
+### 3.5.3 校验发生在哪、为什么不在运行时
+
+| 时机                          | 做什么                                       | 失败时                                           |
+| :---------------------------- | :------------------------------------------- | :----------------------------------------------- |
+| 入库（CI 门禁 `plugin-skin`） | 用**运行时同一个** `validateSkinPack` 真校验 | 阻断，不许合入                                   |
+| 装载（后端读清单）            | 只做路径安全 / 体积 / 外壳形状的浅检         | 降级：`skinError` 随清单下发，**插件照常装得上** |
+
+一句话：**对作者严，对用户宽**。作者交一份坏皮肤，CI 当场拦；用户装到一个坏皮肤，
+不能让整个插件因此装不上。
+
+### 3.5.4 装载之后：进库，不覆盖
+
+插件皮肤装进「我的皮肤库」的**独立分组**，标「插件」角标，只读（不能删、不能改名）。
+用户点「应用」才生效 —— 装一个插件把人家界面换了，是越权。
+
+停用/卸载插件时：该分组条目消失；如果正在用的正是它，**回退默认皮肤**
+（来源没了，就不该继续生效；这与「删除库项不改变当前外观」是两件事：
+前者是系统被动、来源已不在，后者是用户主动、来源仍在）。
+
+### 3.5.5 自检
+
+```bash
+python tools/gates/verify_plugin_skin.py          # 路径/体积/真校验
+python -m pytest services/api/tests_protocol/test_plugin_skin_runtime.py -q
+```
+
+---
+
 ## 4. 陷阱清单（≥5 条）
 
-| # | 陷阱 | 症状 | 解法 |
-|:--|:--|:--|:--|
-| 1 | **SQLModel `list[str]` 裸注解必崩** | 启动时报 `pydantic.errors.PydanticSchemaGenerationError` | 用 `Optional[List[str]]` 或 `Annotated[List[str], Field(...)]` |
-| 2 | **vitest `vi.mock` 提升限制** | `vi.mock` 必须在文件顶部，不能在 `describe` 内 | 把 `vi.mock` 放在 import 之后、`describe` 之前 |
-| 3 | **204 端点不写 `-> None` 起不来** | FastAPI 204 响应体必须为 `None`，否则报 `Response headers only` | 204 端点显式返回 `None` + `Response(status_code=204)` |
-| 4 | **`provides` 冻结契约形态** | `provides` 数组一旦发布不能改（改了就破坏契约） | 首次发布前仔细核对；用 `provides: []` 起步（薄壳模式） |
-| 5 | **FTS5 tokenizer 不带 bigram** | SQLite 3.45.1 标准版不带 bigram，`no such tokenizer` | 用 `tokenize = 'trigram'`（FTS5 内建，3.34+）+ 短词退化 LIKE |
-| 6 | **跨插件调用不走 HTTP** | 直接 import 其他模块的 service → 循环依赖/启动失败 | 经 HTTP 调 `/api/v1/...` + `requires` 声明（ADR-0002） |
-| 7 | **`--kind` 必传 builtin** | 默认 `third-party` 会生成到仓库根 `scripts/`，错位置 | 必须传 `--kind builtin`，生成到 `services/api/modules/<id>/` |
+| #   | 陷阱                                | 症状                                                            | 解法                                                           |
+| :-- | :---------------------------------- | :-------------------------------------------------------------- | :------------------------------------------------------------- |
+| 1   | **SQLModel `list[str]` 裸注解必崩** | 启动时报 `pydantic.errors.PydanticSchemaGenerationError`        | 用 `Optional[List[str]]` 或 `Annotated[List[str], Field(...)]` |
+| 2   | **vitest `vi.mock` 提升限制**       | `vi.mock` 必须在文件顶部，不能在 `describe` 内                  | 把 `vi.mock` 放在 import 之后、`describe` 之前                 |
+| 3   | **204 端点不写 `-> None` 起不来**   | FastAPI 204 响应体必须为 `None`，否则报 `Response headers only` | 204 端点显式返回 `None` + `Response(status_code=204)`          |
+| 4   | **`provides` 冻结契约形态**         | `provides` 数组一旦发布不能改（改了就破坏契约）                 | 首次发布前仔细核对；用 `provides: []` 起步（薄壳模式）         |
+| 5   | **FTS5 tokenizer 不带 bigram**      | SQLite 3.45.1 标准版不带 bigram，`no such tokenizer`            | 用 `tokenize = 'trigram'`（FTS5 内建，3.34+）+ 短词退化 LIKE   |
+| 6   | **跨插件调用不走 HTTP**             | 直接 import 其他模块的 service → 循环依赖/启动失败              | 经 HTTP 调 `/api/v1/...` + `requires` 声明（ADR-0002）         |
+| 7   | **`--kind` 必传 builtin**           | 默认 `third-party` 会生成到仓库根 `scripts/`，错位置            | 必须传 `--kind builtin`，生成到 `services/api/modules/<id>/`   |
 
 ---
 
@@ -256,6 +321,7 @@ node node_modules/vite/bin/vite.js build                        # 构建
 ```
 
 **生产判据基线**（`expected.json`，enabled=true）：
+
 - gate: login_status 200, cookie_name `alongside_refresh`, me_sub `admin`
 - hash: entry_hash `B3M7wy91`（T17+轻UI 批次上线基线）
 - modules: count 17（agents/auth/calendar/catalog/dashboard/diary/docs/finance/habits/health/mcp/notes/persona/plugins/review/todo/web）
@@ -267,11 +333,11 @@ node node_modules/vite/bin/vite.js build                        # 构建
 
 ## 6. 真实演进史：T15 → T16 → T17
 
-| 阶段 | 插件 | 核心特征 | 测试数 | 探测项 |
-|:--|:--|:--|:--|:--|
-| **内核** | T15 文档树 | 三表 + 14 端点 + FTS5 + 版本快照 | 后端 30 / 前端 9 | 22/22 |
-| **薄壳 1** | T16 人格体系 | 零表 + 复用 T15 组件 + 固定根 | 后端 4 / 前端 3 | 11/11 |
-| **薄壳 2** | T17 日记 | 零表 + 路径约定 + 收件箱归纳 + 跨插件 HTTP | 后端 15 / 前端 5 | 15/15 |
+| 阶段       | 插件         | 核心特征                                   | 测试数           | 探测项 |
+| :--------- | :----------- | :----------------------------------------- | :--------------- | :----- |
+| **内核**   | T15 文档树   | 三表 + 14 端点 + FTS5 + 版本快照           | 后端 30 / 前端 9 | 22/22  |
+| **薄壳 1** | T16 人格体系 | 零表 + 复用 T15 组件 + 固定根              | 后端 4 / 前端 3  | 11/11  |
+| **薄壳 2** | T17 日记     | 零表 + 路径约定 + 收件箱归纳 + 跨插件 HTTP | 后端 15 / 前端 5 | 15/15  |
 
 **演进规律**：内核做厚（能力全）→ 薄壳做薄（零表/复用）→ 新插件复制薄壳模式。
 
@@ -279,17 +345,18 @@ node node_modules/vite/bin/vite.js build                        # 构建
 
 ## 7. 进度
 
-| 部分 | 内容 | 状态 |
-|:--|:--|:--|
-| §1 | 5 分钟跑通 | ✅（路径修正：cd services/api + --kind builtin） |
-| §2 | 薄壳模板 | ✅（required 12 个，与 schema 一致） |
-| §3 | 扩展点地图 | ✅（12 个，以 schema 为准） |
-| §4 | 陷阱清单 | ✅（pyfiglet 已撤掉，新增 --kind 必传） |
-| §5 | 验收自检 | ✅（对齐 expected.json） |
-| §6 | 真实演进史 | ✅ |
-| §7 | 进度 | ✅ |
+| 部分 | 内容       | 状态                                             |
+| :--- | :--------- | :----------------------------------------------- |
+| §1   | 5 分钟跑通 | ✅（路径修正：cd services/api + --kind builtin） |
+| §2   | 薄壳模板   | ✅（required 12 个，与 schema 一致）             |
+| §3   | 扩展点地图 | ✅（12 个，以 schema 为准）                      |
+| §4   | 陷阱清单   | ✅（pyfiglet 已撤掉，新增 --kind 必传）          |
+| §5   | 验收自检   | ✅（对齐 expected.json）                         |
+| §6   | 真实演进史 | ✅                                               |
+| §7   | 进度       | ✅                                               |
 
 **修订记录**：
+
 - 2026-09-20 初稿
 - 2026-09-20 修复 migrations null → api/migrations + 进度表更新
 

@@ -32,6 +32,14 @@ export type SlotName =
 export interface PluginManifest extends ModuleManifest {
   /** 扩展点窄化：manifest.slots 只能从已知 15 个里挑。 */
   slots?: SlotName[];
+  /**
+   * 皮肤插件（v1）：后端把清单里的 `skin` 指针解析成皮肤载荷后随清单下发。
+   * ★ 磁盘上是路径（`skin: "skin.json"`），下发给前端的是对象 —— 读取与校验
+   *   留在后端一处，前端不做路径解析（内核洁癖与穿越防护都靠这条）。
+   */
+  skinPack?: unknown;
+  /** 皮肤解析失败的原因（后端原样带回）：界面提示用，不阻断插件本身。 */
+  skinError?: string | null;
 }
 
 export type PluginSource = "core" | "builtin" | "third-party";

@@ -540,13 +540,24 @@ def mount_plugin(info: PluginInfo, registry: Any) -> None:
     """
     if info.id in registry.mounted():
         return
-    router = load_plugin_router(info)
-    registry.mount(
-        info.id,
-        router,
-        prefix=info.manifest["api"]["base"],
-        scoped=(info.kind == "third-party"),
-    )
+    # ★ 纯数据插件（皮肤插件 v1）：清单可以没有 api —— 它没有任何接口要暴露。
+    #   契约层已限定只有「container」或「有 skin、entry=""、provides 为空」的插件
+    #   可以省 api，所以这里不是给任意插件开后门。
+    #   仍然登记为「已挂载」是必须的：否则每次 enable 都会重复尝试挂载、
+    #   每次都撞同一个错（「缺少 api/router.py」），phase 永远起不来。
+    #   空 router + 空 prefix 不产生任何路由，OpenAPI 里也不会多出东西。
+    if "api" not in info.manifest:
+        from fastapi import APIRouter as _APIRouter
+
+        registry.mount(info.id, _APIRouter(), prefix="", scoped=False)
+    else:
+        router = load_plugin_router(info)
+        registry.mount(
+            info.id,
+            router,
+            prefix=info.manifest["api"]["base"],
+            scoped=(info.kind == "third-party"),
+        )
     # ★ 挂载即登记发布端声明（2026-11-10）：运行期 enable / install 的第三方插件
     #   走这条路径进系统，它们的 `emits` 必须在这时进总线注册表，
     #   否则第一条事件就会撞上 UndeclaredPublication。幂等。

@@ -177,6 +177,14 @@ let lastBackendModuleIds: ReadonlySet<string> = new Set<string>();
 export function syncPluginsToStore(plugins: PluginInfo[]): void {
   const incoming = new Set<string>();
   for (const p of plugins) {
+    // ★ 纯数据插件（皮肤插件 v1）不是「可打开的模块」。
+    //   它有 manifest 但没有前端入口、也没有 api：注册进桌面只会多出一个
+    //   点开空白的 Dock 图标（实机验收第一眼就撞到了「夜紫皮肤」这一项）。
+    //   判据刻意收窄成「声明了 skin 且没有 entry」—— 其它无 entry 的插件
+    //   历史上靠 api 提供功能、由 WindowFrame 判定为「合法无 UI」，不能一起砍。
+    if (p.manifest?.skin && !p.manifest?.entry) {
+      continue;
+    }
     if (!p.manifest) {
       // ★ 数据异常保护：缺 manifest 的项不能进 store（Dock 会渲染出无入口的幽灵模块），
       // 也绝不能让它把整个同步循环打断（历史上它会让贡献注册整体挂不上）。

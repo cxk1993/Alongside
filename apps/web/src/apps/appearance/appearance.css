@@ -256,6 +256,17 @@
   color: var(--txt);
 }
 
+/* 插件皮肤的「插件」小标：只标来源，不做按钮 —— 它不可点（不能删、不能改）。 */
+.appearance__lib-tag {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--txt-dim);
+}
+
 .appearance__btn--danger {
   border-color: var(--danger);
   color: var(--danger);

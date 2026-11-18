@@ -20,15 +20,36 @@
   ],
   "allOf": [
     {
-      "description": "★ 路径 a：仅 container 型可省 api；其余 kind 必须声明 api。",
+      "description": "★ 路径 a：可省 api 的插件只有两类 —— ① container（纯前端编排容器）；② 「纯皮肤插件」：声明了 skin、entry 为空串、provides 为空。后者没有接口可挂，逼它写一个假 api 只会挂出 404 路由（声明与实现不符）。其余 kind 必须声明 api。",
       "if": {
-        "properties": {
-          "kind": {
+        "allOf": [
+          {
+            "properties": {
+              "kind": {
+                "not": {
+                  "const": "container"
+                }
+              }
+            }
+          },
+          {
             "not": {
-              "const": "container"
+              "required": [
+                "skin",
+                "entry",
+                "provides"
+              ],
+              "properties": {
+                "entry": {
+                  "const": ""
+                },
+                "provides": {
+                  "maxItems": 0
+                }
+              }
             }
           }
-        }
+        ]
       },
       "then": {
         "required": [
@@ -123,6 +144,11 @@
       "type": "string",
       "pattern": "^(?:|@/apps/[a-z][a-z0-9-]*|/plugin-assets/[a-z][a-z0-9-]*/(?!\\.\\.(?:/|$))(?!.*/\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*|https?://[^\\s]+|//[^/\\s][^\\s]*)$",
       "description": "前端入口，三种语义：① 空串 = 纯后端插件，没有前端 UI（ai-chat / summary / auth / countdown 等）；② 构建期别名 @/apps/<id> = UI 已编进前端树，Vite 在构建期按 glob 解析（存量 22 个内置模块与 plugins/pi-agent 都走这条，无需构建期收录之外的任何声明）；③ 运行时资产 URL = 第三方插件把 UI 产物放在插件目录的 web/dist/ 下，由后端资产端点 GET /plugin-assets/{id}/{path} 运行时服务，入口文件为 web/dist/index.js。③ 允许两种写法：根相对 /plugin-assets/<id>/index.js，或绝对/协议相对的 http(s) URL（https://... 或 //host/...）。★ 后端在组装 GET /api/v1/plugins 清单时会对第三方插件做 entry 规范化：只要插件目录下存在 web/dist/index.js，就把该项 entry 改写成 /plugin-assets/<id>/index.js —— 因此第三方插件写不写这段都可以，但写了就必须能对得上（路径里不得含 .. 段，见 pattern）。★ 前端拿到的是已规范化的值，直接 import()/动态加载，不会二次解释 @/apps 别名；非 http(s) 的 scheme（javascript: / data: / file: 等）一律拒绝 —— entry 是 import() 的入参，scheme 白名单是注入面的第一道闸。"
+    },
+    "skin": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*\\.json$",
+      "description": "皮肤文件指针（插件目录内的相对路径，如 skin.json）。★ 这是**指针不是内容**：清单只索引，皮肤本体是独立文件，装载时用与用户导入、示例包**同一个** validateSkinPack 校验（判据不在第二处复刻）。省略 = 这个插件不带皮肤。不许 ../、不许绝对路径、必须 .json 结尾 —— 与 entry 的 /plugin-assets 穿越防护同一口径。"
     },
     "api": {
       "type": "object",

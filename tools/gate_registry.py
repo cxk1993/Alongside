@@ -210,6 +210,18 @@ GATES: tuple[Gate, ...] = (
         test_ref="services/api/tests_protocol/test_source_hygiene.py",
     ),
     Gate(
+        id="plugin-skin",
+        path="tools/gates/verify_plugin_skin.py",
+        description=(
+            "G20 · 皮肤插件契约：manifest.skin 指针必须指向插件目录内一个真能导入的皮肤文件"
+            "（路径不逃逸 / 文件存在 / ≤64KB / 过运行时同一个 validateSkinPack）。"
+            "★ 没有任何插件带皮肤即判红（反空转）；--report 永远 0。"
+        ),
+        blocking=True,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_plugin_skin_gate.py",
+    ),
+    Gate(
         id="protocol-doc",
         path="tools/check_protocol_doc.py",
         description=(

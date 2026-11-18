@@ -353,6 +353,29 @@ BUILTIN_ALLOW: tuple[tuple[str, str], ...] = (
 )
 
 
+def check_builtin_allow(roots: list[Path]) -> list[str]:
+    """自检内置豁免表本身（不是查代码，是查这张表有没有腐烂）。
+
+    ★ 为什么需要这层
+    ----------------
+    豁免表最容易的烂法不是「加错」，是**慢慢变松**：
+      · 文件改名/删除后，条目还留着 —— 它永远不命中，却让人以为「这处已豁免」；
+      · 理由写成「特例」「历史原因」—— 一年后没人知道能不能删；
+      · 数量悄悄从 2 变 7 —— 每次都有正当理由，合起来就是门禁被架空。
+
+    三条判据对应三种烂法：路径必须仍存在、理由必须够具体、数量必须被测试钉住
+    （数量钉在 tests_protocol/test_source_hygiene.py，改这里的表必须同时改那条测试 ——
+    那一步是「故意」，不是「顺手」）。
+    """
+    problems: list[str] = []
+    for rel, why in BUILTIN_ALLOW:
+        if not any((root / rel).is_file() for root in roots):
+            problems.append(f"内置豁免指向的文件不存在：{rel}（条目已失效，应删除）")
+        if len(why.strip()) < 20:
+            problems.append(f"内置豁免的理由太短（<20 字）：{rel} —— 写清「为什么不是写死」")
+    return problems
+
+
 def is_hex_exempt(label: str, name: str, allow: tuple[str, ...]) -> bool:
     """某文件是否免查 hex。
 
@@ -587,6 +610,22 @@ def main(argv: list[str] | None = None) -> int:
         allow=tuple(args.allow),
     )
     code = decide(result, strict=args.strict)
+
+    # ★ 豁免表自检：表腐烂了要自己喊（否则门禁会「绿着守一份已经不存在的规则」）。
+    #   与代码扫描分开判：豁免表坏了说明**门禁本身**不可信，属 blocking。
+    #   ★ 基准必须是**仓库根**，不是 --root：--root 可以是临时样本目录（测试、
+    #     单目录排查），拿它判豁免等于让「换个目录跑」就报一堆假问题。
+    #     仓库根认不出来（脚本被拷到别处）就跳过自检，别制造噪音。
+    repo_root = Path(__file__).resolve().parents[2]
+    allow_problems = (
+        check_builtin_allow([repo_root]) if (repo_root / "apps" / "web" / "src").is_dir() else []
+    )
+    if allow_problems:
+        print("\n内置豁免表自检：", file=sys.stderr)
+        for item in allow_problems:
+            print(f"  ✗ {item}", file=sys.stderr)
+        if code == 0:
+            code = 1
 
     if args.json:
         payload = {**result, "strict": args.strict, "exit_code": code, "ok": code == 0}

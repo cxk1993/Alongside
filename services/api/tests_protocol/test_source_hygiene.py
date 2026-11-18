@@ -445,3 +445,41 @@ def test_main_json_is_machine_readable(tmp_path: Path, capsys) -> None:
     lenient = json.loads(capsys.readouterr().out)
     assert lenient["ok"] is True
     assert lenient["strict"] is False
+
+
+# ────────────────── 内置豁免表本身：钉住数量与结构 ──────────────────
+
+
+def test_builtin_allow_is_exactly_two_entries() -> None:
+    """内置豁免必须恰好 2 条，且每条理由足够具体。
+
+    ★ 为什么把「数量」也钉住
+    ------------------------
+    豁免表最常见的烂法是**慢慢变松**：每次加一条都有正当理由，合起来门禁就没了。
+    钉住数量意味着「加第 3 条」必须同时改这条测试 —— 那一步是**故意的**，
+    评审时一定看得见。这不是反对加豁免，是要求加豁免时必须说出口。
+    """
+    gate = _load()
+    allow = gate.BUILTIN_ALLOW
+    assert len(allow) == 2, (
+        f"内置豁免应为 2 条，现有 {len(allow)} 条：{[p for p, _ in allow]}。"
+        "要加豁免请同时更新本条测试，并在 commit message 里说明为什么它不算写死。"
+    )
+    for path, why in allow:
+        assert path.endswith((".ts", ".tsx", ".css")), f"豁免目标不像源文件：{path}"
+        assert len(why.strip()) >= 20, f"豁免理由太短，无法判断能否删除：{path}"
+
+
+def test_builtin_allow_targets_still_exist() -> None:
+    """豁免指向的文件必须真实存在 —— 否则是「守着一份已不存在的规则」。"""
+    gate = _load()
+    missing = [rel for rel, _ in gate.BUILTIN_ALLOW if not (_REPO / rel).is_file()]
+    assert not missing, f"内置豁免指向的文件已不存在（应删除这些条目）：{missing}"
+
+
+def test_check_builtin_allow_reports_missing_file(tmp_path: Path) -> None:
+    """自检函数本身要能抓出「文件不存在」这种腐烂。"""
+    gate = _load()
+    problems = gate.check_builtin_allow([tmp_path])  # 空目录 ⇒ 两个豁免目标都不存在
+    assert problems, "自检没有报出任何问题（它自己失效了）"
+    assert any("不存在" in p for p in problems)

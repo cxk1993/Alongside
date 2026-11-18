@@ -15,9 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  applySkin,
   choicesFromSkin,
-  clearSkin,
   DENSITY_LABEL,
   defaultChoices,
   FONT_LABEL,
@@ -26,7 +24,6 @@ import {
   RADIUS_MAX,
   RADIUS_MIN,
   readSwatches,
-  saveSkin,
   SHADOW_LABEL,
   skinFromChoices,
   toHex6,
@@ -37,6 +34,7 @@ import {
   type SkinChoices,
 } from "@/shared/styles/skin";
 import { openDesktopPersonalization } from "@/kernel/wallpaper";
+import { commitSkin, resetSkin, subscribeSkin } from "@/shared/styles/skin-runtime";
 
 import "./appearance.css";
 
@@ -49,6 +47,16 @@ export default function AppearanceApp() {
   const [hexDraft, setHexDraft] = useState(() => toHex6(choicesFromSkin(loadSkin()).accent));
   const [savedAt, setSavedAt] = useState<string>("");
   const swatches = useMemo(() => readSwatches(), []);
+  // ★ 外部（皮肤插件 / window.AlongsideSkin）改了皮肤时，面板要跟着刷新 —— 同一真相。
+  useEffect(
+    () =>
+      subscribeSkin((skin) => {
+        const next = choicesFromSkin(skin ?? loadSkin());
+        choicesRef.current = next;
+        setChoices(next);
+      }),
+    [],
+  );
 
   // ★ 同一 tick 里连点两次（色板 + 密度）时，只靠 state 闭包会丢掉前一次改动：
   //   第二次用的是旧 choices。用一个 ref 串起来，保证「后一次基于前一次」。
@@ -61,9 +69,9 @@ export default function AppearanceApp() {
 
   const commit = useCallback((next: SkinChoices) => {
     // ★ 落盘的是 v2 皮肤（tokens.theme 里的具体变量值），不是标量 —— 与导入的皮肤包同构。
+    // ★ 统一走 runtime.commitSkin：校验 → 应用 → 持久化 → 广播，插件 API 与面板同一真相。
     const skin: Skin = skinFromChoices(next);
-    applySkin(skin);
-    saveSkin(skin);
+    commitSkin(skin);
     choicesRef.current = next;
     setChoices(next);
     setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
@@ -77,8 +85,8 @@ export default function AppearanceApp() {
   );
 
   const reset = useCallback(() => {
-    // clearSkin 撤销「皮肤写过的整张变量表」，不只是某几个硬编码名字。
-    clearSkin();
+    // resetSkin 撤销「皮肤写过的整张变量表」，并广播 null（插件据此同步）。
+    resetSkin();
     setChoices(defaultChoices());
     setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
   }, []);

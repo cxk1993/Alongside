@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   SKIN_PLUGIN_KEY,
   applyPluginSkin,
+  exportPluginSkin,
   clearPluginSkins,
   loadPluginSkins,
   syncPluginSkins,
   type PluginSkinSource,
 } from "./skin-plugin-store";
-import { _resetSkinRuntime, commitSkin, getCurrentSkin } from "./skin-runtime";
+import { _resetSkinRuntime, commitSkin, getCurrentSkin, importSkinPack } from "./skin-runtime";
 
 /** 一份最小可用的皮肤包（alongsideSkin:1 外壳 + tokens.theme）。 */
 function pack(name: string, accent: string) {
@@ -131,5 +132,24 @@ describe("skin-plugin-store：插件皮肤是「只读派生数据」", () => {
     window.localStorage.setItem(SKIN_PLUGIN_KEY, "{不是 JSON");
     expect(() => loadPluginSkins()).not.toThrow();
     expect(loadPluginSkins()).toEqual([]);
+  });
+
+  it("插件皮肤可以导出成与用户库同构的皮肤包，并且能被导入器吃回来", () => {
+    syncPluginSkins([src("a", { manifest: { skinPack: pack("夜紫", "#a78bfa") } })]);
+    const text = exportPluginSkin("plugin:a");
+    expect(text).toBeTruthy();
+    const parsed = JSON.parse(text as string);
+    // 外壳版本必须与用户导入/示例包一致，否则两种来源不能互相导入
+    expect(parsed.alongsideSkin).toBe(1);
+    expect(parsed.skin.tokens.theme["--accent"]).toBe("#a78bfa");
+
+    // 关键：用运行时同一个导入器验证「导出的东西真能装回去」
+    const round = importSkinPack(text as string);
+    expect(round.ok).toBe(true);
+    expect(round.skin?.tokens.theme?.["--accent"]).toBe("#a78bfa");
+  });
+
+  it("导出不存在的插件皮肤返回 null（不抛、不造空包）", () => {
+    expect(exportPluginSkin("plugin:ghost")).toBeNull();
   });
 });

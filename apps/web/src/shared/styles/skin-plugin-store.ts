@@ -201,6 +201,32 @@ export function applyPluginSkin(
   return api.apply(entry.skin);
 }
 
+/**
+ * 导出一份插件皮肤为**可分享的皮肤包字符串**。
+ *
+ * ★ 为什么插件皮肤也要能导出
+ * -------------------------
+ * 「只读」说的是「不能改不能删」，不是「不能带走」。皮肤是**数据不是隐私**：
+ * 它只有颜色与圆角，没有用户信息。装上插件顺手存一份自己的主题，是合理期待；
+ * 停用插件后还能继续用自己存的那份，也正是「库与来源分离」的价值。
+ *
+ * ★ 格式必须与用户库一致（alongsideSkin:1 外壳）
+ * -------------------------------------------
+ * 导出两种格式等于让「用户存的」和「插件带的」不能互相导入 ——
+ * 那正是这一整套设计要消灭的分叉。
+ */
+export function exportPluginSkin(id: string): string | null {
+  const entry = loadPluginSkins().find((it) => it.id === id);
+  if (!entry) return null;
+  const payload = {
+    alongsideSkin: 1,
+    exportedAt: new Date().toISOString(),
+    meta: { ...(entry.skin.meta ?? {}), name: entry.name },
+    skin: { ...entry.skin, meta: { ...(entry.skin.meta ?? {}), name: entry.name } },
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
 /** 清空缓存（登出/回退用）。 */
 export function clearPluginSkins(): void {
   const store = storage();

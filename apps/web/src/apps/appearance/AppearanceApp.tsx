@@ -46,6 +46,7 @@ import {
 } from "@/shared/styles/skin-library";
 import {
   applyPluginSkin,
+  exportPluginSkin,
   loadPluginSkins,
   type PluginSkinEntry,
 } from "@/shared/styles/skin-plugin-store";
@@ -87,6 +88,23 @@ export default function AppearanceApp() {
     setLibMsg(msg);
     window.setTimeout(() => setLibMsg(""), 4000);
   }, []);
+
+  const exportPlugin = useCallback(
+    (id: string) => {
+      const pack = exportPluginSkin(id);
+      if (!pack) return;
+      const entry = pluginSkins.find((it) => it.id === id);
+      const blob = new Blob([pack], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safeFileName(entry?.name ?? "skin")}.skin.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flash("已导出皮肤包（之后可从「导入…」放回来）");
+    },
+    [flash, pluginSkins],
+  );
 
   const applyPlugin = useCallback(
     (id: string) => {
@@ -346,7 +364,8 @@ export default function AppearanceApp() {
             <span className="appearance__value">{pluginSkins.length} 份</span>
           </h3>
           <div className="appearance__hint">
-            由已启用的插件提供。这里只能应用，不能改不能删 —— 停用插件它就会消失。
+            由已启用的插件提供：可以应用或导出带走，但不能在这里改或删 ——
+            停用插件它们就会消失，导出过的仍在你手里。
           </div>
           <ul className="appearance__lib" data-testid="skin-plugin-library">
             {pluginSkins.map((it) => (
@@ -366,6 +385,14 @@ export default function AppearanceApp() {
                   onClick={() => applyPlugin(it.id)}
                 >
                   应用
+                </button>
+                <button
+                  type="button"
+                  className="appearance__btn"
+                  onClick={() => exportPlugin(it.id)}
+                  aria-label={`导出皮肤 ${it.name}`}
+                >
+                  导出
                 </button>
               </li>
             ))}

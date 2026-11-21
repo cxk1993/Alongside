@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "alongside://contracts/proposal.schema.json",
+  "title": "Proposal · 变更提案（签字与撤销的地基）",
+  "description": "AI 的高风险写操作不直接执行：先出一张提案，人在界面上签字才落地，签完可撤销。\n\n这份契约存在的理由：产品简介写着「事中有确认、事后悔可撤」，\n而在 B1 之前 `proposal`/`change_set`/`action_gate` 全仓 0 命中、todo/calendar 硬删无软删列\n—— 撤销物理上不可能。本契约是「把承诺补成实体」的那一步。\n\n★ V1 边界（必须写进契约，否则前端会做假按钮）：\n  action=create 的提案**不可撤销**（没有任何 before 可回放）。服务端会以 409 明确拒绝，\n  而不是假装能撤。前端必须据此把撤销按钮置灰，并在 UI 上如实标注「此操作不可撤销」。",
+  "definitions": {
+    "Proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "title", "tool_name", "action", "method", "path",
+        "actor", "status", "created_at"
+      ],
+      "description": "一条变更提案。字段与实现（modules/proposals/schema.py ProposalOut）逐字对齐。",
+      "properties": {
+        "id": { "type": "string", "description": "提案 id" },
+        "title": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "要做什么（人话）。这是人签字时唯一会认真读的一行，所以要写得像话，不像字段堆。"
+        },
+        "tool_name": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "执行工具（MCP 工具名，如 todo_item_delete）"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["create", "update", "delete"],
+          "description": "动作三分。决定 before 快照形态与撤销策略：create→不可撤 / update→回放 before / delete→用 before 重建"
+        },
+        "method": { "type": "string", "maxLength": 8, "description": "执行 HTTP 方法（签发时快照）" },
+        "path": { "type": "string", "maxLength": 300, "description": "执行路径（签发时快照）" },
+        "payload": {
+          "type": ["object", "null"],
+          "description": "执行参数（签发时快照）"
+        },
+        "before": {
+          "type": ["object", "null"],
+          "description": "★ 变更前快照。delete/update 由拦截点在签发前 GET 同路径取得；\n取不到就 null，撤销时**如实报错，绝不伪造快照**（比丢原话）。\ncreate 恒为 null —— 这也正是它不可撤销的原因。"
+        },
+        "actor": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "发起者：`mcp:<pat name>`（经 MCP 拦截）或 `human`（登录会话直接签发）。\n这一项决定「谁提议、谁执行」的语义边界。"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected", "undone"],
+          "description": "状态机：pending → approved → undone；pending → rejected。\nrejected / undone 是终态。"
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "executed_at": { "type": ["string", "null"], "format": "date-time" },
+        "executed_id": {
+          "type": ["string", "null"],
+          "description": "执行成功后上游返回的资源 id（create 类撤销定位用）。\nV1 create 不可撤销，故此字段仅留证。"
+        },
+        "executed_status": {
+          "type": ["integer", "null"],
+          "description": "执行时的 HTTP 状态码"
+        },
+        "undone_at": { "type": ["string", "null"], "format": "date-time" },
+        "undo_result": {
+          "type": ["string", "null"],
+          "description": "撤销结果（人话）。失败时这里是**失败原因**，不是空字符串——诚实优先于整洁。"
+        }
+      },
+      "allOf": [
+        {
+          "description": "approved/undone 必须有 executed_at —— 且不能是 null（required 只管键在不在，不管值）。",
+          "if": { "properties": { "status": { "enum": ["approved", "undone"] } }, "required": ["status"] },
+          "then": {
+            "required": ["executed_at"],
+            "properties": { "executed_at": { "type": "string" } }
+          }
+        },
+        {
+          "description": "undone 必须有 undone_at（同样：不许是 null）。",
+          "if": { "properties": { "status": { "const": "undone" } }, "required": ["status"] },
+          "then": {
+            "required": ["undone_at"],
+            "properties": { "undone_at": { "type": "string" } }
+          }
+        },
+        {
+          "description": "★ create 类提案的 before 必须为 null —— 若实现给了非 null，说明快照逻辑错了。",
+          "if": { "properties": { "action": { "const": "create" } }, "required": ["action"] },
+          "then": { "properties": { "before": { "type": "null" } } }
+        }
+      ]
+    },
+
+    "ProposalOpResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "detail"],
+      "description": "approve / reject / undo 三个动作的统一响应。\n\n★ 注意：这里**只带三个字段**（比丢实现的既有形状）。\nexecuted_status / undo_result 在 GET /proposals/{id} 里，前端联调应走 GET 取全量。\n这不是遗漏，是刻意保持「动作响应轻、查询响应全」的分工。",
+      "properties": {
+        "id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected", "undone"],
+          "description": "动作执行后的新状态"
+        },
+        "detail": {
+          "type": "string",
+          "description": "人话说明。成功与失败都写这里（失败时是失败原因）。"
+        }
+      }
+    },
+
+    "ProposalList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "description": "GET /proposals 的响应（可按 status 过滤，签字中心的数据源）。",
+      "properties": {
+        "items": { "type": "array", "items": { "$ref": "#/definitions/Proposal" } },
+        "total": { "type": ["integer", "null"] }
+      }
+    }
+  },
+
+  "oneOf": [
+    { "$ref": "#/definitions/Proposal" },
+    { "$ref": "#/definitions/ProposalOpResult" },
+    { "$ref": "#/definitions/ProposalList" }
+  ]
+}

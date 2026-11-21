@@ -1,0 +1,24 @@
+{
+  "id": "p_0001",
+  "title": "删掉那条「交计划书」待办",
+  "tool_name": "todo_item_delete",
+  "action": "delete",
+  "method": "DELETE",
+  "path": "/api/v1/todo/items/t1",
+  "payload": {
+    "id": "t1"
+  },
+  "before": {
+    "id": "t1",
+    "text": "交计划书",
+    "done": false
+  },
+  "actor": "mcp:hermes",
+  "status": "pending",
+  "created_at": "2026-11-22T02:00:00+08:00",
+  "executed_at": null,
+  "executed_id": null,
+  "executed_status": null,
+  "undone_at": null,
+  "undo_result": null
+}

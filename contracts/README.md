@@ -17,6 +17,7 @@
 | **`asset.schema.json`** | **云昔** | 可沉淀经验。三条硬规则：append-only+显式 supersede / 必须留 provenance / 可单条硬删；`exportable` 默认 true |
 | **`action.schema.json`** | **云昔** | 「它做过的」时间线条目。`reversible=true` 必须有 `undo_ref`，`status=undone` 必须有 `undone_at`（schema 强制） |
 | **`widget.schema.json`** | **云昔** | 共处工作台的块与布局。**布局是数据**——可存可导；AI 也能重排（布局本身是能力缝） |
+| **`proposal.schema.json`** | **云昔**（B1 落地后补） | 变更提案 + approve/reject/undo 响应。**含 V1 边界：`create` 类不可撤销**（409 拒绝，前端须置灰、不许假按钮） |
 | `examples/*.example.json` | **云昔** | 上述四份的正例实例（已过校验，供照抄写代码） |
 | `modules/<id>.manifest.json` | **各插件卡** | 每个插件自己的清单，一个插件一个文件 |
 

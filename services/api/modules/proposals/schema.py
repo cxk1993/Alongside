@@ -28,6 +28,33 @@ class ProposalCreate(BaseModel):
         max_length=500,
         description="执行路径（必填；推荐用 {占位符} 模板，真实 id 亦可，撤销时按结构降为集合路径）",
     )
+
+    @field_validator("method")
+    @classmethod
+    def _method_allowed(cls, v: str) -> str:
+        allowed = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+        up = v.strip().upper()
+        if up not in allowed:
+            raise ValueError(f"method 仅允许 {sorted(allowed)}，收到 {v!r}")
+        return up
+
+    @field_validator("path")
+    @classmethod
+    def _path_local_only(cls, v: str) -> str:
+        """★ SSRF 防护（bidiu 2026-11-22 自查）：approve 时服务端会真的请求 path。
+
+        httpx 的行为实测：`Client(base_url=X).get("http://evil/…")` **会忽略 base_url**
+        直接打绝对 URL ⇒ 若签发者（AI/人）把 path 写成 `http://169.254.169.254/…`，
+        人一签字平台就去打云元数据。**必须只允许站内相对路径**。
+        """
+        p = v.strip()
+        if not p.startswith("/"):
+            raise ValueError("path 必须以 / 开头（服务端内部相对路径）")
+        if p.startswith("//") or "://" in p:
+            raise ValueError("path 不允许绝对 URL / 协议相对 URL（SSRF 防护）")
+        if any(seg == ".." for seg in p.split("/")):
+            raise ValueError("path 不允许包含 .. 段（路径穿越防护）")
+        return p
     payload: dict[str, Any] = Field(default_factory=dict, description="执行参数")
     before: dict[str, Any] | None = Field(default=None, description="变更前快照（create 应为 null）")
     actor: str = Field(default="human", max_length=80, description="发起者（mcp:<pat name> / human）")

@@ -600,3 +600,49 @@ def test_concurrent_approve_only_one_wins(client, fake_internal):
     assert not _todo_exists(client, row["text"]), "只执行一次删除"
     got = client.get(f"/api/v1/proposals/{pid}", headers=AUTH).json()
     assert got["status"] == "approved"
+
+
+# ─────────────── SSRF / 方法白名单（bidiu 2026-11-22 自查） ───────────────
+# httpx 实测：Client(base_url=X).get("http://evil/…") 会忽略 base_url 打绝对 URL。
+# 提案的 path 由签发者（AI/人）提供、approve 时服务端真请求 ⇒ 必须站内相对路径。
+
+
+def test_proposal_rejects_absolute_or_traversal_path(client):
+    bad_paths = [
+        "http://169.254.169.254/latest/meta-data/",  # 云元数据 SSRF
+        "//evil.example.com/x",                       # 协议相对
+        "/../etc/passwd",                             # 路径穿越
+        "relative/no-leading-slash",                  # 非绝对内部路径
+    ]
+    for bad in bad_paths:
+        r = client.post(
+            "/api/v1/proposals",
+            json={
+                "title": "ssrf 探针",
+                "tool_name": "x",
+                "action": "update",
+                "method": "GET",
+                "path": bad,
+                "payload": {},
+                "actor": "human",
+            },
+            headers=AUTH,
+        )
+        assert r.status_code == 422, (bad, r.text)
+
+
+def test_proposal_rejects_unknown_http_method(client):
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "method 白名单",
+            "tool_name": "x",
+            "action": "update",
+            "method": "TRACE",
+            "path": "/api/v1/todo/items",
+            "payload": {},
+            "actor": "human",
+        },
+        headers=AUTH,
+    )
+    assert r.status_code == 422, r.text

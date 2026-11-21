@@ -14,6 +14,7 @@ import { useShortcuts, type ShortcutHandlers } from "./Shortcuts";
 import { TopBar } from "./TopBar";
 import { WindowManager } from "./WindowManager";
 import { DesktopSidebar } from "./shell/DesktopSidebar";
+import { SlotHost } from "./slots/SlotHost";
 
 const MODULES_URL = "/modules.json";
 
@@ -349,6 +350,8 @@ export function Desktop() {
             {/* U3：桌面级双侧栏（左=导航/结构，右=摘要/情境；折叠持久化） */}
             <DesktopSidebar side="left" />
             <div className="windows">
+              {/* 共处工作台（desktop.widget）：桌面级背景面。无插件贡献时零渲染（空 fragment 兜底） */}
+              <SlotHost slot="desktop.widget" className="windows__surface" fallback={<></>} />
               <WindowManager />
             </div>
             <DesktopSidebar side="right" />

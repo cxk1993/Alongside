@@ -1,0 +1,120 @@
+/* 共处工作台 · v1 灰盒。颜色/间距只用设计令牌（G18：禁止写死色值）。 */
+.collab-surface {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+  padding: var(--sp-4);
+  box-sizing: border-box;
+  color: var(--txt);
+  font-family: var(--font-sans);
+  background: transparent;
+}
+
+.collab-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.collab-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: 0 0 auto;
+}
+
+.collab-status__meta {
+  color: var(--txt-dim);
+  font-size: 12px;
+}
+
+.collab-status__hint {
+  margin-left: auto;
+  color: var(--txt-faint);
+  font-size: 12px;
+}
+
+.collab-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+}
+
+.collab-card {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: auto;
+}
+
+.collab-card--timeline {
+  grid-column: 1 / -1;
+  max-height: 30%;
+}
+
+.collab-card__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt-dim);
+  letter-spacing: 0.02em;
+}
+
+.collab-empty {
+  margin: 0;
+  color: var(--txt-faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.collab-empty--warn {
+  color: var(--warn);
+}
+
+.collab-list,
+.collab-proposals {
+  margin: 0;
+  padding-left: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: 13px;
+}
+
+.collab-list--attention {
+  color: var(--warn);
+}
+
+.collab-proposal {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.collab-proposal__title {
+  font-size: 13px;
+}
+
+.collab-proposal__meta {
+  color: var(--txt-faint);
+  font-size: 11px;
+}

@@ -1,0 +1,30 @@
+{
+  "id": "collab",
+  "name": "共处工作台",
+  "version": "0.1.0",
+  "kind": "builtin",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "ai",
+  "description": "共处工作台：它看见的 / 它想说的 / 它做过的（桌面级背景面，v1 灰盒）",
+  "entry": "@/apps/collab",
+  "api": {
+    "base": "/api/v1/collab",
+    "openapi": "/api/v1/collab/openapi.json",
+    "health": "/api/v1/collab/health"
+  },
+  "window": {
+    "w": 960,
+    "h": 640,
+    "minW": 640,
+    "minH": 420
+  },
+  "provides": [],
+  "requires": [],
+  "slots": [
+    "desktop.widget"
+  ],
+  "emits": [],
+  "consumes": [],
+  "permissions": []
+}

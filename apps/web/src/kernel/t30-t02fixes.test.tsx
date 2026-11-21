@@ -127,7 +127,7 @@ describe("★ BUG-T02-1：搜索浮层开着 + 桌面有窗，一次 Esc 只关�
     expect(dialog).toBeTruthy();
 
     // 焦点在搜索框（autoFocus），按一次 Esc → 只关搜索
-    const input = screen.getByPlaceholderText("搜索模块…");
+    const input = screen.getByPlaceholderText("搜索或输入命令…");
     fireEvent.keyDown(input, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "全局搜索" })).toBeNull();
     // ★ 修复点：以前这里窗也一起被关了

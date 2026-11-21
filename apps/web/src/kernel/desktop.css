@@ -1355,6 +1355,17 @@
   background: var(--accent-soft);
   color: var(--txt);
 }
+/* ★ T17：命令面板分组（模块 / 动作 / 能力（只读））。
+   分组标题只是视觉分隔，不进键盘序列（键盘走扁平下标）。 */
+.search__group + .search__group {
+  margin-top: var(--sp-2);
+}
+.search__group-title {
+  padding: 2px var(--sp-3);
+  color: var(--txt-faint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
 .search__empty {
   padding: var(--sp-4);
   color: var(--txt-faint);

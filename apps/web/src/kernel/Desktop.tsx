@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ToastHost } from "@/shared/components/Toast";
-import { initTheme } from "@/shared/styles/theme";
+import { initTheme, useTheme } from "@/shared/styles/theme";
 import { pluginHost, registerModules } from "./ModuleRegistry";
 import { useDesktopStore, normalStack, topmostNormalId, type WindowState } from "./store";
 import type { ModuleManifest } from "./types";
@@ -9,6 +9,13 @@ import { AuthGate } from "./AuthGate";
 import { PluginProvider } from "./plugins/PluginContext";
 import { logout } from "@/shared/api/auth";
 import { Dock } from "./Dock";
+import {
+  buildCommands,
+  filterCommands,
+  groupCommands,
+  isRunnable,
+  type Command,
+} from "./commands";
 import { TimeWidget } from "./shell/TimeWidget";
 import { useShortcuts, type ShortcutHandlers } from "./Shortcuts";
 import { TopBar } from "./TopBar";
@@ -114,13 +121,7 @@ export function Desktop() {
   };
   useShortcuts(handlers);
 
-  const items = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return Object.values(modules)
-      .filter((r) => r.enabled)
-      .map((r) => r.manifest)
-      .filter((m) => !q || m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q));
-  }, [query, modules]);
+  // ★ T17：命令面板的数据源在下方（依赖顶/底栏状态与工作区，须在本组 hooks 之后计算）。
 
   // ★ U1（2026-09-24）：顶栏/底栏收放（状态与持久化在 desktop store；判据 U1-1/U1-2）
   const topbarCollapsed = useDesktopStore((s) => s.topbarCollapsed);
@@ -129,6 +130,72 @@ export function Desktop() {
   const toggleBottombar = useDesktopStore((s) => s.toggleBottombar);
   // ★ 主人④（2026-09-24）：一键最小化所有未固定窗口
   const minimizeAllUnpinned = useDesktopStore((s) => s.minimizeAllUnpinned);
+
+  // ═══ ★ T17：命令面板（Dock 隐藏后的主入口）═══
+  // 数据源与检索规则全在 `kernel/commands.ts`（纯函数、可单测）；
+  // 这里只负责把 store 的既有方法与**当前状态**喂进去（标题要随状态变：
+  // Dock 收起时显示「显示 Dock」而不是「隐藏 Dock」——按钮文案不许与事实相反）。
+  const workspaces = useDesktopStore((s) => s.workspaces);
+  const activeWorkspaceId = useDesktopStore((s) => s.activeWorkspaceId);
+  const createWorkspace = useDesktopStore((s) => s.createWorkspace);
+  const switchWorkspace = useDesktopStore((s) => s.switchWorkspace);
+  const toggleTheme = useTheme((s) => s.toggle);
+
+  // 「插件管理」的落点用**能力发现**（与 WindowFrame.tsx:56 同一口径）：
+  // 内核不认识任何具体插件 id，没有提供者就不出这条命令。
+  const managerId = useMemo(() => {
+    for (const reg of Object.values(modules)) {
+      if (!reg.enabled) continue;
+      const caps = (reg.manifest.provides ?? []) as readonly string[];
+      if (caps.includes("plugin.manage")) return reg.manifest.id;
+    }
+    return undefined;
+  }, [modules]);
+
+  const commands = useMemo(
+    () =>
+      buildCommands({
+        modules,
+        workspaces,
+        activeWorkspaceId,
+        topbarCollapsed,
+        dockCollapsed: bottombarCollapsed,
+        openModule: (id) => pluginHost.open(id),
+        openPluginManager: managerId ? () => pluginHost.open(managerId) : undefined,
+        toggleTopbar,
+        toggleBottombar,
+        tidyDesktop: tidy,
+        minimizeAllUnpinned,
+        createWorkspace,
+        switchWorkspace,
+        toggleTheme,
+      }),
+    [
+      modules,
+      workspaces,
+      activeWorkspaceId,
+      topbarCollapsed,
+      bottombarCollapsed,
+      managerId,
+      tidy,
+      toggleTopbar,
+      toggleBottombar,
+      minimizeAllUnpinned,
+      createWorkspace,
+      switchWorkspace,
+      toggleTheme,
+    ],
+  );
+  /** 键盘上下移动的下标作用在**过滤后的扁平列表**上 —— 与视觉顺序一致。 */
+  const items = useMemo(() => filterCommands(commands, query), [commands, query]);
+  const blocks = useMemo(() => groupCommands(items), [items]);
+
+  /** 执行一条命令：先关面板再跑（跑的过程中面板还盖着桌面 = 看不见自己做了什么）。 */
+  const runCommand = (cmd: Command | undefined) => {
+    if (!isRunnable(cmd)) return;
+    closeSearch();
+    cmd.run();
+  };
 
   // ═══ ★ 收放罗盘（主人三板拍板）═══
   // 顶/底栏状态走 store（U1 既有）；左右栏状态在 DesktopSidebar 内部 localStorage
@@ -366,7 +433,7 @@ export function Desktop() {
                 <input
                   className="search__input"
                   autoFocus
-                  placeholder="搜索模块…"
+                  placeholder="搜索或输入命令…"
                   value={query}
                   onChange={(e) => {
                     setQuery(e.target.value);
@@ -380,34 +447,43 @@ export function Desktop() {
                       e.preventDefault();
                       setActiveIdx((i) => Math.max(0, i - 1));
                     } else if (e.key === "Enter") {
-                      const m = items[activeIdx];
-                      if (m) {
-                        closeSearch();
-                        pluginHost.open(m.id);
-                      }
+                      // ★ T17：Enter 执行高亮命令（含模块开窗）。先关面板再跑。
+                      runCommand(items[activeIdx]);
                     } else if (e.key === "Escape") {
                       e.stopPropagation(); // ★ BUG-T02-1：Esc 只关搜索层，不许冒泡成"关窗"
                       closeSearch();
                     }
                   }}
                 />
-                <div className="search__list">
+                <div className="search__list" role="listbox" aria-label="命令列表">
                   {items.length ? (
-                    items.map((m, i) => (
-                      <div
-                        key={m.id}
-                        className={`search__item${i === activeIdx ? " search__item--active" : ""}`}
-                        onMouseEnter={() => setActiveIdx(i)}
-                        onClick={() => {
-                          closeSearch();
-                          pluginHost.open(m.id);
-                        }}
-                      >
-                        {m.name}
+                    blocks.map((b) => (
+                      <div key={b.group} className="search__group" role="group" aria-label={b.group}>
+                        {/* 分组标题不进键盘序列（上下键走的是扁平 items 下标） */}
+                        <div className="search__group-title" aria-hidden="true">
+                          {b.group}
+                        </div>
+                        {b.commands.map((c) => {
+                          // 用扁平列表里的真实下标，保证「鼠标悬停高亮」与「上下键高亮」是同一个东西
+                          const i = items.indexOf(c);
+                          return (
+                            <div
+                              key={c.id}
+                              className={`search__item${i === activeIdx ? " search__item--active" : ""}`}
+                              role="option"
+                              aria-selected={i === activeIdx}
+                              data-testid="command-item"
+                              onMouseEnter={() => setActiveIdx(i)}
+                              onClick={() => runCommand(c)}
+                            >
+                              {c.title}
+                            </div>
+                          );
+                        })}
                       </div>
                     ))
                   ) : (
-                    <div className="search__empty">没有匹配的模块</div>
+                    <div className="search__empty">没有匹配的命令或模块</div>
                   )}
                 </div>
               </div>

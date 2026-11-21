@@ -155,6 +155,11 @@
   justify-content: space-between;
   gap: var(--sp-2);
 }
+/* ★ T28：张力条目下的「建议动作」——另起一行、比正文弱一档，不与 summary 抢注意力。 */
+.collab-tension__action {
+  display: block;
+  margin-top: 2px;
+}
 .collab-count {
   margin-left: var(--sp-1);
   padding: 0 6px;

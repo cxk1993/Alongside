@@ -471,4 +471,71 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     await waitFor(() => expect(screen.queryByTestId("proposal-detail")).toBeNull());
     expect(document.activeElement).toBe(open);
   });
+  it("★ T28：视野的采样时刻上屏（它是每次现算的，不是常量）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("/sight/now")) {
+        return Promise.resolve({
+          head: { now_local: "2026-11-22T04:26:05+08:00", part_of_day: "late_night" },
+          tensions: [],
+          attention: [],
+          degraded: [],
+        });
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    const at = await screen.findByTestId("sight-sampled-at");
+    expect(at.textContent).toContain("04:26");
+    expect(at.textContent).toContain("采样");
+  });
+
+  it("★ T28：张力带建议动作就上屏；没给就不编一行", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("/sight/now")) {
+        return Promise.resolve({
+          head: { now_local: "2026-11-22T04:26:05+08:00", part_of_day: "late_night" },
+          tensions: [
+            {
+              id: "t1",
+              kind: "schedule_conflict",
+              summary: "两节课重叠约 30 分钟",
+              severity: "high",
+              suggested_action: "把其中一件挪开，或确认是否可以不参加",
+            },
+            { id: "t2", kind: "stale_item", summary: "这笔账挂了 11 天", severity: "warn" },
+          ],
+          attention: [],
+          degraded: [],
+        });
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    expect(await screen.findByText(/把其中一件挪开/)).toBeTruthy();
+    // 第二条没有 suggested_action → 不该出现任何编出来的建议
+    expect(screen.queryByText(/（无建议）/)).toBeNull();
+  });
+
+  it("★ T28：待签卡显示「提出于 HH:MM」——什么时候提的很关键，别让人以为刚刚", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=pending")) {
+        return Promise.resolve([
+          {
+            id: "p1",
+            title: "删除待办",
+            action: "delete",
+            actor: "mcp:nx",
+            status: "pending",
+            created_at: "2026-11-22T04:05:04.746731+08:00",
+          },
+        ]);
+      }
+      if (path.includes("status=undone")) return Promise.resolve([]);
+      if (path.includes("/proposals")) return Promise.resolve([]);
+      return err404();
+    });
+    render(<CollabApp />);
+    expect(await screen.findByText(/提出于 04:05/)).toBeTruthy();
+  });
+
 });

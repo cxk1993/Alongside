@@ -33,6 +33,8 @@ interface TensionItem {
   kind?: string;
   summary?: string;
   severity?: string;
+  /** ★ T28：服务端已经给出「建议怎么办」，界面此前把它丢了——只报冲突不给动作，人得自己再想一遍。 */
+  suggested_action?: string;
 }
 
 interface DegradedItem {
@@ -221,6 +223,10 @@ export default function CollabApp() {
         <strong>AI 在场</strong>
         <span className="collab-status__meta">
           {sight.data?.head?.part_of_day ? `${sight.data.head.part_of_day} · ` : ""}
+          {/* ★ T28：显示这一份视野的采样时刻——它是每次现算的，不是常量（否则「在场」只是装饰） */}
+          {hhmm(sight.data?.head?.now_local) ? (
+            <span data-testid="sight-sampled-at">{hhmm(sight.data?.head?.now_local)} 采样 · </span>
+          ) : null}
           处境：{STATUS_TEXT[sight.status]} · 提案：{STATUS_TEXT[proposals.status]}
         </span>
         <span className="collab-status__hint">v1 灰盒 · 数据未接入时如实空态，不造假</span>
@@ -244,6 +250,12 @@ export default function CollabApp() {
                     <li key={t.id ?? t.summary ?? t.kind}>
                       {t.summary ?? t.kind}
                       {t.severity ? ` · ${t.severity}` : ""}
+                      {/* ★ T28：服务端给了动作建议就上屏；没给就不编 */}
+                      {t.suggested_action ? (
+                        <span className="collab-proposal__note collab-tension__action">
+                          {t.suggested_action}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -290,6 +302,7 @@ export default function CollabApp() {
                       <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
                                             <span className="collab-proposal__meta">
                                               待签 · {p.action ?? "?"} · {actorLabel(p.actor)}
+                                              {hhmm(p.created_at) ? ` · 提出于 ${hhmm(p.created_at)}` : ""}
                                             </span>
                                             <BeforePreview action={p.action} before={p.before} />
                                             <span className="collab-proposal__ops">
@@ -354,6 +367,7 @@ export default function CollabApp() {
                           <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
                           <span className="collab-proposal__meta">
                             已签 · {p.action ?? "?"} · {actorLabel(p.actor)}
+                            {hhmm(p.executed_at) ? ` · 执行于 ${hhmm(p.executed_at)}` : ""}
                           </span>
                           <span className="collab-proposal__ops">
                             {/* ★ T20 修正（契约 8ccef3b）：三种动作**都可撤销**——原契约

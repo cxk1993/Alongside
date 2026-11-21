@@ -232,7 +232,7 @@
         "status",
         "detail"
       ],
-      "description": "approve / reject / undo 三个动作的统一响应。\n\n★ 注意：这里**只带三个字段**（比丢实现的既有形状）。\nexecuted_status / undo_result 在 GET /proposals/{id} 里，前端联调应走 GET 取全量。\n这不是遗漏，是刻意保持「动作响应轻、查询响应全」的分工。",
+      "description": "approve / reject / undo 三个动作的统一响应。\n\n★ 注意：这里**只带三个字段**（比丢实现的既有形状）。\nexecuted_status / undo_result 在 GET /proposals/{id} 里，前端联调应走 GET 取全量。\n这不是遗漏，是刻意保持「动作响应轻、查询响应全」的分工。\n\n★ 撤销失败的语义（2026-11-22 03:08 补，来源：凝析 P4 交叉评审实测）：\n  当下游 4xx/5xx（典型：executed_id 悬空 → 404）→ 本端点返回 **HTTP 422**，\n  且 status **保持原值（通常是 approved）不变**，detail 里带下游原始状态与原因。\n  **刻意不新增 undo_failed 状态**：状态机只描述「提案在流程里的位置」，\n  不描述「这一次动作成功与否」。把失败塞进状态机，会让「它到底算签没签」变得含糊。\n  代价：前端不能用 status 判失败，必须看 HTTP 码 —— 这是有意的取舍。",
       "properties": {
         "id": {
           "type": "string"
@@ -245,11 +245,11 @@
             "rejected",
             "undone"
           ],
-          "description": "动作执行后的新状态"
+          "description": "动作执行后的状态。**动作失败时这个值不变**（见本节点 description 的撤销失败语义）。\n所以判成功看 HTTP 码，不要只看 status。"
         },
         "detail": {
           "type": "string",
-          "description": "人话说明。成功与失败都写这里（失败时是失败原因）。"
+          "description": "人话说明。成功与失败都写这里；失败时**必须带下游原始状态与原因**（如「撤销失败：下游 404，原待办已不存在」），不许只写「失败」。"
         }
       }
     },

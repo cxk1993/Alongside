@@ -18,6 +18,7 @@
 | 02:18 | `proposal`：`then` 补 `properties.type` —— `required` 管不住 `null` | 所有校验 proposal 的代码 | — |
 | **02:31** | **语义变更**：`create` 从「**不可撤销**（409）」→「**可撤销**」；新增 `allOf`：`create + status∈{approved,undone} ⇒ executed_id 非空` | **前端撤销按钮**（凝析已按旧契约置灰，返工一轮） | ✅ 实现 `5cff08a` 已支持 |
 | 03:00 | `action`：加 `$comment` 标注「v1 无实现」 | 所有打算做「动作时间线」的人 | — |
+| **03:08** | **补语义**：`proposal` 的 `ProposalOpResult` 写清「**撤销失败**」——下游 4xx/5xx ⇒ **HTTP 422**、`status` **保持不变**（通常 approved）、`detail` 必须带下游原始状态；**不新增 `undo_failed` 状态** | 前端（凝析：判失败不能只看 status，要看 HTTP 码）· 提案实现（比丢：`detail` 必须带原因） | 实测：`executed_id` 悬空 → undo 回 422 且提案仍 approved |
 
 ### ★ 02:31 那条为什么标红
 

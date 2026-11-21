@@ -65,6 +65,88 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     expect(screen.getByText("撤销")).toBeTruthy();
   });
 
+  it("★ T20：delete 提案带 before → 折叠快照可展开，正文在", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=approved")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          {
+            id: "p2",
+            title: "删除待办 #2",
+            action: "delete",
+            actor: "mcp:pat",
+            before: { id: "t2", text: "要删的那条" },
+          },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    expect(await screen.findByText("变更前快照")).toBeTruthy();
+    expect(screen.getByText(/要删的那条/)).toBeTruthy();
+  });
+
+  it("★ T20：before 缺失 → 如实说「服务端未提供」，绝不渲染空对象", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=approved")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          { id: "p4", title: "改个标题", action: "update", actor: "mcp:pat", before: null },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    expect(await screen.findByText("变更前快照：服务端未提供")).toBeTruthy();
+    expect(screen.queryByText("{}")).toBeNull();
+  });
+
+  it("★ T20：action=create → 明说「无变更前快照」", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=approved")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          { id: "p5", title: "新建待办", action: "create", actor: "human", before: null },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    expect(await screen.findByText(/新建 · 无变更前快照/)).toBeTruthy();
+  });
+
+  it("★ T20：create 的已签提案 → 撤销置灰并注明不可撤销（不做按下去必报错的假按钮）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          { id: "p3", title: "新建待办", action: "create", actor: "human", before: null },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    const btn = (await screen.findByTestId("undo-disabled")) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(screen.getByText(/新建的提案不可撤销/)).toBeTruthy();
+  });
+
+  it("★ T20：actor 读得懂（AI 提案 vs 人自己签发一眼分开）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=approved")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          { id: "a1", title: "AI 的提案", action: "delete", actor: "mcp:nx-t10-ui" },
+          { id: "a2", title: "人的提案", action: "delete", actor: "human" },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    expect(await screen.findByText(/AI（nx-t10-ui）/)).toBeTruthy();
+    expect(screen.getByText(/你签发/)).toBeTruthy();
+  });
+
   it("sight 就绪时显示 tensions 与降级说明", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("/sight/now")) {

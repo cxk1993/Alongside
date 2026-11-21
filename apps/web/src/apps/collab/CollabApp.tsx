@@ -49,6 +49,46 @@ interface ProposalRow {
   status?: string;
   actor?: string;
   created_at?: string;
+  /** ★ T20：变更前快照。契约口径：create 必为 null；null 就是**没有快照**，不是空对象。 */
+  before?: Record<string, unknown> | null;
+  executed_at?: string | null;
+  undone_at?: string | null;
+}
+
+/**
+ * ★ T20：actor 要一眼分得开（契约 11 §二）。
+ * 原样显示 `mcp:nx-t10-ui` 这类内部标识对人没有意义，但也不能丢掉「是谁」——
+ * 折中：保留前缀语义，人读得懂的部分放前面。
+ */
+function actorLabel(actor?: string): string {
+  if (!actor) return "来源不明";
+  if (actor === "human") return "你签发";
+  if (actor.startsWith("mcp:")) return `AI（${actor.slice(4) || "未命名 PAT"}）`;
+  return actor;
+}
+
+/**
+ * ★ T20：变更前快照预览。
+ *
+ * 三条诚实规则（契约 11 §二/§三）：
+ *   1. `action=create` → 没有"变更前"，**不渲染空对象**，明说「新建」；
+ *   2. `before === null`（delete/update 却没有快照）→ 如实说「服务端未提供」，
+ *      而不是留一个空白框让人以为快照是空的；
+ *   3. 有快照 → 默认折叠（卡片上已经有一行标题，快照是签字时才要细看的东西）。
+ */
+function BeforePreview({ action, before }: { action?: string; before?: Record<string, unknown> | null }) {
+  if (action === "create") {
+    return <span className="collab-proposal__note">新建 · 无变更前快照</span>;
+  }
+  if (!before) {
+    return <span className="collab-proposal__note">变更前快照：服务端未提供</span>;
+  }
+  return (
+    <details className="collab-before">
+      <summary>变更前快照</summary>
+      <pre className="collab-before__body">{JSON.stringify(before, null, 2)}</pre>
+    </details>
+  );
 }
 
 function useSight(): { status: ZoneStatus; data: SightNow | null } {
@@ -205,10 +245,11 @@ export default function CollabApp() {
                   {proposals.pending.map((p) => (
                     <li key={p.id} className="collab-proposal" data-testid="proposal-row">
                       <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
-                      <span className="collab-proposal__meta">
-                        待签 · {p.action ?? "?"} · {p.actor ?? "?"}
-                      </span>
-                      <span className="collab-proposal__ops">
+                                            <span className="collab-proposal__meta">
+                                              待签 · {p.action ?? "?"} · {actorLabel(p.actor)}
+                                            </span>
+                                            <BeforePreview action={p.action} before={p.before} />
+                                            <span className="collab-proposal__ops">
                         <button
                           type="button"
                           className="collab-btn collab-btn--primary"
@@ -239,19 +280,38 @@ export default function CollabApp() {
                     {proposals.approved.map((p) => (
                       <li key={p.id} className="collab-proposal" data-testid="proposal-row-approved">
                         <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
-                        <span className="collab-proposal__meta">
-                          已签 · {p.action ?? "?"} · {p.actor ?? "?"}
-                        </span>
-                        <span className="collab-proposal__ops">
-                          <button
-                            type="button"
-                            className="collab-btn collab-btn--primary"
-                            disabled={proposals.busyId === p.id}
-                            onClick={() => void proposals.act(p.id, "undo")}
-                          >
-                            撤销
-                          </button>
-                        </span>
+                                                <span className="collab-proposal__meta">
+                                                  已签 · {p.action ?? "?"} · {actorLabel(p.actor)}
+                                                </span>
+                                                <span className="collab-proposal__ops">
+                                                  {p.action === "create" ? (
+                                                    // ★ T20：契约 11 §三——create 没有 before 可回放，服务端会 409。
+                                                    //   所以这里**置灰 + 明说**，而不是做出一个按下去必然报错的按钮。
+                                                    <>
+                                                      <button
+                                                        type="button"
+                                                        className="collab-btn"
+                                                        disabled
+                                                        title="此操作不可撤销"
+                                                        data-testid="undo-disabled"
+                                                      >
+                                                        撤销
+                                                      </button>
+                                                      <span className="collab-proposal__note">
+                                                        新建的提案不可撤销（没有可回放的快照）
+                                                      </span>
+                                                    </>
+                                                  ) : (
+                                                    <button
+                                                      type="button"
+                                                      className="collab-btn collab-btn--primary"
+                                                      disabled={proposals.busyId === p.id}
+                                                      onClick={() => void proposals.act(p.id, "undo")}
+                                                    >
+                                                      撤销
+                                                    </button>
+                                                  )}
+                                                </span>
                       </li>
                     ))}
                   </ul>

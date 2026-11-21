@@ -248,4 +248,24 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     expect(await screen.findByText("还没有签过或撤过的东西")).toBeTruthy();
     expect(screen.queryByTestId("collab-timeline")).toBeNull();
   });
+
+  it("★ 撤销失败（422，例如 executed_id 已悬空）→ 错误行如实回显，提案仍在已签组", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("status=undone")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          { id: "p7", title: "新建待办", action: "create", actor: "human", executed_id: "gone" },
+        ]);
+      }
+      return err404();
+    });
+    post.mockImplementationOnce(() => Promise.reject(new ErrCtor(422)));
+    render(<CollabApp />);
+    const btn = (await screen.findByTestId("undo-btn")) as HTMLButtonElement;
+    fireEvent.click(btn);
+    // 服务端拒了 → 界面必须说失败，且**不许**把这条从已签组里抹掉（那会是"假成功"）
+    expect(await screen.findByTestId("proposal-error")).toBeTruthy();
+    expect(screen.getByTestId("proposal-row-approved")).toBeTruthy();
+  });
 });

@@ -25,6 +25,11 @@ const post = api.post as unknown as ReturnType<typeof vi.fn>;
 
 /** 404 响应替身：用 mock 的 ApiError 类构造（组件内 instanceof 判定 404→missing）。 */
 const ErrCtor = ApiError as unknown as new (status: number) => Error;
+
+/** ★ T27：已签区默认收起 —— 需要验撤销/已签明细的用例先展开（计数与开关始终可见）。 */
+async function expandApproved() {
+  fireEvent.click(await screen.findByTestId("approved-toggle"));
+}
 function err404(): Promise<never> {
   return Promise.reject(new ErrCtor(404));
 }
@@ -64,6 +69,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     expect(await screen.findByTestId("proposal-row")).toBeTruthy();
     expect(screen.getByText("签字")).toBeTruthy();
     expect(screen.getByText("驳回")).toBeTruthy();
+    await expandApproved();
     expect(screen.getByText("撤销")).toBeTruthy();
   });
 
@@ -132,6 +138,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
       return err404();
     });
     render(<CollabApp />);
+    await expandApproved();
     const btn = (await screen.findByTestId("undo-btn")) as HTMLButtonElement;
     // 原契约「create 不可撤销 409」已被实现推翻 → 按钮必须可点，但文案要说清撤掉什么
     expect(btn.disabled).toBe(false);
@@ -159,6 +166,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
       return err404();
     });
     render(<CollabApp />);
+    await expandApproved();
     expect(await screen.findByText(/撤销 = 用快照重建（会得到新 id，不是同一行）/)).toBeTruthy();
   });
 
@@ -372,10 +380,95 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     });
     post.mockImplementationOnce(() => Promise.reject(new ErrCtor(422)));
     render(<CollabApp />);
+    await expandApproved();
     const btn = (await screen.findByTestId("undo-btn")) as HTMLButtonElement;
     fireEvent.click(btn);
     // 服务端拒了 → 界面必须说失败，且**不许**把这条从已签组里抹掉（那会是"假成功"）
     expect(await screen.findByTestId("proposal-error")).toBeTruthy();
     expect(screen.getByTestId("proposal-row-approved")).toBeTruthy();
+  });
+
+  it("★ T27：已签区默认收起——计数与开关常显，明细要展开才出现（收起的是展示，不是数据）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("status=undone")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          { id: "a1", title: "AI 想清掉过期待办", action: "delete", actor: "mcp:nx", status: "approved" },
+          { id: "a2", title: "AI 想沉淀经验卡", action: "create", actor: "mcp:nx", status: "approved" },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    const toggle = await screen.findByTestId("approved-toggle");
+    expect(toggle.textContent).toContain("展开 2 条");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // 收起时：明细不在 DOM，但「有几条」和「在哪展开」都写着
+    expect(screen.queryByTestId("proposal-row-approved")).toBeNull();
+    expect(screen.getByTestId("approved-collapsed")).toBeTruthy();
+    fireEvent.click(toggle);
+    expect((await screen.findAllByTestId("proposal-row-approved")).length).toBe(2);
+    expect(screen.queryByTestId("approved-collapsed")).toBeNull();
+    expect(screen.getByTestId("approved-toggle").textContent).toBe("收起");
+  });
+
+  it("★ T27：签字成功后已签区自动展开（刚签的卡片不能像凭空消失）", async () => {
+    let approvedCalls = 0;
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=pending")) {
+        return Promise.resolve(
+          approvedCalls === 0
+            ? [{ id: "p1", title: "删除待办", action: "delete", actor: "mcp:nx", status: "pending" }]
+            : [],
+        );
+      }
+      if (path.includes("status=undone")) return Promise.resolve([]);
+      if (path.includes("status=approved")) {
+        approvedCalls += 1;
+        return Promise.resolve(
+          approvedCalls > 1
+            ? [{ id: "p1", title: "删除待办", action: "delete", actor: "mcp:nx", status: "approved" }]
+            : [],
+        );
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    const row = await screen.findByTestId("proposal-row");
+    const approve = [...row.querySelectorAll("button")].find((b) => b.textContent === "签字");
+    expect(approve).toBeTruthy();
+    fireEvent.click(approve as HTMLButtonElement);
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/proposals/p1/approve", {}));
+    expect(await screen.findByTestId("proposal-row-approved")).toBeTruthy();
+  });
+
+  it("★ T27：Esc 关抽屉，焦点回到打开它的「详情」按钮", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("/proposals/")) {
+        return Promise.resolve({
+          id: "p1",
+          title: "删除待办",
+          action: "delete",
+          status: "pending",
+          method: "DELETE",
+          path: "/api/v1/todo/items/{id}",
+        });
+      }
+      if (path.includes("status=pending")) {
+        return Promise.resolve([{ id: "p1", title: "删除待办", action: "delete", actor: "mcp:nx", status: "pending" }]);
+      }
+      if (path.includes("status=undone")) return Promise.resolve([]);
+      if (path.includes("/proposals")) return Promise.resolve([]);
+      return err404();
+    });
+    render(<CollabApp />);
+    const open = (await screen.findByTestId("detail-btn")) as HTMLButtonElement;
+    open.focus();
+    fireEvent.click(open);
+    expect(await screen.findByTestId("proposal-detail")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("proposal-detail")).toBeNull());
+    expect(document.activeElement).toBe(open);
   });
 });

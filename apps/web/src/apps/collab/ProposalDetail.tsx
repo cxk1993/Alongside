@@ -11,7 +11,7 @@
  *   3. **失败如实说**：404 → 「服务端没有这条提案」；其它错误 → 错误行 + 重试按钮。
  *      不把错误渲染成空白，让人以为「这提案啥也没干」。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { api, ApiError } from "@/shared/api/client";
@@ -89,8 +89,26 @@ export function ProposalDetail({
 }) {
   const [state, setState] = useState<DetailState>({ kind: "loading" });
   const [nonce, setNonce] = useState(0);
+  const panelRef = useRef<HTMLElement | null>(null);
 
   const load = useCallback(() => setNonce((n) => n + 1), []);
+
+  /** ★ T27：抽屉不是 modal，但键盘要能走 —— 打开即把焦点收进抽屉，
+   *  否则读屏/纯键盘用户不知道「右侧多出来一块」。Esc 关闭是本能的退出动作。 */
+  useEffect(() => {
+    panelRef.current?.focus();
+  }, [proposalId]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // 不让 Esc 继续冒泡到桌面（关窗口/退全屏是另一层语义）
+      e.stopPropagation();
+      onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   useEffect(() => {
     let alive = true;
@@ -114,7 +132,13 @@ export function ProposalDetail({
   }, [proposalId, nonce, refreshKey]);
 
   return (
-    <aside className="collab-detail" data-testid="proposal-detail" aria-label="提案详情">
+    <aside
+      className="collab-detail"
+      data-testid="proposal-detail"
+      aria-label="提案详情"
+      ref={panelRef}
+      tabIndex={-1}
+    >
       <header className="collab-detail__head">
         <strong>提案详情</strong>
         <span className="collab-detail__id">{proposalId}</span>

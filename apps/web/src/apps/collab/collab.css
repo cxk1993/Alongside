@@ -148,6 +148,22 @@
 .collab-groups { display: flex; flex-direction: column; gap: var(--sp-2); }
 .collab-subtitle { margin: var(--sp-2) 0 0; font-size: 12px; color: var(--txt-faint); font-weight: 600; }
 
+/* ★ T27：标题行右侧放「展开/收起」——计数常显，列表默认收起（演示第一屏不被历史淹没）。 */
+.collab-subtitle--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.collab-count {
+  margin-left: var(--sp-1);
+  padding: 0 6px;
+  border-radius: var(--r-xs);
+  background: var(--surface-3);
+  color: var(--txt-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ★ T20：变更前快照 / 不可撤销说明。
    快照默认折叠：签字时人先读标题，需要核对细节再展开——不把一坨 JSON 摊在卡片上。 */
 .collab-proposal__note {

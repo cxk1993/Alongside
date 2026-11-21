@@ -177,4 +177,22 @@ describe("提案详情抽屉（T25 全字段）", () => {
     fireEvent.click(screen.getByTestId("detail-close"));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+  it("★ T27：Esc 关闭（document 级监听）；别的键不误关", async () => {
+    get.mockResolvedValue(undoneRow);
+    const onClose = vi.fn();
+    render(<ProposalDetail proposalId="p2" onClose={onClose} />);
+    await screen.findByTestId("detail-target");
+    fireEvent.keyDown(document, { key: "Enter" });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("★ T27：打开即把焦点收进抽屉（不是 modal，但键盘/读屏要知道右边多了块）", async () => {
+    get.mockResolvedValue(undoneRow);
+    render(<ProposalDetail proposalId="p2" onClose={() => {}} />);
+    const panel = await screen.findByTestId("proposal-detail");
+    await waitFor(() => expect(document.activeElement).toBe(panel));
+  });
+
 });

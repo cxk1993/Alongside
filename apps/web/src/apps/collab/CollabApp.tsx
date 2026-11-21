@@ -11,7 +11,8 @@
  * ★ 纪律：不造假数据、不装深度（判据 16/25）。接口没接就如实显示「未就绪」。
  * ★ 本组件同时作为桌面级背景面（desktop.widget 插槽）与普通窗口两种形态渲染。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 
 import { api, ApiError } from "@/shared/api/client";
 import { ProposalDetail } from "./ProposalDetail";
@@ -116,7 +117,8 @@ function useProposals(): {
   undone: ProposalRow[];
   busyId: string | null;
   lastError: string | null;
-  act: (id: string, op: "approve" | "reject" | "undo") => Promise<void>;
+  /** ★ T27：返回是否成功——签字成功要把「已签」区自动展开（否则卡片像凭空消失）。 */
+  act: (id: string, op: "approve" | "reject" | "undo") => Promise<boolean>;
   /** ★ T21：给 SSE 推送用（事件到了就重拉一次，不做本地增量拼接——列表是唯一真相）。 */
   reload: () => Promise<void>;
   /** ★ T25：每次成功重拉 +1 —— 详情抽屉拿它当「该刷新了」的信号，避免抽屉比卡片旧。 */
@@ -153,17 +155,20 @@ function useProposals(): {
   }, [reload]);
 
   const act = useCallback(
-    async (id: string, op: "approve" | "reject" | "undo") => {
+    async (id: string, op: "approve" | "reject" | "undo"): Promise<boolean> => {
       setBusyId(id);
       setLastError(null);
+      let ok = false;
       try {
         await api.post(`/api/v1/proposals/${id}/${op}`, {});
+        ok = true;
       } catch (e) {
         setLastError(e instanceof Error ? e.message : String(e));
       } finally {
         setBusyId(null);
         await reload();
       }
+      return ok;
     },
     [reload],
   );
@@ -183,6 +188,26 @@ export default function CollabApp() {
   const proposals = useProposals();
   // ★ T25：详情抽屉当前的提案 id（null = 关闭）。抽屉自己发 GET，不复用列表快照。
   const [detailId, setDetailId] = useState<string | null>(null);
+  /** ★ T27：「已签（可撤销）」默认收起。
+   *  真栈里这一组长到 5+ 条（今晚验收探针全留在这里），演示第一屏会被历史淹没；
+   *  收起只藏「展示」不藏「数据」——计数与「展开」按钮都在，点开就是全量。
+   *  签字成功后自动展开：否则刚签的卡片移到收起区，人会觉得「它消失了」。 */
+  const [approvedOpen, setApprovedOpen] = useState(false);
+  /** ★ T27：抽屉关闭后焦点要回到打开它的按钮（键盘/读屏用户不至于掉到页首）。 */
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+  const openDetail = (id: string) => (e: MouseEvent<HTMLButtonElement>) => {
+    openerRef.current = e.currentTarget;
+    setDetailId(id);
+  };
+  const closeDetail = useCallback(() => {
+    setDetailId(null);
+    const el = openerRef.current;
+    openerRef.current = null;
+    // 等抽屉真的从 DOM 卸掉再还焦点（同一帧里 focus 会被卸载覆盖）
+    queueMicrotask(() => {
+      if (el && document.contains(el)) el.focus();
+    });
+  }, []);
   // ★ T21：提案的四种状态变更是 SSE 推来的 → 收到就重拉（挂载时那次拉取仍然保留，
   //   它是「断线/无 EventSource 时」的兜底）。
   useProposalStream(proposals.reload);
@@ -272,7 +297,12 @@ export default function CollabApp() {
                           type="button"
                           className="collab-btn collab-btn--primary"
                           disabled={proposals.busyId === p.id}
-                          onClick={() => void proposals.act(p.id, "approve")}
+                          onClick={() => {
+                            void proposals.act(p.id, "approve").then((ok) => {
+                              // ★ T27：签完立刻展开已签区——刚签的卡片进了收起组，看起来就是「没了」
+                              if (ok) setApprovedOpen(true);
+                            });
+                          }}
                         >
                           签字
                         </button>
@@ -288,7 +318,7 @@ export default function CollabApp() {
                         <button
                           type="button"
                           className="collab-btn"
-                          onClick={() => setDetailId(p.id)}
+                          onClick={openDetail(p.id)}
                           data-testid="detail-btn"
                         >
                           详情
@@ -302,42 +332,62 @@ export default function CollabApp() {
               )}
               {proposals.approved.length ? (
                 <>
-                  <h4 className="collab-subtitle">已签（可撤销）</h4>
-                  <ul className="collab-proposals">
-                    {proposals.approved.map((p) => (
-                      <li key={p.id} className="collab-proposal" data-testid="proposal-row-approved">
-                        <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
-                        <span className="collab-proposal__meta">
-                          已签 · {p.action ?? "?"} · {actorLabel(p.actor)}
-                        </span>
-                        <span className="collab-proposal__ops">
-                          {/* ★ T20 修正（契约 8ccef3b）：三种动作**都可撤销**——原契约
-                              「create 不可撤销 409」已被实现 5cff08a 推翻并改口。
-                              但语义不同，按钮必须说清撤掉的是什么，否则只是另一种假按钮。 */}
-                          <button
-                            type="button"
-                            className="collab-btn collab-btn--primary"
-                            disabled={proposals.busyId === p.id}
-                            onClick={() => void proposals.act(p.id, "undo")}
-                            data-testid="undo-btn"
-                          >
-                            {p.action === "create" ? "撤销（删掉刚建的那条）" : "撤销"}
-                          </button>
-                          {/* ★ T25：执行证据（executed_status / executed_id）在详情抽屉里，
-                              摊在卡片上只是噪声。 */}
-                          <button
-                            type="button"
-                            className="collab-btn"
-                            onClick={() => setDetailId(p.id)}
-                            data-testid="detail-btn"
-                          >
-                            详情
-                          </button>
-                          <span className="collab-proposal__note">{undoNote(p.action)}</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <h4 className="collab-subtitle collab-subtitle--row">
+                    <span>
+                      已签（可撤销）<span className="collab-count">{proposals.approved.length}</span>
+                    </span>
+                    {/* ★ T27：默认收起，但「有几条」永远看得见——收起的是展示，不是事实 */}
+                    <button
+                      type="button"
+                      className="collab-btn"
+                      onClick={() => setApprovedOpen((v) => !v)}
+                      aria-expanded={approvedOpen}
+                      data-testid="approved-toggle"
+                    >
+                      {approvedOpen ? "收起" : `展开 ${proposals.approved.length} 条`}
+                    </button>
+                  </h4>
+                  {approvedOpen ? (
+                    <ul className="collab-proposals">
+                      {proposals.approved.map((p) => (
+                        <li key={p.id} className="collab-proposal" data-testid="proposal-row-approved">
+                          <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
+                          <span className="collab-proposal__meta">
+                            已签 · {p.action ?? "?"} · {actorLabel(p.actor)}
+                          </span>
+                          <span className="collab-proposal__ops">
+                            {/* ★ T20 修正（契约 8ccef3b）：三种动作**都可撤销**——原契约
+                                「create 不可撤销 409」已被实现 5cff08a 推翻并改口。
+                                但语义不同，按钮必须说清撤掉的是什么，否则只是另一种假按钮。 */}
+                            <button
+                              type="button"
+                              className="collab-btn collab-btn--primary"
+                              disabled={proposals.busyId === p.id}
+                              onClick={() => void proposals.act(p.id, "undo")}
+                              data-testid="undo-btn"
+                            >
+                              {p.action === "create" ? "撤销（删掉刚建的那条）" : "撤销"}
+                            </button>
+                            {/* ★ T25：执行证据（executed_status / executed_id）在详情抽屉里，
+                                摊在卡片上只是噪声。 */}
+                            <button
+                              type="button"
+                              className="collab-btn"
+                              onClick={openDetail(p.id)}
+                              data-testid="detail-btn"
+                            >
+                              详情
+                            </button>
+                            <span className="collab-proposal__note">{undoNote(p.action)}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="collab-empty" data-testid="approved-collapsed">
+                      已收起 —— 点「展开」回看已签与撤销（撤错了想复原，就在里面）。
+                    </p>
+                  )}
                 </>
               ) : null}
             </div>
@@ -363,7 +413,7 @@ export default function CollabApp() {
                   <button
                     type="button"
                     className="collab-btn collab-timeline__open"
-                    onClick={() => setDetailId(t.id)}
+                    onClick={openDetail(t.id)}
                     data-testid="detail-btn"
                   >
                     详情
@@ -384,7 +434,7 @@ export default function CollabApp() {
       {detailId ? (
         <ProposalDetail
           proposalId={detailId}
-          onClose={() => setDetailId(null)}
+          onClose={closeDetail}
           refreshKey={proposals.version}
         />
       ) : null}

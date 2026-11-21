@@ -249,6 +249,116 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     expect(screen.queryByTestId("collab-timeline")).toBeNull();
   });
 
+  it("★ T25：待签卡「详情」→ 抽屉显示执行目标（打到哪个端点）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path === "/api/v1/proposals/p1") {
+        return Promise.resolve({
+          id: "p1",
+          title: "删除待办 #1",
+          tool_name: "todo_item_delete",
+          action: "delete",
+          method: "DELETE",
+          path: "/api/v1/todo/items/{id}",
+          payload: { id: "t1" },
+          before: { id: "t1", text: "x" },
+          actor: "mcp:pat",
+          status: "pending",
+          created_at: "2026-11-22T03:00:00+08:00",
+        });
+      }
+      if (path.includes("status=approved") || path.includes("status=undone")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          { id: "p1", title: "删除待办 #1", action: "delete", status: "pending", actor: "mcp:pat" },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    const btn = await screen.findByTestId("detail-btn");
+    fireEvent.click(btn);
+    const d = await screen.findByTestId("detail-target");
+    expect(d.textContent).toContain("DELETE /api/v1/todo/items/{id}");
+    expect(get).toHaveBeenCalledWith("/api/v1/proposals/p1");
+    // 关闭后抽屉消失
+    fireEvent.click(screen.getByTestId("detail-close"));
+    expect(screen.queryByTestId("proposal-detail")).toBeNull();
+  });
+
+  it("★ T25：抽屉开着时签字 → 列表刷新会把抽屉一起刷新（不许一屏两块矛盾证据）", async () => {
+    const pendingRow = {
+      id: "p1",
+      title: "删除待办 #1",
+      action: "delete",
+      method: "DELETE",
+      path: "/api/v1/todo/items/{id}",
+      status: "pending",
+      actor: "mcp:pat",
+    };
+    let detailCalls = 0;
+    get.mockImplementation((path: string) => {
+      if (path === "/api/v1/proposals/p1") {
+        detailCalls += 1;
+        // 第一次读 = 还没签字；之后 = 已执行
+        return Promise.resolve(
+          detailCalls === 1
+            ? pendingRow
+            : { ...pendingRow, status: "approved", executed_at: "2026-11-22T03:40:00+08:00", executed_status: 204 },
+        );
+      }
+      if (path.includes("status=pending")) return Promise.resolve([pendingRow]);
+      if (path.includes("status=approved") || path.includes("status=undone")) return Promise.resolve([]);
+      return err404();
+    });
+    render(<CollabApp />);
+    fireEvent.click(await screen.findByTestId("detail-btn"));
+    expect(await screen.findByTestId("detail-not-executed")).toBeTruthy();
+    // 签字（post 已 mock 成功）→ reload → version+1 → 抽屉重取
+    fireEvent.click(screen.getByText("签字"));
+    await waitFor(() => expect(detailCalls).toBe(2));
+    expect(await screen.findByText("HTTP 204")).toBeTruthy();
+    expect(screen.queryByTestId("detail-not-executed")).toBeNull();
+  });
+
+  it("★ T25：时间线「详情」→ 打开的是那一行的提案（不是最后一行的）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path === "/api/v1/proposals/u1") {
+        return Promise.resolve({
+          id: "u1",
+          title: "删除待办 #7",
+          action: "delete",
+          method: "DELETE",
+          path: "/api/v1/todo/items/{id}",
+          status: "undone",
+          executed_at: "2026-11-22T02:30:00+08:00",
+          executed_status: 204,
+          undone_at: "2026-11-22T02:42:00+08:00",
+        });
+      }
+      if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("status=undone")) {
+        return Promise.resolve([
+          {
+            id: "u1",
+            title: "删除待办 #7",
+            action: "delete",
+            status: "undone",
+            executed_at: "2026-11-22T02:30:00+08:00",
+            undone_at: "2026-11-22T02:42:00+08:00",
+          },
+        ]);
+      }
+      if (path.includes("/proposals")) return Promise.resolve([]);
+      return err404();
+    });
+    render(<CollabApp />);
+    const list = await screen.findByTestId("collab-timeline");
+    const open = list.querySelector('[data-testid="detail-btn"]') as HTMLButtonElement;
+    fireEvent.click(open);
+    expect((await screen.findByTestId("detail-status")).textContent).toContain("已撤销");
+    expect(get).toHaveBeenCalledWith("/api/v1/proposals/u1");
+  });
+
   it("★ 撤销失败（422，例如 executed_id 已悬空）→ 错误行如实回显，提案仍在已签组", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=pending")) return Promise.resolve([]);

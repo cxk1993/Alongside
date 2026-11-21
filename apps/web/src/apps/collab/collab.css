@@ -221,3 +221,124 @@
   color: var(--txt-dim);
   font-size: 12px;
 }
+
+/* ★ T25：提案详情抽屉。
+   宿主 surface 加 position:relative（不影响 flex 布局），抽屉绝对定位贴右侧；
+   不是 modal：核对证据时签字/撤销仍可点，不用关窗再开窗。 */
+.collab-surface {
+  position: relative;
+}
+
+.collab-detail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: min(420px, 92%);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-2);
+  border-left: 1px solid var(--line-strong);
+}
+
+.collab-detail__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.collab-detail__id {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--txt-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.collab-detail__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-3);
+}
+
+.collab-detail__grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.collab-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px dashed var(--line);
+}
+
+.collab-detail__h {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt-dim);
+}
+
+.collab-detail__row {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.collab-detail__k {
+  flex: 0 0 62px;
+  color: var(--txt-faint);
+}
+
+.collab-detail__v {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--txt);
+  word-break: break-word;
+}
+
+.collab-detail__v code,
+.collab-detail__v pre {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.collab-detail__field {
+  margin-top: var(--sp-1);
+}
+
+.collab-json {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.collab-json__toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.collab-timeline__open {
+  flex: 0 0 auto;
+  margin-left: auto;
+}

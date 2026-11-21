@@ -1,11 +1,12 @@
 /**
- * 共处工作台 v1.1（T10：接真 proposals / sight 端点）。
+ * 共处工作台 v1.2（T10 接真 proposals / sight；T25 提案详情抽屉）。
  *
  * 三个面（每区单一职责）：
  *   左 = 它看见的（Sight：head + tensions + attention + degraded 诚实降级）
  *   右 = 它想说的（提案卡流：GET /api/v1/proposals?status=pending；签字/驳回/撤销走真 API）
- *   底 = 它做过的（时间线 v1 只读，撤销结果从接口 detail 回显）
+ *   底 = 它做过的（时间线，撤销结果从接口 detail 回显）
  * 顶 = 在场状态条。
+ * 侧 = ★ T25 详情抽屉（GET /proposals/{id} 全字段：执行目标/参数/执行证据/撤销回执）。
  *
  * ★ 纪律：不造假数据、不装深度（判据 16/25）。接口没接就如实显示「未就绪」。
  * ★ 本组件同时作为桌面级背景面（desktop.widget 插槽）与普通窗口两种形态渲染。
@@ -13,6 +14,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiError } from "@/shared/api/client";
+import { ProposalDetail } from "./ProposalDetail";
+import { actorLabel, hhmm, undoNote, type ProposalRow } from "./proposalFormat";
+import { BeforePreview } from "./proposalView";
 import { useProposalStream } from "./useProposalStream";
 import "./collab.css";
 
@@ -42,80 +46,13 @@ interface SightNow {
   degraded?: DegradedItem[];
 }
 
-interface ProposalRow {
-  id: string;
-  title?: string;
-  tool_name?: string;
-  action?: string;
-  status?: string;
-  actor?: string;
-  created_at?: string;
-  /** ★ T20：变更前快照。契约口径：create 必为 null；null 就是**没有快照**，不是空对象。 */
-  before?: Record<string, unknown> | null;
-  executed_at?: string | null;
-  undone_at?: string | null;
-}
-
-/**
- * ★ T20：actor 要一眼分得开（契约 11 §二）。
- * 原样显示 `mcp:nx-t10-ui` 这类内部标识对人没有意义，但也不能丢掉「是谁」——
- * 折中：保留前缀语义，人读得懂的部分放前面。
- */
-function actorLabel(actor?: string): string {
-  if (!actor) return "来源不明";
-  if (actor === "human") return "你签发";
-  if (actor.startsWith("mcp:")) return `AI（${actor.slice(4) || "未命名 PAT"}）`;
-  return actor;
-}
-
-/**
- * ★ T20：变更前快照预览。
- *
- * 三条诚实规则（契约 11 §二/§三）：
- *   1. `action=create` → 没有"变更前"，**不渲染空对象**，明说「新建」；
- *   2. `before === null`（delete/update 却没有快照）→ 如实说「服务端未提供」，
- *      而不是留一个空白框让人以为快照是空的；
- *   3. 有快照 → 默认折叠（卡片上已经有一行标题，快照是签字时才要细看的东西）。
- */
-/**
- * ★ T20 修正（契约 8ccef3b）：三种撤销语义不同，文案必须说清「撤掉的是什么」。
- *   契约原文：delete → 用 before 重建（新 id 同内容）｜update → 用 before 回写原 id
- *   ｜create → 删除 executed_id 指向的那条。
- */
-function undoNote(action?: string): string {
-  if (action === "create") return "撤销 = 删除刚建的那条";
-  if (action === "delete") return "撤销 = 用快照重建（会得到新 id，不是同一行）";
-  if (action === "update") return "撤销 = 用快照回写原行";
-  return "";
-}
-
-function BeforePreview({ action, before }: { action?: string; before?: Record<string, unknown> | null }) {
-  if (action === "create") {
-    return <span className="collab-proposal__note">新建 · 无变更前快照</span>;
-  }
-  if (!before) {
-    return <span className="collab-proposal__note">变更前快照：服务端未提供</span>;
-  }
-  return (
-    <details className="collab-before">
-      <summary>变更前快照</summary>
-      <pre className="collab-before__body">{JSON.stringify(before, null, 2)}</pre>
-    </details>
-  );
-}
-
-
-/** ★ T22：时间只到分钟（ISO 的 T 之后 5 个字符）——给人看的列表不该出现毫秒。 */
-function hhmm(iso?: string | null): string {
-  const m = /T(\d{2}:\d{2})/.exec(iso ?? "");
-  return m ? m[1] : "";
-}
-
 interface TimelineEntry {
   key: string;
   at: string;
   label: "已执行" | "已撤销";
   title: string;
+  /** ★ T25：时间线也点得开——「我签过的那个，到底干成了什么」要能回查。 */
+  id: string;
 }
 
 /**
@@ -137,6 +74,7 @@ function buildTimeline(
       at: p.executed_at ?? p.created_at ?? "",
       label: "已执行",
       title: p.title ?? p.tool_name ?? p.id,
+      id: p.id,
     });
   }
   for (const p of undone) {
@@ -145,6 +83,7 @@ function buildTimeline(
       at: p.undone_at ?? p.executed_at ?? p.created_at ?? "",
       label: "已撤销",
       title: p.title ?? p.tool_name ?? p.id,
+      id: p.id,
     });
   }
   rows.sort((x, y) => (y.at || "").localeCompare(x.at || ""));
@@ -180,6 +119,8 @@ function useProposals(): {
   act: (id: string, op: "approve" | "reject" | "undo") => Promise<void>;
   /** ★ T21：给 SSE 推送用（事件到了就重拉一次，不做本地增量拼接——列表是唯一真相）。 */
   reload: () => Promise<void>;
+  /** ★ T25：每次成功重拉 +1 —— 详情抽屉拿它当「该刷新了」的信号，避免抽屉比卡片旧。 */
+  version: number;
 } {
   const [status, setStatus] = useState<ZoneStatus>("loading");
   const [pending, setPending] = useState<ProposalRow[]>([]);
@@ -187,6 +128,7 @@ function useProposals(): {
   const [undone, setUndone] = useState<ProposalRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
 
   const reload = useCallback(async () => {
     try {
@@ -200,6 +142,7 @@ function useProposals(): {
       setApproved(Array.isArray(a) ? a : []);
       setUndone(Array.isArray(u) ? u : []);
       setStatus("ready");
+      setVersion((v) => v + 1);
     } catch (e) {
       setStatus(e instanceof ApiError && e.status === 404 ? "missing" : "error");
     }
@@ -225,7 +168,7 @@ function useProposals(): {
     [reload],
   );
 
-  return { status, pending, approved, undone, busyId, lastError, act, reload };
+  return { status, pending, approved, undone, busyId, lastError, act, reload, version };
 }
 
 const STATUS_TEXT: Record<ZoneStatus, string> = {
@@ -238,6 +181,8 @@ const STATUS_TEXT: Record<ZoneStatus, string> = {
 export default function CollabApp() {
   const sight = useSight();
   const proposals = useProposals();
+  // ★ T25：详情抽屉当前的提案 id（null = 关闭）。抽屉自己发 GET，不复用列表快照。
+  const [detailId, setDetailId] = useState<string | null>(null);
   // ★ T21：提案的四种状态变更是 SSE 推来的 → 收到就重拉（挂载时那次拉取仍然保留，
   //   它是「断线/无 EventSource 时」的兜底）。
   useProposalStream(proposals.reload);
@@ -339,6 +284,15 @@ export default function CollabApp() {
                         >
                           驳回
                         </button>
+                        {/* ★ T25：签字前核对「打到哪个端点、带什么参数」→ 打开详情抽屉 */}
+                        <button
+                          type="button"
+                          className="collab-btn"
+                          onClick={() => setDetailId(p.id)}
+                          data-testid="detail-btn"
+                        >
+                          详情
+                        </button>
                       </span>
                     </li>
                   ))}
@@ -369,6 +323,16 @@ export default function CollabApp() {
                           >
                             {p.action === "create" ? "撤销（删掉刚建的那条）" : "撤销"}
                           </button>
+                          {/* ★ T25：执行证据（executed_status / executed_id）在详情抽屉里，
+                              摊在卡片上只是噪声。 */}
+                          <button
+                            type="button"
+                            className="collab-btn"
+                            onClick={() => setDetailId(p.id)}
+                            data-testid="detail-btn"
+                          >
+                            详情
+                          </button>
                           <span className="collab-proposal__note">{undoNote(p.action)}</span>
                         </span>
                       </li>
@@ -395,6 +359,15 @@ export default function CollabApp() {
                   </span>
                   <span className="collab-timeline__at">{hhmm(t.at) || "时间未知"}</span>
                   <span className="collab-timeline__title">{t.title}</span>
+                  {/* ★ T25：时间线点得开——「这条当时到底打通没有」要能回查 */}
+                  <button
+                    type="button"
+                    className="collab-btn collab-timeline__open"
+                    onClick={() => setDetailId(t.id)}
+                    data-testid="detail-btn"
+                  >
+                    详情
+                  </button>
                 </li>
               ))}
             </ul>
@@ -405,6 +378,16 @@ export default function CollabApp() {
           )}
         </section>
       </div>
+
+      {/* ★ T25：抽屉做成 surface 内的绝对定位侧栏（不是 modal）——核对证据时
+          签字/撤销仍可点，不用关窗再开窗。 */}
+      {detailId ? (
+        <ProposalDetail
+          proposalId={detailId}
+          onClose={() => setDetailId(null)}
+          refreshKey={proposals.version}
+        />
+      ) : null}
     </section>
   );
 }

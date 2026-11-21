@@ -104,6 +104,53 @@ function BeforePreview({ action, before }: { action?: string; before?: Record<st
   );
 }
 
+
+/** ★ T22：时间只到分钟（ISO 的 T 之后 5 个字符）——给人看的列表不该出现毫秒。 */
+function hhmm(iso?: string | null): string {
+  const m = /T(\d{2}:\d{2})/.exec(iso ?? "");
+  return m ? m[1] : "";
+}
+
+interface TimelineEntry {
+  key: string;
+  at: string;
+  label: "已执行" | "已撤销";
+  title: string;
+}
+
+/**
+ * ★ T22：「它做过的」= 已执行的（approved 且带 executed_at）+ 已撤销的，按时间倒序取最近几条。
+ *
+ * 为什么把「已撤销」也算进来：撤销是这套系统里唯一**可回看的"做完"证据**。
+ * 只列 approved 的话，用户一点撤销，那条就从界面上消失了——他会怀疑「到底撤没撤」。
+ * 只列 undone 的话，签字执行过的动作又看不见。两路合起来才是"做过什么"。
+ */
+function buildTimeline(
+  approved: ProposalRow[],
+  undone: ProposalRow[],
+  limit = 6,
+): TimelineEntry[] {
+  const rows: TimelineEntry[] = [];
+  for (const p of approved) {
+    rows.push({
+      key: `a-${p.id}`,
+      at: p.executed_at ?? p.created_at ?? "",
+      label: "已执行",
+      title: p.title ?? p.tool_name ?? p.id,
+    });
+  }
+  for (const p of undone) {
+    rows.push({
+      key: `u-${p.id}`,
+      at: p.undone_at ?? p.executed_at ?? p.created_at ?? "",
+      label: "已撤销",
+      title: p.title ?? p.tool_name ?? p.id,
+    });
+  }
+  rows.sort((x, y) => (y.at || "").localeCompare(x.at || ""));
+  return rows.slice(0, limit);
+}
+
 function useSight(): { status: ZoneStatus; data: SightNow | null } {
   const [status, setStatus] = useState<ZoneStatus>("loading");
   const [data, setData] = useState<SightNow | null>(null);
@@ -126,6 +173,8 @@ function useProposals(): {
   status: ZoneStatus;
   pending: ProposalRow[];
   approved: ProposalRow[];
+  /** ★ T22：「它做过的」——已撤销的提案（撤销是这一面唯一可回看的"做完"证据）。 */
+  undone: ProposalRow[];
   busyId: string | null;
   lastError: string | null;
   act: (id: string, op: "approve" | "reject" | "undo") => Promise<void>;
@@ -135,17 +184,21 @@ function useProposals(): {
   const [status, setStatus] = useState<ZoneStatus>("loading");
   const [pending, setPending] = useState<ProposalRow[]>([]);
   const [approved, setApproved] = useState<ProposalRow[]>([]);
+  const [undone, setUndone] = useState<ProposalRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      const [p, a] = await Promise.all([
+      const [p, a, u] = await Promise.all([
         api.get<ProposalRow[]>("/api/v1/proposals?status=pending"),
         api.get<ProposalRow[]>("/api/v1/proposals?status=approved"),
+        // ★ T22：撤销也是「做过的」——不拉这一路，撤销在界面上就等于「凭空消失」。
+        api.get<ProposalRow[]>("/api/v1/proposals?status=undone"),
       ]);
       setPending(Array.isArray(p) ? p : []);
       setApproved(Array.isArray(a) ? a : []);
+      setUndone(Array.isArray(u) ? u : []);
       setStatus("ready");
     } catch (e) {
       setStatus(e instanceof ApiError && e.status === 404 ? "missing" : "error");
@@ -172,7 +225,7 @@ function useProposals(): {
     [reload],
   );
 
-  return { status, pending, approved, busyId, lastError, act, reload };
+  return { status, pending, approved, undone, busyId, lastError, act, reload };
 }
 
 const STATUS_TEXT: Record<ZoneStatus, string> = {
@@ -188,6 +241,8 @@ export default function CollabApp() {
   // ★ T21：提案的四种状态变更是 SSE 推来的 → 收到就重拉（挂载时那次拉取仍然保留，
   //   它是「断线/无 EventSource 时」的兜底）。
   useProposalStream(proposals.reload);
+  // ★ T22：时间线在渲染期推导（纯函数），不额外存一份状态——省掉「状态与列表不同步」这一类 bug。
+  const timeline = buildTimeline(proposals.approved, proposals.undone);
 
   return (
     <section className="collab-surface" data-testid="collab-root" aria-label="共处工作台">
@@ -327,9 +382,27 @@ export default function CollabApp() {
 
         <section className="collab-card collab-card--timeline" aria-label="它做过的">
           <h3 className="collab-card__title">它做过的</h3>
-          <p className="collab-empty">
-            动作时间线 v1 只读：签字/撤销结果即时回显（SSE 推送接 v2，见 T10 备注）
-          </p>
+          {/* ★ T22：真数据——已执行 + 已撤销，按时间倒序。撤销在列表里留痕，}
+              人才不用怀疑「到底撤没撤」。 */}
+          {timeline.length ? (
+            <ul className="collab-list collab-timeline" data-testid="collab-timeline">
+              {timeline.map((t) => (
+                <li key={t.key} className="collab-timeline__row">
+                  <span
+                    className={`collab-tag${t.label === "已撤销" ? " collab-tag--undo" : ""}`}
+                  >
+                    {t.label}
+                  </span>
+                  <span className="collab-timeline__at">{hhmm(t.at) || "时间未知"}</span>
+                  <span className="collab-timeline__title">{t.title}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="collab-empty">
+              {proposals.status === "ready" ? "还没有签过或撤过的东西" : "读取中…"}
+            </p>
+          )}
         </section>
       </div>
     </section>

@@ -52,6 +52,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
 
   it("拿到真提案时渲染三按钮（签字/驳回/撤销）", async () => {
     get.mockImplementation((path: string) => {
+      if (path.includes("status=undone")) return Promise.resolve([]);
       if (path.includes("/proposals")) {
         return Promise.resolve([
           { id: "p1", title: "删除待办 #1", action: "delete", status: "pending", actor: "mcp:pat" },
@@ -69,6 +70,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
   it("★ T20：delete 提案带 before → 折叠快照可展开，正文在", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=approved")) return Promise.resolve([]);
+      if (path.includes("status=undone")) return Promise.resolve([]);
       if (path.includes("/proposals")) {
         return Promise.resolve([
           {
@@ -90,6 +92,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
   it("★ T20：before 缺失 → 如实说「服务端未提供」，绝不渲染空对象", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=approved")) return Promise.resolve([]);
+      if (path.includes("status=undone")) return Promise.resolve([]);
       if (path.includes("/proposals")) {
         return Promise.resolve([
           { id: "p4", title: "改个标题", action: "update", actor: "mcp:pat", before: null },
@@ -105,6 +108,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
   it("★ T20：action=create → 明说「无变更前快照」", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=approved")) return Promise.resolve([]);
+      if (path.includes("status=undone")) return Promise.resolve([]);
       if (path.includes("/proposals")) {
         return Promise.resolve([
           { id: "p5", title: "新建待办", action: "create", actor: "human", before: null },
@@ -119,6 +123,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
   it("★ T20 修正：create 的已签提案**可撤销**（契约 8ccef3b）——按钮文案说清删的是什么", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("status=undone")) return Promise.resolve([]);
       if (path.includes("/proposals")) {
         return Promise.resolve([
           { id: "p3", title: "新建待办", action: "create", actor: "human", before: null },
@@ -139,6 +144,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
   it("★ T20：delete 的撤销文案说明「会得到新 id，不是同一行」（契约 §撤销语义）", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("status=undone")) return Promise.resolve([]);
       if (path.includes("/proposals")) {
         return Promise.resolve([
           {
@@ -159,6 +165,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
   it("★ T20：actor 读得懂（AI 提案 vs 人自己签发一眼分开）", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=approved")) return Promise.resolve([]);
+      if (path.includes("status=undone")) return Promise.resolve([]);
       if (path.includes("/proposals")) {
         return Promise.resolve([
           { id: "a1", title: "AI 的提案", action: "delete", actor: "mcp:nx-t10-ui" },
@@ -188,5 +195,57 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     expect(await screen.findByText(/这笔账挂了 11 天/)).toBeTruthy();
     expect(await screen.findByText(/交材料/)).toBeTruthy();
     expect(await screen.findByText(/calendar\(timeout\)/)).toBeTruthy();
+  });
+
+  it("★ T22：它做过的 = 已执行 + 已撤销，按时间倒序（撤销在 UI 上留痕）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("status=undone")) {
+        return Promise.resolve([
+          {
+            id: "u1",
+            title: "删除待办 #7",
+            action: "delete",
+            actor: "mcp:pat",
+            status: "undone",
+            executed_at: "2026-11-22T02:30:00+08:00",
+            undone_at: "2026-11-22T02:42:00+08:00",
+          },
+        ]);
+      }
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          {
+            id: "a9",
+            title: "更新日程 #3",
+            action: "update",
+            actor: "mcp:pat",
+            status: "approved",
+            executed_at: "2026-11-22T02:35:00+08:00",
+          },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    const list = await screen.findByTestId("collab-timeline");
+    const text = list.textContent ?? "";
+    expect(text).toContain("已撤销");
+    expect(text).toContain("02:42");
+    expect(text).toContain("删除待办 #7");
+    expect(text).toContain("已执行");
+    expect(text).toContain("更新日程 #3");
+    // 倒序：撤销（02:42）在已执行（02:35）上面
+    expect(text.indexOf("已撤销")).toBeLessThan(text.indexOf("已执行"));
+  });
+
+  it("★ T22：没有任何历史 → 诚实空态（不是空白框）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("/proposals")) return Promise.resolve([]);
+      return err404();
+    });
+    render(<CollabApp />);
+    expect(await screen.findByText("还没有签过或撤过的东西")).toBeTruthy();
+    expect(screen.queryByTestId("collab-timeline")).toBeNull();
   });
 });

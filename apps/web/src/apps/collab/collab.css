@@ -177,3 +177,47 @@
   font-size: 11px;
   cursor: pointer;
 }
+
+/* ★ T22：「它做过的」时间线。左标签、中间时间、右边标题，一行一条，最新的在上。 */
+.collab-timeline {
+  gap: var(--sp-1);
+}
+
+.collab-timeline__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  list-style: none;
+}
+
+.collab-tag {
+  flex: 0 0 auto;
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xs);
+  color: var(--txt-dim);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.collab-tag--undo {
+  border-style: dashed;
+  color: var(--txt-faint);
+}
+
+.collab-timeline__at {
+  flex: 0 0 auto;
+  color: var(--txt-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.collab-timeline__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--txt-dim);
+  font-size: 12px;
+}

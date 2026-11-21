@@ -61,6 +61,28 @@ _NEVER_EXPOSE_VERBS = {"install","uninstall","enable","disable","register","unre
 - 改后：新增门禁测试——给假 manifest 加一条 `plugin.install` provides → 断言它**不出现在工具面**，且断言**现有 91 工具数不变**
 - 回归：`test_mcp.py` 全绿 + 工具数快照
 
+## 补充（2026-11-22 · 云昔 18 号 verb 审计的双向视角 + 我的复核）
+
+云昔扫了同一批 43 份 manifest，指出「隐式规则的代价是**双向**的」：不只该拦的没拦，**该给的也可能没给**。
+她的数据把未归类 verb 从 8 个扩到 **15 个 / 22 条 provides**。逐条复核后：
+
+| 类别 | verb | 复核结论 |
+|---|---|---|
+| 改平台（绝不该给） | `install` `uninstall` `enable` `disable` `assemble` `manage` `register` `unregister` | ✅ **采纳**：已**显式**写进 `_HUMAN_ONLY_VERBS`（commit `583ecff`）——它们今天不在工具面只是巧合 |
+| 半写（拉数据会回写） | `sync` ×3（sdu-feeds / welearn / yuketang） | ✅ 同意归写侧；将来若要给 AI，应走提案 |
+| **能力声明（不是端点）** | `peek` ×4（`x.day.peek`）· `today` ×4（`x.summary.today`） | ❌ **纠正**：它们**没有独立 REST 端点**（manifest 无 `api.tools` 映射），是给 dashboard 等聚合者供数的 capability。**AI 拿「今日摘要」的正门是 `dashboard.today.read`**——真栈实测 `dashboard_today_read` **200**，body 含 `date=2026-11-22` 与当天两个日程。代码里加 `_CAPABILITY_ONLY_VERBS = {"peek","today"}` 并把「别补映射」写进注释（补了会推导出错误路径） |
+| 待定 | `request`（health）· `session`（auth） | 保持丢弃，注释已说明 |
+
+**结论修正**：原卡说的「8 个危险侧」依然成立（已显式化）；但「AI 够不着今日摘要」**不成立**——
+那 8 条 provides 是能力声明，正门 `dashboard.today.read` 一直在工具面且回真数据。
+
+**落地状态**：`_HUMAN_ONLY_VERBS`（11 个 verb）+ `_CAPABILITY_ONLY_VERBS`（2 个）已进
+`modules/mcp/mcp_server.py`；测试 +2（`test_human_only_verbs_explicitly_cover_platform_mutators` /
+`test_capability_only_verbs_never_become_tools`）。
+
+**仍未做**（留给共享领地）：`tests_protocol` 里的「未归类 verb 报红」门禁——建议云昔或汐瑶落，
+我可供 11 个 verb 的显式清单做基线。
+
 ## 相关
 
 - S-A（`75908d1`）：AI 自签——同类「不在拦截表就直通」的病

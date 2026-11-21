@@ -120,3 +120,29 @@ def test_widget_columns_fixed_for_v1():
     """自由度过早就是混乱：v1 栅格只允许 12。"""
     assert _rejects("widget.schema.json",
                     {"schema_version": 1, "version": 1, "columns": 8, "widgets": []})
+
+
+# ----------------------------- proposal：create 撤销的前提（2026-11-22 修正） -----------------------------
+
+def test_create_approved_without_executed_id_is_rejected():
+    """★ create 可撤销的前提：approved 时必须记下 executed_id，否则 undo 不知道删哪条。
+
+    这条是契约从「create 不可撤销」改口成「create 可撤销」之后**必须补**的结构约束。
+    改口只改文案不补约束，等于给前端一个「能点但不知道删谁」的按钮。
+    """
+    assert _rejects("proposal.schema.json",
+                    _proposal(action="create", before=None, status="approved", executed_at=TS))
+
+
+def test_create_undone_with_executed_id_is_accepted():
+    """create 走完 approve→undo 的合法终态。"""
+    assert _accepts("proposal.schema.json",
+                    _proposal(action="create", before=None, status="undone", executed_at=TS,
+                              executed_id="t_new_001", undone_at=TS, undo_result="已删除刚建的那条"))
+
+
+def test_delete_undone_does_not_require_executed_id():
+    """delete 的撤销靠 before 重建，不靠 executed_id —— 别把规则套到所有 action 上。"""
+    assert _accepts("proposal.schema.json",
+                    _proposal(status="undone", executed_at=TS, undone_at=TS,
+                              undo_result="已用 before 重建（新 id）"))

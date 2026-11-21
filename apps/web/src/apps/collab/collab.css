@@ -144,3 +144,6 @@
   opacity: 0.5;
   cursor: default;
 }
+
+.collab-groups { display: flex; flex-direction: column; gap: var(--sp-2); }
+.collab-subtitle { margin: var(--sp-2) 0 0; font-size: 12px; color: var(--txt-faint); font-weight: 600; }

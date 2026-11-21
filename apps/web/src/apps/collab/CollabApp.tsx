@@ -71,19 +71,24 @@ function useSight(): { status: ZoneStatus; data: SightNow | null } {
 
 function useProposals(): {
   status: ZoneStatus;
-  rows: ProposalRow[];
+  pending: ProposalRow[];
+  approved: ProposalRow[];
   busyId: string | null;
-  reload: () => Promise<void>;
   act: (id: string, op: "approve" | "reject" | "undo") => Promise<void>;
 } {
   const [status, setStatus] = useState<ZoneStatus>("loading");
-  const [rows, setRows] = useState<ProposalRow[]>([]);
+  const [pending, setPending] = useState<ProposalRow[]>([]);
+  const [approved, setApproved] = useState<ProposalRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      const d = await api.get<ProposalRow[]>("/api/v1/proposals?status=pending");
-      setRows(Array.isArray(d) ? d : []);
+      const [p, a] = await Promise.all([
+        api.get<ProposalRow[]>("/api/v1/proposals?status=pending"),
+        api.get<ProposalRow[]>("/api/v1/proposals?status=approved"),
+      ]);
+      setPending(Array.isArray(p) ? p : []);
+      setApproved(Array.isArray(a) ? a : []);
       setStatus("ready");
     } catch (e) {
       setStatus(e instanceof ApiError && e.status === 404 ? "missing" : "error");
@@ -107,7 +112,7 @@ function useProposals(): {
     [reload],
   );
 
-  return { status, rows, busyId, reload, act };
+  return { status, pending, approved, busyId, act };
 }
 
 const STATUS_TEXT: Record<ZoneStatus, string> = {
@@ -183,47 +188,67 @@ export default function CollabApp() {
             <p className="collab-empty collab-empty--warn">提案列表暂不可用</p>
           )}
           {proposals.status === "loading" && <p className="collab-empty">读取中…</p>}
-          {proposals.status === "ready" &&
-            (proposals.rows.length ? (
-              <ul className="collab-proposals">
-                {proposals.rows.map((p) => (
-                  <li key={p.id} className="collab-proposal" data-testid="proposal-row">
-                    <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
-                    <span className="collab-proposal__meta">
-                      {p.action ?? "?"} · {p.actor ?? "?"}
-                    </span>
-                    <span className="collab-proposal__ops">
-                      <button
-                        type="button"
-                        className="collab-btn collab-btn--primary"
-                        disabled={proposals.busyId === p.id}
-                        onClick={() => void proposals.act(p.id, "approve")}
-                      >
-                        签字
-                      </button>
-                      <button
-                        type="button"
-                        className="collab-btn"
-                        disabled={proposals.busyId === p.id}
-                        onClick={() => void proposals.act(p.id, "reject")}
-                      >
-                        驳回
-                      </button>
-                      <button
-                        type="button"
-                        className="collab-btn"
-                        disabled={proposals.busyId === p.id}
-                        onClick={() => void proposals.act(p.id, "undo")}
-                      >
-                        撤销
-                      </button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="collab-empty">暂无待签字</p>
-            ))}
+          {proposals.status === "ready" && (
+            <div className="collab-groups">
+              {proposals.pending.length ? (
+                <ul className="collab-proposals">
+                  {proposals.pending.map((p) => (
+                    <li key={p.id} className="collab-proposal" data-testid="proposal-row">
+                      <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
+                      <span className="collab-proposal__meta">
+                        待签 · {p.action ?? "?"} · {p.actor ?? "?"}
+                      </span>
+                      <span className="collab-proposal__ops">
+                        <button
+                          type="button"
+                          className="collab-btn collab-btn--primary"
+                          disabled={proposals.busyId === p.id}
+                          onClick={() => void proposals.act(p.id, "approve")}
+                        >
+                          签字
+                        </button>
+                        <button
+                          type="button"
+                          className="collab-btn"
+                          disabled={proposals.busyId === p.id}
+                          onClick={() => void proposals.act(p.id, "reject")}
+                        >
+                          驳回
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="collab-empty">暂无待签字</p>
+              )}
+              {proposals.approved.length ? (
+                <>
+                  <h4 className="collab-subtitle">已签（可撤销）</h4>
+                  <ul className="collab-proposals">
+                    {proposals.approved.map((p) => (
+                      <li key={p.id} className="collab-proposal" data-testid="proposal-row-approved">
+                        <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
+                        <span className="collab-proposal__meta">
+                          已签 · {p.action ?? "?"} · {p.actor ?? "?"}
+                        </span>
+                        <span className="collab-proposal__ops">
+                          <button
+                            type="button"
+                            className="collab-btn collab-btn--primary"
+                            disabled={proposals.busyId === p.id}
+                            onClick={() => void proposals.act(p.id, "undo")}
+                          >
+                            撤销
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          )}
         </section>
 
         <section className="collab-card collab-card--timeline" aria-label="它做过的">

@@ -186,6 +186,15 @@ function DetailBody({ d }: { d: ProposalDetailData }) {
           <code>{d.tool_name ?? "未返回"}</code>
         </Row>
         <Row k="签发时间">{ymdhm(d.created_at) || "未返回"}</Row>
+        {/* ★ T29：驳回是终态，但提案表只有 status——没有 rejected_at/rejected_by。
+            与其留白让人以为「系统记得只是没显示」，不如明说这次没记。 */}
+        {d.status === "rejected" ? (
+          <Row k="驳回">
+            <span className="collab-proposal__note" data-testid="detail-reject-unaudited">
+              服务端未记录驳回时间与驳回人（提案表只有 status 字段）
+            </span>
+          </Row>
+        ) : null}
       </Section>
 
       <Section title="它要做的（执行目标）">
@@ -234,6 +243,11 @@ function DetailBody({ d }: { d: ProposalDetailData }) {
               )}
             </Row>
           </>
+        ) : d.status === "rejected" ? (
+          // ★ T29：驳回是终态——说「签字之后就会有证据」等于骗人，它永远不会被签。
+          <p className="collab-empty" data-testid="detail-not-executed">
+            未执行 —— 这张提案已被驳回作废，不会执行。
+          </p>
         ) : (
           <p className="collab-empty" data-testid="detail-not-executed">
             尚未执行 —— 签字之后这里才会出现执行证据。
@@ -276,8 +290,13 @@ function DetailBody({ d }: { d: ProposalDetailData }) {
           </>
         ) : (
           <p className="collab-empty" data-testid="detail-not-undone">
-            {d.status === "approved" ? "未撤销。" : "还没到可撤销的阶段。"}
-            {d.action ? ` ${undoNote(d.action)}` : ""}
+            {d.status === "approved"
+              ? "未撤销。"
+              : d.status === "rejected"
+                ? "已驳回作废，无可撤销。"
+                : "还没到可撤销的阶段。"}
+            {/* ★ T29 修正：作废是终态，再说「撤销 = 删除刚建的那条」自相矛盾（上面刚写完「无可撤销」）。 */}
+            {d.status === "rejected" ? null : d.action ? ` ${undoNote(d.action)}` : ""}
           </p>
         )}
       </Section>

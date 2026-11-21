@@ -253,7 +253,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
       return err404();
     });
     render(<CollabApp />);
-    expect(await screen.findByText("还没有签过或撤过的东西")).toBeTruthy();
+    expect(await screen.findByText("还没有签过、撤过或否过的东西")).toBeTruthy();
     expect(screen.queryByTestId("collab-timeline")).toBeNull();
   });
 
@@ -274,7 +274,12 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
           created_at: "2026-11-22T03:00:00+08:00",
         });
       }
-      if (path.includes("status=approved") || path.includes("status=undone")) return Promise.resolve([]);
+      if (
+        path.includes("status=approved") ||
+        path.includes("status=undone") ||
+        path.includes("status=rejected")
+      )
+        return Promise.resolve([]);
       if (path.includes("/proposals")) {
         return Promise.resolve([
           { id: "p1", title: "删除待办 #1", action: "delete", status: "pending", actor: "mcp:pat" },
@@ -315,7 +320,12 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
         );
       }
       if (path.includes("status=pending")) return Promise.resolve([pendingRow]);
-      if (path.includes("status=approved") || path.includes("status=undone")) return Promise.resolve([]);
+      if (
+        path.includes("status=approved") ||
+        path.includes("status=undone") ||
+        path.includes("status=rejected")
+      )
+        return Promise.resolve([]);
       return err404();
     });
     render(<CollabApp />);
@@ -424,6 +434,8 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
         );
       }
       if (path.includes("status=undone")) return Promise.resolve([]);
+      // ★ T29：驳回列表是第四条拉取——不 stub 就会 404，整个面板会判「未就绪」
+      if (path.includes("status=rejected")) return Promise.resolve([]);
       if (path.includes("status=approved")) {
         approvedCalls += 1;
         return Promise.resolve(
@@ -538,4 +550,34 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     expect(await screen.findByText(/提出于 04:05/)).toBeTruthy();
   });
 
+  it("★ T29：驳回后不消失——时间线留「已驳回 · 提出于」，详情说「不会执行」", async () => {
+    const rejectedRow = {
+      id: "r1",
+      title: "删除待办 #9",
+      action: "delete",
+      actor: "mcp:nx",
+      status: "rejected",
+      created_at: "2026-11-22T04:05:04.746731+08:00",
+    };
+    get.mockImplementation((path: string) => {
+      if (path === "/api/v1/proposals/r1") {
+        return Promise.resolve({ ...rejectedRow, method: "DELETE", path: "/api/v1/todo/items/{id}" });
+      }
+      if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("status=approved") || path.includes("status=undone")) return Promise.resolve([]);
+      if (path.includes("status=rejected")) return Promise.resolve([rejectedRow]);
+      return err404();
+    });
+    render(<CollabApp />);
+    const list = await screen.findByTestId("collab-timeline");
+    // 否掉的东西只出现在「它做过的」，不能再混进待签区
+    expect(screen.queryAllByTestId("proposal-row")).toHaveLength(0);
+    expect(list.textContent).toContain("已驳回");
+    expect(list.textContent).toContain("提出于 04:05");
+    fireEvent.click(list.querySelector('[data-testid="detail-btn"]') as HTMLButtonElement);
+    expect((await screen.findByTestId("detail-status")).textContent).toContain("已作废");
+    expect((await screen.findByTestId("detail-not-executed")).textContent).toContain("不会执行");
+    // 服务端没记驳回时间/驳回人 —— 界面必须说「未记录」，不能让空白冒充「系统记得」
+    expect(screen.getByTestId("detail-reject-unaudited").textContent).toContain("未记录");
+  });
 });

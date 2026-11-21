@@ -4,7 +4,7 @@
  * 三个面（每区单一职责）：
  *   左 = 它看见的（Sight：head + tensions + attention + degraded 诚实降级）
  *   右 = 它想说的（提案卡流：GET /api/v1/proposals?status=pending；签字/驳回/撤销走真 API）
- *   底 = 它做过的（时间线，撤销结果从接口 detail 回显）
+ *   底 = 它做过的（时间线，撤销结果从接口 detail 回显；T29 起含已驳回）
  * 顶 = 在场状态条。
  * 侧 = ★ T25 详情抽屉（GET /proposals/{id} 全字段：执行目标/参数/执行证据/撤销回执）。
  *
@@ -52,22 +52,30 @@ interface SightNow {
 interface TimelineEntry {
   key: string;
   at: string;
-  label: "已执行" | "已撤销";
+  label: "已执行" | "已撤销" | "已驳回";
   title: string;
+  /** ★ T29：时间戳的语义前缀。驳回没有服务端时间（提案表只有 status，无 rejected_at），
+   *  只能拿提出时间；不加「提出于」就等于把提出时间冒充成驳回时间。 */
+  atNote?: string;
   /** ★ T25：时间线也点得开——「我签过的那个，到底干成了什么」要能回查。 */
   id: string;
 }
 
 /**
  * ★ T22：「它做过的」= 已执行的（approved 且带 executed_at）+ 已撤销的，按时间倒序取最近几条。
+ * ★ T29：再加「已驳回」——驳回落进这里，否则人否掉一条建议，屏幕上**一点痕迹都没有**。
  *
  * 为什么把「已撤销」也算进来：撤销是这套系统里唯一**可回看的"做完"证据**。
  * 只列 approved 的话，用户一点撤销，那条就从界面上消失了——他会怀疑「到底撤没撤」。
  * 只列 undone 的话，签字执行过的动作又看不见。两路合起来才是"做过什么"。
+ *
+ * 为什么驳回也进来：驳回是人的**决定**，不是「没发生」。它和执行同级留痕，
+ * 但标签必须分开（已驳回 ≠ 已执行）——否则时间线会把「我否掉的」读成「它做过的」。
  */
 function buildTimeline(
   approved: ProposalRow[],
   undone: ProposalRow[],
+  rejected: ProposalRow[] = [],
   limit = 6,
 ): TimelineEntry[] {
   const rows: TimelineEntry[] = [];
@@ -85,6 +93,18 @@ function buildTimeline(
       key: `u-${p.id}`,
       at: p.undone_at ?? p.executed_at ?? p.created_at ?? "",
       label: "已撤销",
+      title: p.title ?? p.tool_name ?? p.id,
+      id: p.id,
+    });
+  }
+  // ★ T29：驳回。服务端没记驳回时间（契约 ProposalOut 无 rejected_at）——
+  //   只拿得到提出时间，所以前缀写「提出于」，不冒充「驳回于」。
+  for (const p of rejected) {
+    rows.push({
+      key: `r-${p.id}`,
+      at: p.created_at ?? "",
+      atNote: "提出于",
+      label: "已驳回",
       title: p.title ?? p.tool_name ?? p.id,
       id: p.id,
     });
@@ -117,6 +137,8 @@ function useProposals(): {
   approved: ProposalRow[];
   /** ★ T22：「它做过的」——已撤销的提案（撤销是这一面唯一可回看的"做完"证据）。 */
   undone: ProposalRow[];
+  /** ★ T29：已驳回的提案（人的否决也是留痕，不是「没发生」）。 */
+  rejected: ProposalRow[];
   busyId: string | null;
   lastError: string | null;
   /** ★ T27：返回是否成功——签字成功要把「已签」区自动展开（否则卡片像凭空消失）。 */
@@ -130,21 +152,28 @@ function useProposals(): {
   const [pending, setPending] = useState<ProposalRow[]>([]);
   const [approved, setApproved] = useState<ProposalRow[]>([]);
   const [undone, setUndone] = useState<ProposalRow[]>([]);
+  /** ★ T29：驳回后的提案。不拉这一路，人点了「驳回」屏幕上就没有任何痕迹。 */
+  const [rejected, setRejected] = useState<ProposalRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
 
   const reload = useCallback(async () => {
     try {
-      const [p, a, u] = await Promise.all([
+      const [p, a, u, r] = await Promise.all([
         api.get<ProposalRow[]>("/api/v1/proposals?status=pending"),
         api.get<ProposalRow[]>("/api/v1/proposals?status=approved"),
         // ★ T22：撤销也是「做过的」——不拉这一路，撤销在界面上就等于「凭空消失」。
         api.get<ProposalRow[]>("/api/v1/proposals?status=undone"),
+        // ★ T29：驳回同理——否掉的建议也要留痕，否则「它做过的」是半份记录。
+        api.get<ProposalRow[]>("/api/v1/proposals?status=rejected"),
       ]);
       setPending(Array.isArray(p) ? p : []);
       setApproved(Array.isArray(a) ? a : []);
       setUndone(Array.isArray(u) ? u : []);
+      // 只收真正 rejected 的行：接口已按状态筛过，但列表替身/老数据可能不带 status，
+      // 不设这道闸就会把待签卡片重复摆进时间线（同一份数据两处出现＝另一种造假）。
+      setRejected(Array.isArray(r) ? r.filter((row) => row.status === "rejected") : []);
       setStatus("ready");
       setVersion((v) => v + 1);
     } catch (e) {
@@ -175,7 +204,7 @@ function useProposals(): {
     [reload],
   );
 
-  return { status, pending, approved, undone, busyId, lastError, act, reload, version };
+  return { status, pending, approved, undone, rejected, busyId, lastError, act, reload, version };
 }
 
 const STATUS_TEXT: Record<ZoneStatus, string> = {
@@ -214,7 +243,7 @@ export default function CollabApp() {
   //   它是「断线/无 EventSource 时」的兜底）。
   useProposalStream(proposals.reload);
   // ★ T22：时间线在渲染期推导（纯函数），不额外存一份状态——省掉「状态与列表不同步」这一类 bug。
-  const timeline = buildTimeline(proposals.approved, proposals.undone);
+  const timeline = buildTimeline(proposals.approved, proposals.undone, proposals.rejected);
 
   return (
     <section className="collab-surface" data-testid="collab-root" aria-label="共处工作台">
@@ -417,11 +446,20 @@ export default function CollabApp() {
               {timeline.map((t) => (
                 <li key={t.key} className="collab-timeline__row">
                   <span
-                    className={`collab-tag${t.label === "已撤销" ? " collab-tag--undo" : ""}`}
+                    className={`collab-tag${
+                      t.label === "已撤销"
+                        ? " collab-tag--undo"
+                        : t.label === "已驳回"
+                          ? " collab-tag--reject"
+                          : ""
+                    }`}
                   >
                     {t.label}
                   </span>
-                  <span className="collab-timeline__at">{hhmm(t.at) || "时间未知"}</span>
+                  <span className="collab-timeline__at">
+                    {t.atNote ? `${t.atNote} ` : ""}
+                    {hhmm(t.at) || "时间未知"}
+                  </span>
                   <span className="collab-timeline__title">{t.title}</span>
                   {/* ★ T25：时间线点得开——「这条当时到底打通没有」要能回查 */}
                   <button
@@ -437,7 +475,7 @@ export default function CollabApp() {
             </ul>
           ) : (
             <p className="collab-empty">
-              {proposals.status === "ready" ? "还没有签过或撤过的东西" : "读取中…"}
+              {proposals.status === "ready" ? "还没有签过、撤过或否过的东西" : "读取中…"}
             </p>
           )}
         </section>

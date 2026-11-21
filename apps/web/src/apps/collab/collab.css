@@ -63,7 +63,10 @@
 
 .collab-card--timeline {
   grid-column: 1 / -1;
-  max-height: 30%;
+  /* ★ T30：这里原来是 `max-height: 30%` —— 百分比 max-height 会对**自己所在的 grid 行**
+     （auto 行）解析，等于自指；实测把整块压成 26px 的一条缝，记录看不见也点不到。
+     改法：卡高跟内容走，只给「列表」一个像素级上限 + 内滚。 */
+  max-height: none;
 }
 
 .collab-card__title {
@@ -202,6 +205,10 @@
 /* ★ T22：「它做过的」时间线。左标签、中间时间、右边标题，一行一条，最新的在上。 */
 .collab-timeline {
   gap: var(--sp-1);
+  /* ★ T30：历史的「上限」放在列表上（像素），不放在卡上（百分比）。
+     5 行以内全显示，超了列表内滚——记录一条都不会因此消失不见。 */
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .collab-timeline__row {
@@ -223,6 +230,12 @@
 
 .collab-tag--undo {
   border-style: dashed;
+  color: var(--txt-faint);
+}
+
+/* ★ T29：已驳回——点线边框与撤销（虚线）区分开，三种终态不能长一个样。 */
+.collab-tag--reject {
+  border-style: dotted;
   color: var(--txt-faint);
 }
 

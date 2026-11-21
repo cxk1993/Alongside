@@ -218,6 +218,15 @@ _MUTATION_TOOLS = [
     ("agents_agent_delete",    "DELETE", "/api/v1/agents/agents/{agent_id}",    "agents:delete"),
     ("agents_task_patch",      "PATCH",  "/api/v1/agents/tasks/{task_id}",      "agents:patch"),
     ("agents_task_delete",     "DELETE", "/api/v1/agents/tasks/{task_id}",      "agents:delete"),
+    # ★ B2（bidiu 2026-11-21）agents 闭环：派发 / 回报 / agent 面——
+    #   此前 dispatch/report 在动词表缺失被静默丢弃，agent 面（list/read/write）无 provides。
+    ("agents_task_dispatch",   "POST",   "/api/v1/agents/tasks/{task_id}/dispatch", "agents:dispatch"),
+    ("agents_task_report",     "POST",   "/api/v1/agents/tasks/{task_id}/report",   "agents:report"),
+    ("agents_agent_read",      "GET",    "/api/v1/agents/agents/{agent_id}",       "agents:read"),
+    ("agents_agent_list",      "GET",    "/api/v1/agents/agents",                  "agents:list"),
+    ("agents_agent_write",     "POST",   "/api/v1/agents/agents",                  "agents:write"),
+    ("agents_task_read",       "GET",    "/api/v1/agents/tasks/{task_id}",         "agents:read"),
+    ("agents_task_list",       "GET",    "/api/v1/agents/tasks",                   "agents:list"),
 ]
 
 

@@ -37,13 +37,19 @@ _METHOD_BY_VERB: dict[str, str] = {
     #   此前**没有任何动词映射 PATCH** ⇒ 满地的 PATCH 端点（改待办 / 改文档 /
     #   改课 / 改日程…）在工具面上天然不可达。补一条 `patch`。
     "patch": "PATCH",
+    # ★ bidiu 2026-11-21（B2 agents 闭环）：任务派发 / 回报是 POST 子路由
+    #   （/tasks/{id}/dispatch、/tasks/{id}/report，路径经 manifest api.tools 显式映射）。
+    #   此前动词表没有这两个词 ⇒ manifest 声明了 provides 却被 derive_tool 静默丢弃，
+    #   AI 能建任务却没有任何工具让它跑起来。
+    "dispatch": "POST",
+    "report": "POST",
     "delete": "DELETE",
     "remove": "DELETE",
 }
 
 # 写类动词集合（审计用：落在集合里的 tool 调用要落 audit_log）。
 WRITE_VERBS: frozenset[str] = frozenset(
-    {"write", "create", "update", "patch", "delete", "remove"}
+    {"write", "create", "update", "patch", "delete", "remove", "dispatch", "report"}
 )
 #（ISSUE-008 方案 A，2026-09-20）不规则/语义命名路由的显式映射不在本文件——
 # 在各插件 manifest 的 api.tools（resource → 路由段，声明则优先，未声明走机械

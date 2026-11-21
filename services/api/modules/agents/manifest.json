@@ -21,17 +21,25 @@
     "openapi": "/api/v1/agents/openapi.json",
     "health": "/api/v1/agents/health",
     "tools": {
+      "agent.read": "/agents/{agent_id}",
       "agent.patch": "/agents/{agent_id}",
       "agent.delete": "/agents/{agent_id}",
+      "task.read": "/tasks/{task_id}",
       "task.patch": "/tasks/{task_id}",
-      "task.delete": "/tasks/{task_id}"
+      "task.delete": "/tasks/{task_id}",
+      "task.dispatch": "/tasks/{task_id}/dispatch",
+      "task.report": "/tasks/{task_id}/report"
     }
   },
   "provides": [
     "agents.task.read",
+    "agents.task.list",
     "agents.task.write",
     "agents.task.dispatch",
     "agents.task.report",
+    "agents.agent.read",
+    "agents.agent.list",
+    "agents.agent.write",
     "agents.agent.patch",
     "agents.agent.delete",
     "agents.task.patch",

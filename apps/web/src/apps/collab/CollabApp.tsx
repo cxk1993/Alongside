@@ -1,10 +1,10 @@
 /**
- * 共处工作台 · v1 灰盒（主人 2026-11-21 定调：AI 是一等用户，人坐在旁边）。
+ * 共处工作台 v1.1（T10：接真 proposals / sight 端点）。
  *
  * 三个面（每区单一职责）：
- *   左 = 它看见的（Sight 处境，读 /api/v1/sight/now；未就绪就诚实空态）
- *   右 = 它想说的（提案卡流，读 /api/v1/proposals?status=pending；B1 未接线就诚实空态）
- *   底 = 它做过的（动作时间线，v1 先只读；撤销随提案层）
+ *   左 = 它看见的（Sight：head + tensions + attention + degraded 诚实降级）
+ *   右 = 它想说的（提案卡流：GET /api/v1/proposals?status=pending；签字/驳回/撤销走真 API）
+ *   底 = 它做过的（时间线 v1 只读，撤销结果从接口 detail 回显）
  * 顶 = 在场状态条。
  *
  * ★ 纪律：不造假数据、不装深度（判据 16/25）。接口没接就如实显示「未就绪」。
@@ -17,6 +17,30 @@ import "./collab.css";
 
 type ZoneStatus = "loading" | "ready" | "missing" | "error";
 
+interface AttentionItem {
+  kind?: string;
+  title?: string;
+}
+
+interface TensionItem {
+  id?: string;
+  kind?: string;
+  summary?: string;
+  severity?: string;
+}
+
+interface DegradedItem {
+  source?: string;
+  reason?: string;
+}
+
+interface SightNow {
+  head?: { now_local?: string; weekday?: string; part_of_day?: string };
+  attention?: AttentionItem[];
+  tensions?: TensionItem[];
+  degraded?: DegradedItem[];
+}
+
 interface ProposalRow {
   id: string;
   title?: string;
@@ -25,13 +49,6 @@ interface ProposalRow {
   status?: string;
   actor?: string;
   created_at?: string;
-}
-
-interface SightNow {
-  time?: { now?: string; free_slots?: unknown[] };
-  attention?: Array<{ kind?: string; text?: string; age_days?: number }>;
-  tensions?: string[];
-  recent?: unknown[];
 }
 
 function useSight(): { status: ZoneStatus; data: SightNow | null } {
@@ -52,24 +69,45 @@ function useSight(): { status: ZoneStatus; data: SightNow | null } {
   return { status, data };
 }
 
-function useProposals(): { status: ZoneStatus; rows: ProposalRow[] } {
+function useProposals(): {
+  status: ZoneStatus;
+  rows: ProposalRow[];
+  busyId: string | null;
+  reload: () => Promise<void>;
+  act: (id: string, op: "approve" | "reject" | "undo") => Promise<void>;
+} {
   const [status, setStatus] = useState<ZoneStatus>("loading");
   const [rows, setRows] = useState<ProposalRow[]>([]);
-  const load = useCallback(async () => {
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
     try {
-      const d = await api.get<{ items?: ProposalRow[] }>(
-        "/api/v1/proposals?status=pending",
-      );
-      setRows(d.items ?? []);
+      const d = await api.get<ProposalRow[]>("/api/v1/proposals?status=pending");
+      setRows(Array.isArray(d) ? d : []);
       setStatus("ready");
     } catch (e) {
       setStatus(e instanceof ApiError && e.status === 404 ? "missing" : "error");
     }
   }, []);
+
   useEffect(() => {
-    void load();
-  }, [load]);
-  return { status, rows };
+    void reload();
+  }, [reload]);
+
+  const act = useCallback(
+    async (id: string, op: "approve" | "reject" | "undo") => {
+      setBusyId(id);
+      try {
+        await api.post(`/api/v1/proposals/${id}/${op}`, {});
+      } finally {
+        setBusyId(null);
+        await reload();
+      }
+    },
+    [reload],
+  );
+
+  return { status, rows, busyId, reload, act };
 }
 
 const STATUS_TEXT: Record<ZoneStatus, string> = {
@@ -89,6 +127,7 @@ export default function CollabApp() {
         <span className="collab-status__dot" aria-hidden="true" />
         <strong>AI 在场</strong>
         <span className="collab-status__meta">
+          {sight.data?.head?.part_of_day ? `${sight.data.head.part_of_day} · ` : ""}
           处境：{STATUS_TEXT[sight.status]} · 提案：{STATUS_TEXT[proposals.status]}
         </span>
         <span className="collab-status__hint">v1 灰盒 · 数据未接入时如实空态，不造假</span>
@@ -109,7 +148,10 @@ export default function CollabApp() {
               {sight.data.tensions?.length ? (
                 <ul className="collab-list">
                   {sight.data.tensions.map((t) => (
-                    <li key={t}>{t}</li>
+                    <li key={t.id ?? t.summary ?? t.kind}>
+                      {t.summary ?? t.kind}
+                      {t.severity ? ` · ${t.severity}` : ""}
+                    </li>
                   ))}
                 </ul>
               ) : (
@@ -118,12 +160,15 @@ export default function CollabApp() {
               {sight.data.attention?.length ? (
                 <ul className="collab-list collab-list--attention">
                   {sight.data.attention.map((a, i) => (
-                    <li key={`${a.kind ?? "item"}-${i}`}>
-                      {a.text ?? a.kind}
-                      {typeof a.age_days === "number" ? ` · 已挂 ${a.age_days} 天` : ""}
-                    </li>
+                    <li key={`${a.kind ?? "item"}-${i}`}>{a.title ?? a.kind}</li>
                   ))}
                 </ul>
+              ) : null}
+              {sight.data.degraded?.length ? (
+                <p className="collab-empty collab-empty--warn">
+                  降级：
+                  {sight.data.degraded.map((d) => `${d.source ?? "?"}(${d.reason ?? "?"})`).join(" · ")}
+                </p>
               ) : null}
             </div>
           )}
@@ -143,11 +188,35 @@ export default function CollabApp() {
               <ul className="collab-proposals">
                 {proposals.rows.map((p) => (
                   <li key={p.id} className="collab-proposal" data-testid="proposal-row">
-                    <span className="collab-proposal__title">
-                      {p.title ?? p.tool_name ?? p.id}
-                    </span>
+                    <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
                     <span className="collab-proposal__meta">
                       {p.action ?? "?"} · {p.actor ?? "?"}
+                    </span>
+                    <span className="collab-proposal__ops">
+                      <button
+                        type="button"
+                        className="collab-btn collab-btn--primary"
+                        disabled={proposals.busyId === p.id}
+                        onClick={() => void proposals.act(p.id, "approve")}
+                      >
+                        签字
+                      </button>
+                      <button
+                        type="button"
+                        className="collab-btn"
+                        disabled={proposals.busyId === p.id}
+                        onClick={() => void proposals.act(p.id, "reject")}
+                      >
+                        驳回
+                      </button>
+                      <button
+                        type="button"
+                        className="collab-btn"
+                        disabled={proposals.busyId === p.id}
+                        onClick={() => void proposals.act(p.id, "undo")}
+                      >
+                        撤销
+                      </button>
                     </span>
                   </li>
                 ))}
@@ -160,7 +229,7 @@ export default function CollabApp() {
         <section className="collab-card collab-card--timeline" aria-label="它做过的">
           <h3 className="collab-card__title">它做过的</h3>
           <p className="collab-empty">
-            动作时间线 v1 只读：随提案层接线后显示「做了什么 · 为什么 · [撤回]」
+            动作时间线 v1 只读：签字/撤销结果即时回显（SSE 推送接 v2，见 T10 备注）
           </p>
         </section>
       </div>

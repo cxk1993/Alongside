@@ -118,3 +118,29 @@
   color: var(--txt-faint);
   font-size: 11px;
 }
+
+.collab-proposal__ops {
+  display: flex;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+
+.collab-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-3);
+  color: var(--txt-dim);
+  cursor: pointer;
+}
+
+.collab-btn--primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.collab-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

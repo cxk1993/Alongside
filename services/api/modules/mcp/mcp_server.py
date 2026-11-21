@@ -43,10 +43,16 @@ _DEFAULT_PROTOCOL_VERSION = "2025-06-18"
 #: 拦截开关的环境变量名。缺省**关**（存量行为不变）；演示/试点设 `MCP_PROPOSAL_MODE=on`。
 _PROPOSAL_MODE_ENV = "MCP_PROPOSAL_MODE"
 
-#: 会被拦成提案的动词 = **数据变更**动词。dispatch/report 是任务编排动作
+#: 拦成提案的动词 = **数据变更**动词。dispatch/report 是任务编排动作
 #: （推进状态机、不落业务数据），拦了会把 agents 演示流卡死——故不拦；
 #: approve/reject/undo 是提案层自己的动作——拦了就无限递归——故不拦。
 _PROPOSABLE_VERBS = frozenset({"write", "create", "update", "patch", "delete", "remove"})
+
+#: ★ 只允许**人类登录会话**（REST/JWT）的动词：提案的签字/作废/撤销。
+#:   MCP 来路（PAT）调它们 = AI 给自己盖章 → 403（与 S1 自我提权同类）。
+#:   实测漏洞（bidiu 2026-11-22 自查）：带 proposals:approve scope 的 PAT 能通过
+#:   tools/call 自己 approve 自己的提案 → 数据被删，「人签字」形同虚设。
+_HUMAN_ONLY_VERBS = frozenset({"approve", "reject", "undo"})
 
 #: verb → 提案 action（提案层的动作三分）
 _VERB_TO_ACTION = {
@@ -249,6 +255,9 @@ def _handle_tools_list(msg_id: Any) -> dict[str, Any]:
             "inputSchema": _tool_schema(t),
         }
         for t in build_tool_map()
+        # ★ 人类专属动作（签字/作废/撤销）**不暴露给 AI**：工具面里看得见但调用必 403
+        #   会引诱 AI 反复试。不列出来 = 不给假希望；硬猜名字调用仍被 403 挡（双保险）。
+        if t.verb not in _HUMAN_ONLY_VERBS
     ]
     # 外部 MCP 源（BeeCount 等）：未配置则空，不挡本地工具。
     for t in external_tools():
@@ -322,6 +331,21 @@ def _handle_tools_call(msg: dict[str, Any], msg_id: Any, pat: PatContext) -> dic
         extra = {k: v for k, v in arguments.items() if k != "payload"}
         if extra:
             payload = {**(payload or {}), **extra}
+
+    # ★ 提案签字动作**只允许人类登录会话**（REST/JWT）。
+    #   MCP 来路（PAT）调 approve/reject/undo = AI 给自己盖章 → 403 + 审计。
+    #   实测漏洞（bidiu 2026-11-22）：带 proposals:approve scope 的 PAT 能自己 approve
+    #   自己的提案，数据被删——「AI 提议、人执行」的承诺被绕过。与 S1 自我提权同类。
+    if tool.verb in _HUMAN_ONLY_VERBS:
+        audit.audit_denied(
+            token_prefix=pat.token_prefix,
+            tool_name=name,
+            reason="人类专属动作（签字/作废/撤销）不可经 MCP 调用",
+        )
+        raise ForbiddenError(
+            "MCP 来路不能签字/作废/撤销提案——这是人类的动作（AI 提议、人执行）。"
+            "请让主人在界面上点签字。"
+        )
 
     # ★ B1（bidiu 2026-11-21）：提案拦截。
     #   开 `MCP_PROPOSAL_MODE=on` 时，**数据变更**写工具不直接执行，

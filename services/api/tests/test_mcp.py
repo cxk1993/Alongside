@@ -50,6 +50,7 @@ def client():
     #   其他文件已 import 而幸免——即"首跑红、复跑绿"的隔离缺陷）。
     #   显式 import 保证表注册，**消除 import 顺序依赖**。
     from modules.mcp import models as _mcp_models  # noqa: F401
+    from modules.proposals import models as _proposals_models  # noqa: F401（自签边界测试要建提案表）
 
     # 建全部已注册表（mcp_pat + 内核表）；checkfirst 幂等。
     SQLModel.metadata.create_all(engine)
@@ -910,3 +911,63 @@ def test_pat_expiry_backfill_migration(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 200, r.text
+
+
+# ─────────────── 提案签字的人类专属边界（bidiu 2026-11-22 自查 · 真漏洞） ───────────────
+# 实测：带 proposals:approve scope 的 PAT 能通过 tools/call 自己 approve 自己的提案
+# → 数据被删，「AI 提议、人执行」的承诺被绕过。修法两层：
+#   ① tools/list 不暴露 approve/reject/undo（不给假希望）
+#   ② 硬猜名字调用 → 403 + 审计（防线在后端）
+
+
+def test_tools_list_hides_human_only_verbs(client, pat):
+    """工具面不暴露签字/作废/撤销（approve/reject/undo）。"""
+    _, headers, _ = pat
+    r = client.post("/api/v1/mcp", json=_rpc("tools/list", {}), headers=headers)
+    assert r.status_code == 200, r.text
+    names = [t["name"] for t in r.json()["result"]["tools"]]
+    assert names, "工具面不该为空"
+    bad = [n for n in names if n.endswith(("_approve", "_reject", "_undo"))]
+    assert not bad, f"人类专属动作不该暴露给 AI：{bad}"
+
+
+def test_mcp_cannot_self_approve_proposal(client, pat):
+    """MCP 来路即使持有 approve scope，也不能签字（403）——防 AI 给自己盖章。"""
+    _, _h, _ = pat  # noqa: F841
+    # 造一条提案（REST，人类身份）
+    row = {"id": "x", "text": "自签探测", "tags": []}
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "自签探测",
+            "tool_name": "todo_item_delete",
+            "action": "delete",
+            "method": "DELETE",
+            "path": "/api/v1/todo/items/{item_id}",
+            "payload": {"item_id": "x"},
+            "before": row,
+            "actor": "mcp:probe",
+        },
+        headers=AUTH,
+    )
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    # PAT 持有 proposals:approve（fixture 的 pat 是否含？为稳妥另建一枚）
+    r2 = client.post(
+        "/api/v1/mcp/pats",
+        json={"name": "self-approve-probe", "scopes": ["proposals:read", "proposals:approve", "proposals:reject", "proposals:undo"]},
+        headers=AUTH,
+    )
+    assert r2.status_code == 201
+    h2 = {"Authorization": f"Bearer {r2.json()['token']}"}
+    # 硬猜名字调用 → 403
+    r3 = client.post(
+        "/api/v1/mcp",
+        json=_rpc("tools/call", {"name": "proposals_proposal_approve", "arguments": {"payload": {"proposal_id": pid}}}),
+        headers=h2,
+    )
+    assert r3.status_code == 403, r3.text
+    assert "人类的动作" in r3.text or "不能签字" in r3.text
+    # 提案仍是 pending（没有被偷偷批准）
+    got = client.get(f"/api/v1/proposals/{pid}", headers=AUTH).json()
+    assert got["status"] == "pending"

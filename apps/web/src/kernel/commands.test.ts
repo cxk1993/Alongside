@@ -14,11 +14,7 @@ import type { ModuleManifest } from "./types";
  *   ④ 检索规则（中文/英文/大小写/空查询）—— 打字打不出来就等于没有面板。
  */
 
-function mod(
-  id: string,
-  name: string,
-  extra: Partial<ModuleManifest> = {},
-): ModuleReg {
+function mod(id: string, name: string, extra: Partial<ModuleManifest> = {}): ModuleReg {
   const manifest: ModuleManifest = {
     id,
     name,
@@ -154,9 +150,9 @@ describe("T17 · filterCommands", () => {
   it("中文、英文、大小写都能命中", () => {
     expect(filterCommands(list, "笔记").map((c) => c.id)).toEqual(["mod:notes"]);
     expect(filterCommands(list, "DOCK").some((c) => c.id === "act:toggle-dock")).toBe(true);
-    expect(filterCommands(list, "calendar.event").some((c) => c.id === "cap:calendar.event.read")).toBe(
-      true,
-    );
+    expect(
+      filterCommands(list, "calendar.event").some((c) => c.id === "cap:calendar.event.read"),
+    ).toBe(true);
   });
 
   it("分组名可检索（输入「能力」只剩能力组）", () => {
@@ -182,9 +178,18 @@ describe("T17 · groupCommands / isRunnable", () => {
 
   it("disabled 的命令不可执行", () => {
     expect(isRunnable(undefined)).toBe(false);
-    expect(isRunnable({ id: "x", title: "x", group: "动作", keywords: [], disabled: true, run: () => {} })).toBe(
-      false,
+    expect(
+      isRunnable({
+        id: "x",
+        title: "x",
+        group: "动作",
+        keywords: [],
+        disabled: true,
+        run: () => {},
+      }),
+    ).toBe(false);
+    expect(isRunnable({ id: "y", title: "y", group: "动作", keywords: [], run: () => {} })).toBe(
+      true,
     );
-    expect(isRunnable({ id: "y", title: "y", group: "动作", keywords: [], run: () => {} })).toBe(true);
   });
 });

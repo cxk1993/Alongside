@@ -507,3 +507,31 @@ def test_proposal_reject_publishes_event(client, monkeypatch):
     pid = r.json()["id"]
     assert client.post(f"/api/v1/proposals/{pid}/reject", headers=AUTH).status_code == 200
     assert [t for t, _, _ in seen if t == "proposals.proposal.rejected"], seen
+
+
+def test_create_action_undo_deletes_created_row(client, fake_internal):
+    """create 提案：approve 真建 → undo 删掉刚建的那条（用 executed_id）。
+
+    ★ 契约冲突点（云昔 aa3f95e 声称 create 不可撤销 409）——用测试钉住实现真伪。
+    """
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "建一条待办",
+            "tool_name": "todo_item_create",
+            "action": "create",
+            "method": "POST",
+            "path": "/api/v1/todo/items",
+            "payload": {"text": "create 撤销验证（建了要能删）", "tags": ["e2e"]},
+            "actor": "human",
+        },
+        headers=AUTH,
+    )
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    r1 = client.post(f"/api/v1/proposals/{pid}/approve", headers=AUTH)
+    assert r1.status_code == 200, r1.text
+    assert _todo_exists(client, "create 撤销验证（建了要能删）"), "approve 后应真建"
+    r2 = client.post(f"/api/v1/proposals/{pid}/undo", headers=AUTH)
+    assert r2.status_code == 200, r2.text
+    assert not _todo_exists(client, "create 撤销验证（建了要能删）"), "undo 应删掉刚建那条"

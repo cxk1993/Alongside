@@ -242,10 +242,17 @@ class ProposalsService:
             raise ValidationError(f"只有已执行的提案能撤销，当前 {row.status!r}")
 
         if row.action == "create":
-            # 撤销 create = 删掉刚建的那条（用执行时记下的 id）
+            # 撤销 create = 删掉刚建的那条（用执行时记下的 id）。
+            # ★ 2026-11-22：path 是**集合路径**（`/api/v1/todo/items`，POST 用），
+            #   直接 DELETE 集合会 405 —— 必须把 executed_id 拼成子资源路径。
+            #   path 含占位符（MCP 拦截点给的模板）时走原逻辑。
             if not row.executed_id:
                 raise ValidationError("这条 create 提案没有记下执行产物 id，无法撤销")
-            status, data = _request("DELETE", row.path, {"id": row.executed_id})
+            if _PATH_PARAM_RE.search(row.path or ""):
+                status, data = _request("DELETE", row.path, {"id": row.executed_id})
+            else:
+                undo_path = f"{(row.path or '').rstrip('/')}/{quote(str(row.executed_id), safe='')}"
+                status, data = _request("DELETE", undo_path, {})
         elif row.action == "update":
             # 撤销 update = 用 before 原值回写同一资源
             body = self._with_path_params(row, _clean_for_recreate(row.before))

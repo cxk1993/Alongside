@@ -2,6 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "alongside://contracts/action.schema.json",
   "title": "Action · 它做过的",
+  "$comment": "⚠️ v1 实现状态：**本契约暂无实现**。2026-11-22 夜班核对：后端 35 个模块中没有 action / timeline / audit 模块，前端对 `reversible`/`undo_ref` 零消费。它描述的是目标形状，不是现状。在实现出现前，任何声称「动作时间线」的界面都是假的——请用 proposals（有实现）或 audit_log 兜底，并在 UI 上如实标注。新增这个实现时，请同时删掉本行注释。",
   "description": "AI（或人）对系统做过的一次动作。这是「动作时间线」的数据源，也是「可记录可补救」的落地载体。\n\n与提案层的关系：高风险写操作不直接执行，先生成 proposal；人签字后才由 execution 落成 action。\n所以 proposal_id 为空 = 直执（低风险或人工操作）；非空 = 经签字后执行。\n\n铁律：status=undone 必须能找到 undo_ref；找不到就不许标 undone——不装深度。",
   "type": "object",
   "additionalProperties": false,

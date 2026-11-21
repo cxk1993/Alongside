@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "assets 模块设置",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

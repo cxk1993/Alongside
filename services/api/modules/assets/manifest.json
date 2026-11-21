@@ -1,0 +1,49 @@
+{
+  "id": "assets",
+  "name": "资产层",
+  "version": "0.1.0",
+  "kind": "builtin",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "archive",
+  "description": "可沉淀的经验（contracts/asset.schema.json 的落地）：note/skill/checklist/decision/procedure；append-only + 显式 supersede（旧条标 superseded 并反向指 superseded_by）；provenance 必填；可单条硬删。任务一键沉淀 = POST /assets {type:\"note\", provenance:{inputs:[task_id]}}。",
+  "author": "bidiu",
+  "window": {
+    "w": 900,
+    "h": 620,
+    "minW": 560,
+    "minH": 420,
+    "singleton": true
+  },
+  "entry": "",
+  "api": {
+    "base": "/api/v1/assets",
+    "openapi": "/api/v1/assets/openapi.json",
+    "health": "/api/v1/assets/health",
+    "tools": {
+      "asset.write": "/api/v1/assets",
+      "asset.list": "/api/v1/assets",
+      "asset.read": "/api/v1/assets/{asset_id}",
+      "asset.delete": "/api/v1/assets/{asset_id}"
+    }
+  },
+  "provides": [
+    "assets.asset.write",
+    "assets.asset.list",
+    "assets.asset.read",
+    "assets.asset.delete"
+  ],
+  "requires": [],
+  "slots": [],
+  "emits": [
+    "assets.asset.created",
+    "assets.asset.superseded",
+    "assets.asset.deleted"
+  ],
+  "consumes": [],
+  "permissions": [
+    "db:own"
+  ],
+  "migrations": "migrations",
+  "settingsSchema": "settings.schema.json"
+}

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "插件设置",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

@@ -43,13 +43,18 @@ _METHOD_BY_VERB: dict[str, str] = {
     #   AI 能建任务却没有任何工具让它跑起来。
     "dispatch": "POST",
     "report": "POST",
+    # ★ bidiu 2026-11-21（B1 提案层）：签字/作废/撤销是 POST 子路由
+    #   （/proposals/{id}/approve|reject|undo，路径经 manifest api.tools 显式映射）。
+    "approve": "POST",
+    "reject": "POST",
+    "undo": "POST",
     "delete": "DELETE",
     "remove": "DELETE",
 }
 
 # 写类动词集合（审计用：落在集合里的 tool 调用要落 audit_log）。
 WRITE_VERBS: frozenset[str] = frozenset(
-    {"write", "create", "update", "patch", "delete", "remove", "dispatch", "report"}
+    {"write", "create", "update", "patch", "delete", "remove", "dispatch", "report", "approve", "reject", "undo"}
 )
 #（ISSUE-008 方案 A，2026-09-20）不规则/语义命名路由的显式映射不在本文件——
 # 在各插件 manifest 的 api.tools（resource → 路由段，声明则优先，未声明走机械

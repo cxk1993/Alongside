@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from core.errors import ForbiddenError
@@ -36,6 +37,93 @@ SERVER_VERSION = "0.1.0"
 # 我们支持的协议版本（核心三原语在各版本间一致；握手时回客户端所请求的版本）。
 _SUPPORTED_PROTOCOL_VERSIONS = ("2024-11-05", "2025-03-26", "2025-06-18")
 _DEFAULT_PROTOCOL_VERSION = "2025-06-18"
+
+# ───────────────────────── B1 提案拦截（bidiu 2026-11-21） ─────────────────────────
+
+#: 拦截开关的环境变量名。缺省**关**（存量行为不变）；演示/试点设 `MCP_PROPOSAL_MODE=on`。
+_PROPOSAL_MODE_ENV = "MCP_PROPOSAL_MODE"
+
+#: 会被拦成提案的动词 = **数据变更**动词。dispatch/report 是任务编排动作
+#: （推进状态机、不落业务数据），拦了会把 agents 演示流卡死——故不拦；
+#: approve/reject/undo 是提案层自己的动作——拦了就无限递归——故不拦。
+_PROPOSABLE_VERBS = frozenset({"write", "create", "update", "patch", "delete", "remove"})
+
+#: verb → 提案 action（提案层的动作三分）
+_VERB_TO_ACTION = {
+    "write": "create",
+    "create": "create",
+    "update": "update",
+    "patch": "update",
+    "delete": "delete",
+    "remove": "delete",
+}
+
+
+def _proposal_mode_on() -> bool:
+    """提案模式：**缺省开（fail-closed）**——忘设环境变量不会静默裸奔。
+
+    显式关法：``MCP_PROPOSAL_MODE=off``（亦接受 0/false/no/disable，大小写不敏感）。
+    依据：四家共识 #9「fail-closed：提案模式缺省开（仅 WRITE_VERBS）」+ 团队判据 7。
+    """
+    raw = (os.environ.get(_PROPOSAL_MODE_ENV, "") or "").strip().lower()
+    return raw not in {"off", "0", "false", "no", "disable", "disabled"}
+
+
+def _issue_proposal(msg_id: Any, pat: PatContext, tool: Any, payload: dict[str, Any] | None) -> dict[str, Any]:
+    """把一次写工具调用**转成提案**（不执行业务动作），返回给 AI 一张「待签字」回执。
+
+    before 快照：update/delete 先 GET 同路径取当前值（取不到就 null，
+    撤销时会诚实失败——宁可 undo 报错，不可伪造快照）。
+    """
+    action = _VERB_TO_ACTION[tool.verb]
+    payload_dict = payload if isinstance(payload, dict) else {}
+
+    before: Any = None
+    if action in ("update", "delete"):
+        try:
+            b_status, b_body = forward("GET", tool.path, payload_dict)
+            if 200 <= b_status < 300 and isinstance(b_body, dict):
+                before = b_body
+        except Exception:  # noqa: BLE001 —— 快照失败不拦签发（undo 时诚实报错）
+            before = None
+
+    p_status, p_body = forward(
+        "POST",
+        "/api/v1/proposals",
+        {
+            "title": f"{tool.name}（AI 发起，待签字）",
+            "tool_name": tool.name,
+            "action": action,
+            "method": tool.method,
+            "path": tool.path,
+            "payload": payload_dict,
+            "before": before,
+            "actor": f"mcp:{pat.name}",
+        },
+    )
+    proposal_id = ""
+    if 200 <= p_status < 300 and isinstance(p_body, dict):
+        proposal_id = str(p_body.get("id") or "")
+    text = json.dumps(
+        {
+            "proposal_id": proposal_id,
+            "status": "pending" if proposal_id else f"签发失败 HTTP {p_status}",
+            "message": (
+                f"提案 #{proposal_id} 已签发：等待主人签字（proposals_proposal_approve）后才执行。"
+                "这是治理要求——AI 的写操作先过动作门，不直接改数据。"
+                if proposal_id
+                else f"提案签发失败 HTTP {p_status}：{json.dumps(p_body, ensure_ascii=False, default=str)[:200]}"
+            ),
+            "tool_name": tool.name,
+            "action": action,
+        },
+        ensure_ascii=False,
+        default=str,
+    )
+    return _rpc_result({"content": [{"type": "text", "text": text}], "isError": not proposal_id}, msg_id)
+
+
+# ───────────────────────── JSON-RPC 分发 ─────────────────────────
 
 # JSON-RPC 错误码（标准）
 _ERR_METHOD_NOT_FOUND = -32601
@@ -234,6 +322,19 @@ def _handle_tools_call(msg: dict[str, Any], msg_id: Any, pat: PatContext) -> dic
         extra = {k: v for k, v in arguments.items() if k != "payload"}
         if extra:
             payload = {**(payload or {}), **extra}
+
+    # ★ B1（bidiu 2026-11-21）：提案拦截。
+    #   开 `MCP_PROPOSAL_MODE=on` 时，**数据变更**写工具不直接执行，
+    #   转成提案等主人签字（proposals_proposal_approve）——「AI 提议、人执行」。
+    #   读工具 / dispatch/report 等编排动作不受影响；人类 REST 路径根本不经这里。
+    #   提案层自身工具（proposals_*：签发/签字/驳回/撤销）必须直通——
+    #   拦了 = 「提案的提案」无限套娃（test_mcp_proposal_tools_not_self_intercepted 守）。
+    if (
+        _proposal_mode_on()
+        and tool.verb in _PROPOSABLE_VERBS
+        and not (tool.name or "").startswith("proposals_")
+    ):
+        return _issue_proposal(msg_id, pat, tool, payload)
 
     status, body = forward(tool.method, tool.path, payload)
     ok = 200 <= status < 300

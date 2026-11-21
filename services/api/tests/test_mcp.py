@@ -446,7 +446,12 @@ def test_tools_call_scope_denied_403(client):
 
 
 def test_tools_call_forwards_via_http(client, pat, monkeypatch):
-    """成功路径：scope 过 → 内部 HTTP 转发（mock）→ 写类工具落审计。"""
+    """成功路径：scope 过 → 内部 HTTP 转发（mock）→ 写类工具落审计。
+
+    ★ 2026-11-22：提案模式已改为缺省开（fail-closed，四家共识 #9），
+    本测试验证的是**转发链路本身**，故显式关闭提案拦截（逃生阀）。
+    """
+    monkeypatch.setenv("MCP_PROPOSAL_MODE", "off")
     _, headers, _ = pat
     seen: dict = {}
 

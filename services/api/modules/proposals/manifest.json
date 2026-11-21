@@ -1,0 +1,55 @@
+{
+  "id": "proposals",
+  "name": "变更提案",
+  "version": "0.1.0",
+  "kind": "builtin",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "clipboard-check",
+  "description": "签字中心 · AI 的高风险写操作先出提案卡（before/after + 发起人 + 工具名），主人签字才执行，签完可一键撤销。MCP_PROPOSAL_MODE=on 时 MCP 写工具自动走这里拦截。",
+  "author": "bidiu",
+  "window": {
+    "w": 900,
+    "h": 640,
+    "minW": 560,
+    "minH": 420,
+    "singleton": true
+  },
+  "entry": "",
+  "api": {
+    "base": "/api/v1/proposals",
+    "openapi": "/api/v1/proposals/openapi.json",
+    "health": "/api/v1/proposals/health",
+    "tools": {
+      "proposal.write": "/api/v1/proposals",
+      "proposal.list": "/api/v1/proposals",
+      "proposal.read": "/api/v1/proposals/{proposal_id}",
+      "proposal.approve": "/api/v1/proposals/{proposal_id}/approve",
+      "proposal.reject": "/api/v1/proposals/{proposal_id}/reject",
+      "proposal.undo": "/api/v1/proposals/{proposal_id}/undo"
+    }
+  },
+  "provides": [
+    "proposals.proposal.read",
+    "proposals.proposal.list",
+    "proposals.proposal.write",
+    "proposals.proposal.approve",
+    "proposals.proposal.reject",
+    "proposals.proposal.undo"
+  ],
+  "requires": [],
+  "slots": [],
+  "emits": [
+    "proposals.proposal.created",
+    "proposals.proposal.approved",
+    "proposals.proposal.rejected",
+    "proposals.proposal.undone"
+  ],
+  "consumes": [],
+  "permissions": [
+    "db:own",
+    "net:out:localhost"
+  ],
+  "migrations": "migrations",
+  "settingsSchema": "settings.schema.json"
+}

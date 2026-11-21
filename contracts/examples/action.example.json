@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "ac_test0001",
+  "at": "2026-11-22T01:30:00+08:00",
+  "actor": {
+    "kind": "agent",
+    "id": "pat_1",
+    "name": "hermes"
+  },
+  "verb": "update",
+  "tool": "calendar_event_patch",
+  "target": {
+    "module": "calendar",
+    "id": "e1"
+  },
+  "status": "applied",
+  "reversible": true,
+  "undo_ref": "snap_0001",
+  "summary": "把明天 14:00 的会议挪到 16:00"
+}

@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "alongside://contracts/asset.schema.json",
+  "title": "Asset · 可沉淀的经验",
+  "description": "人与 AI 协同产出的、可复用的东西。这是项目「沉淀→复用→扩散」的物理载体。\n\n三条硬规则（来源：MCP issue #3564 的真实教训 + 汐瑶 ADR）：\n1) append-only + 显式 supersede —— 不许整块重写（last-writer-wins 会丢掉「之前决定过什么、为什么」）\n2) 必须留 provenance —— 跨 AI 共享记忆时，一毒全毒，必须能追溯是谁写的、基于什么\n3) 必须可单条硬删 —— 用户有权真正删除\n\n另外：exportable 默认为 true —— 「只读」约束的是不能在这里改删，不是不能带走。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "type", "title", "body", "provenance", "status", "tier", "created_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^as_[A-Za-z0-9_-]{6,}$",
+      "description": "稳定 id，前缀 as_。永不复用。"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["note", "skill", "checklist", "decision", "procedure"],
+      "description": "沉淀物的种类。note=一次结论/心得；skill=一套可复用的做事方法；checklist=可勾选清单；decision=做过的决定+理由；procedure=多步流程。"
+    },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "body": {
+      "type": "string",
+      "description": "正文（Markdown）。无长度上限——但过长的正文应考虑拆分并互相 ref。"
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "一页纸摘要。索引与检索只读这一段，不读 body。"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "at"],
+      "description": "★ 必填。谁写的、什么时候、基于什么。缺了它就不可信。",
+      "properties": {
+        "agent": {
+          "type": "string",
+          "description": "human | agent:<name> | mcp:<pat_name>。跨 AI 共享时这一项决定追责路径。"
+        },
+        "at": { "type": "string", "format": "date-time" },
+        "inputs": {
+          "type": "array",
+          "description": "基于哪些材料（文件路径 / asset id / 会话 id）。防投毒：能追到源头。",
+          "items": { "type": "string" }
+        },
+        "session_id": { "type": ["string", "null"], "description": "若来自某次会话，记下来，便于回放" }
+      }
+    },
+    "supersedes": {
+      "type": "array",
+      "description": "★ 被本条取代的旧 asset id 列表。这是「记忆带逆」的落地：旧条不删，标 superseded 并指向新条。",
+      "items": { "type": "string", "pattern": "^as_" }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "superseded", "draft"],
+      "description": "active=现行有效；superseded=已被取代（保留可查，检索降权）；draft=未确认，不参与检索。"
+    },
+    "superseded_by": {
+      "type": ["string", "null"],
+      "pattern": "^as_",
+      "description": "被哪一条取代（反向指针）。与 supersedes 互为镜像，便于双向遍历。"
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["public", "work", "private", "sealed"],
+      "description": "★ 柜子模型的档位（谁能读）。默认必须是 private——默认放宽的东西会一路松到没有。",
+      "default": "private"
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["private", "shared"],
+      "default": "private",
+      "description": "是否允许外溢给别的用户/别的 AI 集群（智能组织体）。v1 一律 private。"
+    },
+    "exportable": {
+      "type": "boolean",
+      "default": true,
+      "description": "★ 是否允许导出带走。默认为 true——别人的资产是锁，我们的资产是引力。"
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "type": "string", "maxLength": 24 }
+    },
+    "refs": {
+      "type": "array",
+      "description": "关联的其他 asset / 模块对象。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["asset", "module", "url"] },
+          "id": { "type": "string" },
+          "label": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "description": "superseded 必须有 superseded_by，否则这条记忆就没有「逆」——不知道它被谁取代。",
+      "if": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] },
+      "then": { "required": ["superseded_by"] }
+    },
+    {
+      "description": "active 的条目不允许带 superseded_by（自相矛盾）。",
+      "if": { "properties": { "status": { "const": "active" } }, "required": ["status"] },
+      "then": { "properties": { "superseded_by": { "type": "null" } } }
+    }
+  ]
+}

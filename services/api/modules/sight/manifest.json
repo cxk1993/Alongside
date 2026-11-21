@@ -1,0 +1,51 @@
+{
+  "id": "sight",
+  "name": "此刻",
+  "version": "0.1.0",
+  "kind": "builtin",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "compass",
+  "description": "给 AI 的「处境」：调一次就知道此刻什么时候、有什么事挂着、有哪些张力。只读聚合，本插件不持有任何业务表。",
+  "author": "yunxi",
+  "window": {
+    "w": 900,
+    "h": 640,
+    "minW": 600,
+    "minH": 420,
+    "singleton": true
+  },
+  "api": {
+    "base": "/api/v1/sight",
+    "openapi": "/api/v1/sight/openapi.json",
+    "health": "/api/v1/sight/health",
+    "tools": {
+      "now": "/now"
+    }
+  },
+  "provides": [
+    "sight.now.read"
+  ],
+  "requires": [
+    "calendar.event.read",
+    "todo.item.read",
+    "habits.habit.read"
+  ],
+  "slots": [],
+  "emits": [],
+  "consumes": [
+    "calendar.event.created",
+    "calendar.event.updated",
+    "calendar.event.deleted",
+    "todo.item.created",
+    "todo.item.updated",
+    "todo.item.completed",
+    "habits.log.checked"
+  ],
+  "permissions": [
+    "net:out:127.0.0.1",
+    "net:out:localhost"
+  ],
+  "migrations": null,
+  "settingsSchema": null
+}

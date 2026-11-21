@@ -1,0 +1,216 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "alongside://contracts/sight.schema.json",
+  "title": "Sight · 此刻处境",
+  "description": "GET /sight/now 的响应形状。给 AI 的「处境」而不是「数据表」——系统先做判断再交出，不要只把各行各列原样吐出来。\n\n铁律（I5 不装深度）：造不出结构化判断就写进 degraded，如实降级，不编。宁可返回「我暂时看不到日程」，也不要编一个看起来合理的 tensions。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "head", "attention", "tensions"],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "契约版本。加字段不动它；改字段语义必须升版本。"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "生成本快照的时刻（带时区，ISO8601）。调用方据此判断新鲜度。"
+    },
+    "head": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["now_local", "weekday", "part_of_day"],
+      "description": "抬头三行——AI 一进门最先看到的。刻意短：只回答「现在是什么时候」。",
+      "properties": {
+        "now_local": {
+          "type": "string",
+          "description": "本地时间，人读格式，如 2026-11-22T01:24:00+08:00"
+        },
+        "weekday": {
+          "type": "string",
+          "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        },
+        "part_of_day": {
+          "type": "string",
+          "enum": ["dawn", "morning", "noon", "afternoon", "evening", "late_night"],
+          "description": "时段。深夜调用的 AI 应当据此调整语气与建议（例如不建议安排高强度任务）。"
+        }
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "时间维度的处境。任一子字段无法取得则整块省略，并记入 degraded。",
+      "properties": {
+        "busy_until": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "若此刻正在某个日程中，返回其结束时刻；否则 null。"
+        },
+        "next_event": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "title": { "type": "string" },
+            "start_at": { "type": "string", "format": "date-time" },
+            "minutes_until": { "type": "integer", "minimum": 0 },
+            "location": { "type": ["string", "null"] }
+          }
+        },
+        "free_slots": {
+          "type": "array",
+          "description": "今天剩余的空档，只保留 ≥30 分钟的。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start", "end", "minutes"],
+            "properties": {
+              "start": { "type": "string", "format": "date-time" },
+              "end": { "type": "string", "format": "date-time" },
+              "minutes": { "type": "integer", "minimum": 30 }
+            }
+          }
+        }
+      }
+    },
+    "attention": {
+      "type": "array",
+      "description": "值得注意的条目（欠的、快到的、断了的）。按重要度降序，最多 10 条——不是清单，是「该看这几件」。",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "title", "ref"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "todo_overdue",
+              "todo_due_soon",
+              "event_soon",
+              "habit_streak_broken",
+              "habit_missed",
+              "health_followup",
+              "bill_due",
+              "stale_decision"
+            ],
+            "description": "为什么它值得注意。新增枚举值 = 契约变更，走 RFC。"
+          },
+          "title": { "type": "string", "description": "一句话，人话，≤40 字" },
+          "ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["module"],
+            "description": "指回原模块，供界面点开。",
+            "properties": {
+              "module": { "type": "string", "description": "模块 id，如 todo / calendar / finance" },
+              "id": { "type": ["string", "null"] },
+              "path": { "type": ["string", "null"], "description": "该模块内部的相对路径或视图参数" }
+            }
+          },
+          "age_days": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "挂了多少天。老账新账一眼看出来。"
+          },
+          "due_at": { "type": ["string", "null"], "format": "date-time" },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"], "default": "medium" }
+        }
+      }
+    },
+    "tensions": {
+      "type": "array",
+      "description": "★ 本契约的核心：系统先判断出的「冲突与别扭」，而不是原始数据。\n空数组是合法且重要的答案——说明此刻没有张力，不要为了有内容而硬造。",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "summary", "severity"],
+        "properties": {
+          "id": { "type": "string", "description": "稳定 id，供去重与「已读」标记" },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "schedule_conflict",
+              "overload",
+              "stale_item",
+              "missing_info",
+              "goal_drift",
+              "resource_short"
+            ],
+            "description": "schedule_conflict=两件事撞了 / overload=排太满 / stale_item=挂了很久 / missing_info=缺信息无法推进 / goal_drift=在做的事偏离了目标 / resource_short=时间或钱不够"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "一句话说清是什么冲突。这一句会被 AI 直接读进上下文，所以要能独立成立。"
+          },
+          "refs": {
+            "type": "array",
+            "description": "参与这次冲突的对象，供界面高亮、供 AI 引用。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["module"],
+              "properties": {
+                "module": { "type": "string" },
+                "id": { "type": ["string", "null"] },
+                "label": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+          "suggested_action": {
+            "type": ["string", "null"],
+            "description": "可选的建议动作（一句话）。注意：这里只写建议，不执行——执行必须走 action/proposal。"
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "软上下文：不是「发生了什么」，而是「最近在想什么」。全部可选，取不到就省略。",
+      "properties": {
+        "recent_notes": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "at"],
+            "properties": {
+              "title": { "type": "string" },
+              "at": { "type": "string", "format": "date-time" },
+              "ref": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "description": "用户还没决定的事（来自待办/日记/对话沉淀）。",
+          "maxItems": 5,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "degraded": {
+      "type": "array",
+      "description": "★ 诚实降级区（I5）。哪些源没拿到、为什么。有这个字段，调用方才知道「现在看到的不全」，而不是误以为「世界就这么多事」。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "reason"],
+        "properties": {
+          "source": { "type": "string", "description": "模块 id 或子系统名" },
+          "reason": {
+            "type": "string",
+            "enum": ["timeout", "auth_failed", "not_configured", "empty", "not_implemented", "error"],
+            "description": "not_implemented 是合法的诚实答案——尚未实现就别假装有数据"
+          },
+          "detail": { "type": ["string", "null"], "maxLength": 200 }
+        }
+      }
+    }
+  }
+}

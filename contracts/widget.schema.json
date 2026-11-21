@@ -1,0 +1,136 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "alongside://contracts/widget.schema.json",
+  "title": "Widget & Layout · 共处工作台的桌子",
+  "description": "视野区的「块」与整张桌子的布局。\n\n★ 核心设计：布局是数据（JSON），可存、可导、可分享；而且——\n因为每次改动都是 effect、都带逆，所以「布局本身是一种能力缝」：AI 也能重排桌子（「我给你加一张卡片」），接错了能拆。\n\n这就是「AI 是主体」贯彻到界面层的真正含义：不是给 AI 一个固定位置，而是 AI 可以重新安排这张桌子。\n\n两份对象共用本文件：Widget（一个块）与 Layout（一张桌子）。",
+  "definitions": {
+    "Widget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "slot"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^w_[A-Za-z0-9_-]{4,}$",
+          "description": "块 id，前缀 w_。供拖拽与持久化定位。"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "sight_time",
+            "sight_attention",
+            "sight_tension",
+            "action_timeline",
+            "proposal_queue",
+            "asset_gallery",
+            "note_card",
+            "module_embed",
+            "custom"
+          ],
+          "description": "块的类型。sight_* 消费 /sight/now；action_timeline 消费 action；proposal_queue 消费 proposals；module_embed 把旧模块（日历/待办…）作为一块嵌进来——旧窗口降级为「抽屉」的落点就是它。"
+        },
+        "slot": {
+          "type": "string",
+          "enum": ["sight", "actions", "proposals", "assets", "sidebar"],
+          "description": "★ 放在桌子的哪一区。sight=它看见的；actions=它做过的；proposals=待你签字；assets=沉底；sidebar=侧栏。"
+        },
+        "title": { "type": ["string", "null"], "maxLength": 40 },
+        "order": {
+          "type": "integer",
+          "default": 0,
+          "description": "同 slot 内的排序权重，越小越靠前。"
+        },
+        "size": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "以 12 栏栅格为单位。",
+          "properties": {
+            "w": { "type": "integer", "minimum": 1, "maximum": 12, "default": 4 },
+            "h": { "type": "integer", "minimum": 1, "maximum": 12, "default": 2 }
+          }
+        },
+        "config": {
+          "type": "object",
+          "description": "块的私有配置，不同 kind 各自解释，内核不校验（与 manifest.meta_json 同一哲学）。",
+          "additionalProperties": true
+        },
+        "source": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "description": "数据来源。module_embed 必填。",
+          "properties": {
+            "module": { "type": ["string", "null"], "description": "模块 id，如 calendar / todo" },
+            "view": { "type": ["string", "null"], "description": "模块内视图，如 month / list" },
+            "ref": { "type": ["string", "null"], "description": "具体对象 id（可选）" }
+          }
+        },
+        "created_by": {
+          "type": "string",
+          "enum": ["human", "agent", "system"],
+          "default": "human",
+          "description": "★ 这块是谁加的。AI 加的块要能被人一眼认出来（界面上加个淡淡的角标），因为人是唯一主人。"
+        },
+        "pinned": { "type": "boolean", "default": false },
+        "hidden": { "type": "boolean", "default": false, "description": "隐藏而非删除——与 Dock 的处理同一个道理：留退路。" }
+      }
+    },
+
+    "Layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "version", "columns", "widgets"],
+      "description": "一整张桌子。可导出/导入，跨设备一致。",
+      "properties": {
+        "schema_version": { "const": 1 },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "布局自身的版本号，每次保存 +1。用于冲突检测（乐观锁）。"
+        },
+        "preset": {
+          "type": "string",
+          "enum": ["sight", "work", "archive", "custom"],
+          "default": "sight",
+          "description": "预设工作空间（借 Blender 的 workspace 思路）：sight=视野为主 / work=行动为主 / archive=沉淀为主 / custom=用户自建"
+        },
+        "name": {
+          "type": ["string", "null"],
+          "maxLength": 40,
+          "description": "自建空间的名字。preset=custom 时建议填。"
+        },
+        "columns": {
+          "type": "integer",
+          "enum": [12],
+          "default": 12,
+          "description": "栅格列数。v1 固定 12，不允许自定义——先固定，别给自由度过早。"
+        },
+        "widgets": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Widget" }
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["public", "work", "private", "sealed"],
+          "default": "private",
+          "description": "布局本身的可见性（复用柜子模型）。布局里可能暴露「你在关注什么」，所以默认 private。"
+        },
+        "exportable": {
+          "type": "boolean",
+          "default": true,
+          "description": "布局可带走。与 asset 同一条哲学：能带走的才是资产。"
+        },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "updated_by": {
+          "type": "string",
+          "enum": ["human", "agent", "system"],
+          "description": "最后一次改这张桌子的是谁。AI 改过要留痕——人有权知道自己的桌面被重排过。"
+        }
+      }
+    }
+  },
+
+  "oneOf": [
+    { "$ref": "#/definitions/Widget" },
+    { "$ref": "#/definitions/Layout" }
+  ]
+}

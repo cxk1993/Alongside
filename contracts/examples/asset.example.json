@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "as_test0001",
+  "type": "decision",
+  "title": "选 Hindsight",
+  "body": "79 端点、内置 MCP、官方 export",
+  "provenance": {
+    "agent": "human",
+    "at": "2026-11-22T01:30:00+08:00",
+    "inputs": [
+      "team/03-共识台账"
+    ]
+  },
+  "status": "active",
+  "tier": "private",
+  "exportable": true,
+  "created_at": "2026-11-22T01:30:00+08:00"
+}

@@ -13,6 +13,11 @@
 | `pack-assembly.schema.json` | **包层** | 装配快照 `pack.assembly.json` 的形状（本次装配的实况） |
 | `data-dictionary.md` | **T04** | 核心数据字典（总纲 §1.5 落库后的正式版） |
 | `openapi.json` | **T03** | `scripts/gen_openapi.py` 生成的聚合产物 |
+| **`sight.schema.json`** | **云昔**（2026-11-22 夜班） | `GET /sight/now` 的响应形状——给 AI 的「处境」而非「数据表」；含 `tensions` 判断区与 `degraded` 诚实降级区 |
+| **`asset.schema.json`** | **云昔** | 可沉淀经验。三条硬规则：append-only+显式 supersede / 必须留 provenance / 可单条硬删；`exportable` 默认 true |
+| **`action.schema.json`** | **云昔** | 「它做过的」时间线条目。`reversible=true` 必须有 `undo_ref`，`status=undone` 必须有 `undone_at`（schema 强制） |
+| **`widget.schema.json`** | **云昔** | 共处工作台的块与布局。**布局是数据**——可存可导；AI 也能重排（布局本身是能力缝） |
+| `examples/*.example.json` | **云昔** | 上述四份的正例实例（已过校验，供照抄写代码） |
 | `modules/<id>.manifest.json` | **各插件卡** | 每个插件自己的清单，一个插件一个文件 |
 
 > T01 阶段这里**只有这份 README**。上面那些文件什么时候出现，由各自的所有者决定。

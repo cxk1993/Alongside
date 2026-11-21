@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "alongside://contracts/action.schema.json",
+  "title": "Action · 它做过的",
+  "description": "AI（或人）对系统做过的一次动作。这是「动作时间线」的数据源，也是「可记录可补救」的落地载体。\n\n与提案层的关系：高风险写操作不直接执行，先生成 proposal；人签字后才由 execution 落成 action。\n所以 proposal_id 为空 = 直执（低风险或人工操作）；非空 = 经签字后执行。\n\n铁律：status=undone 必须能找到 undo_ref；找不到就不许标 undone——不装深度。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "at", "actor", "verb", "status"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^ac_[A-Za-z0-9_-]{6,}$",
+      "description": "动作 id，前缀 ac_"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "动作发生时刻（带时区）。时间线按它排序。"
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "description": "谁做的。人与 AI 在同一根时间线上，但要能区分——这是「谁读了什么/谁动了什么」的基础。",
+      "properties": {
+        "kind": { "type": "string", "enum": ["human", "agent", "system"] },
+        "id": { "type": ["string", "null"], "description": "agent id / PAT id / user id" },
+        "name": { "type": ["string", "null"], "description": "展示名（如 hermes、claude-code）" }
+      }
+    },
+    "verb": {
+      "type": "string",
+      "enum": ["create", "update", "delete", "invoke", "read", "approve", "reject", "undo", "dispatch", "report"],
+      "description": "读用 read、动用 create/update/delete/invoke；审批链路用 approve/reject/undo；多 agent 编排用 dispatch/report。"
+    },
+    "tool": {
+      "type": ["string", "null"],
+      "description": "执行的工具名（MCP 工具或内部能力名），如 todo_item_write / calendar_event_patch"
+    },
+    "target": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "作用对象。读/删/改要能指向具体一条。",
+      "properties": {
+        "module": { "type": "string" },
+        "id": { "type": ["string", "null"] },
+        "label": { "type": ["string", "null"] }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "applied", "rejected", "undone", "failed"],
+      "description": "pending=待签字/待执行；applied=已生效；rejected=被拒；undone=已撤销；failed=执行失败（不推进状态，可重试）"
+    },
+    "proposal_id": {
+      "type": ["string", "null"],
+      "description": "经提案层签字的动作才有此值。空 = 直执。"
+    },
+    "reversible": {
+      "type": "boolean",
+      "default": false,
+      "description": "★ 这个动作能不能撤销。false 不等于不能做，但界面上必须如实标注「不可撤销」——比假装能撤更诚实。"
+    },
+    "undo_ref": {
+      "type": ["string", "null"],
+      "description": "撤销凭据：快照 id / 逆向操作 id。reversible=true 时应当非空。"
+    },
+    "undone_at": { "type": ["string", "null"], "format": "date-time" },
+    "summary": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "★ 人话一句话：「把明天 14:00 的会议挪到 16:00」。这是界面上显示的那一行，不是给机器看的字段堆。"
+    },
+    "diff": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "改动前后（可选）。有它才能做「before/after 预览」。",
+      "properties": {
+        "before": { "type": ["object", "array", "string", "number", "boolean", "null"] },
+        "after": { "type": ["object", "array", "string", "number", "boolean", "null"] }
+      }
+    },
+    "evidence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "证据：请求 id、耗时、返回码。用于事后复盘与交叉核对。",
+      "properties": {
+        "request_id": { "type": ["string", "null"] },
+        "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "http_status": { "type": ["integer", "null"] }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "reversible=true 时必须给 undo_ref，否则「能撤」是空话。",
+      "if": { "properties": { "reversible": { "const": true } }, "required": ["reversible"] },
+      "then": { "required": ["undo_ref"] }
+    },
+    {
+      "description": "status=undone 必须有 undone_at。",
+      "if": { "properties": { "status": { "const": "undone" } }, "required": ["status"] },
+      "then": { "required": ["undone_at"] }
+    }
+  ]
+}

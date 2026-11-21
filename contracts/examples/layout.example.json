@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "version": 1,
+  "columns": 12,
+  "preset": "sight",
+  "widgets": [
+    {
+      "id": "w_card0001",
+      "kind": "sight_tension",
+      "slot": "sight",
+      "size": {
+        "w": 6,
+        "h": 3
+      },
+      "order": 0
+    },
+    {
+      "id": "w_card0002",
+      "kind": "action_timeline",
+      "slot": "actions",
+      "order": 1
+    },
+    {
+      "id": "w_card0003",
+      "kind": "module_embed",
+      "slot": "sidebar",
+      "source": {
+        "module": "calendar",
+        "view": "month"
+      }
+    }
+  ]
+}

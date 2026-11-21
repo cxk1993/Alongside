@@ -8,7 +8,7 @@ HTTP 契约（全项目统一，不许自创）：
 ★ 路径参数用 Annotated[str, FPath()]；body 必填不写 = None。
 ★ 204 端点写 `-> None`（本文件不要加 future import）。
 """
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi import Path as FPath
@@ -68,15 +68,28 @@ def create_proposal(
     return _out(ProposalsService(db).create(body))
 
 
+#: 列表过滤的合法状态值（= models 里真实出现的四种，外加 `all` 表示不过滤）。
+#  ★ 2026-11-22：此前 `?status=all` 会精确匹配到 0 行 —— 未知值静默给空集，
+#    前端（或人）会误判「没有数据」。判据 5：不猜、不静默给错答案。
+#    现在：`all` 与空串（`?status=`，部分 HTTP 客户端会这么发）等价于不传，
+#    其它未定义值由 FastAPI 直接 422。
+ProposalStatusFilter = Literal["pending", "approved", "rejected", "undone", "all", ""]
+
+
 @router.get("", response_model=list[ProposalOut])
 def list_proposals(
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
-    status_filter: Annotated[str | None, Query(alias="status")] = None,
+    status_filter: Annotated[ProposalStatusFilter | None, Query(alias="status")] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[ProposalOut]:
-    """提案列表（签字中心数据源）。`?status=pending` 只看待签。"""
-    return [_out(r) for r in ProposalsService(db).list(status_filter, limit)]
+    """提案列表（签字中心数据源）。
+
+    `?status=pending` 只看待签；`?status=all` 与省略等价（不过滤）；
+    其余取值 422（不再静默返回空列表）。
+    """
+    effective = None if status_filter in (None, "", "all") else status_filter
+    return [_out(r) for r in ProposalsService(db).list(effective, limit)]
 
 
 @router.get("/{proposal_id}", response_model=ProposalOut)

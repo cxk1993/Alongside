@@ -689,3 +689,39 @@ def test_create_action_accepts_null_before(client):
         headers=AUTH,
     )
     assert r.status_code == 201, r.text
+
+
+def test_list_status_all_means_no_filter_and_unknown_is_422(client):
+    """`?status=all` 不过滤；未定义值 422（不再静默给空集）。
+
+    ★ 2026-11-22 实测踩点：`?status=all` 曾精确匹配到 0 行，前端会误判「没有数据」。
+    """
+    made = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "过滤语义探针",
+            "tool_name": "todo_item_create",
+            "action": "create",
+            "method": "POST",
+            "path": "/api/v1/todo/items",
+            "payload": {"text": "probe"},
+            "before": None,
+            "actor": "mcp:probe",
+        },
+        headers=AUTH,
+    )
+    assert made.status_code == 201, made.text
+    pid = made.json()["id"]
+
+    def ids(url: str) -> set[str]:
+        r = client.get(url, headers=AUTH)
+        assert r.status_code == 200, r.text
+        return {row["id"] for row in r.json()}
+
+    assert pid in ids("/api/v1/proposals?status=all")
+    assert ids("/api/v1/proposals?status=all") == ids("/api/v1/proposals")
+    assert ids("/api/v1/proposals?status=") == ids("/api/v1/proposals")
+    assert pid in ids("/api/v1/proposals?status=pending")
+
+    bad = client.get("/api/v1/proposals?status=bogus", headers=AUTH)
+    assert bad.status_code == 422, bad.text

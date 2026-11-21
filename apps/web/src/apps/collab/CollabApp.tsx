@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiError } from "@/shared/api/client";
+import { useProposalStream } from "./useProposalStream";
 import "./collab.css";
 
 type ZoneStatus = "loading" | "ready" | "missing" | "error";
@@ -128,6 +129,8 @@ function useProposals(): {
   busyId: string | null;
   lastError: string | null;
   act: (id: string, op: "approve" | "reject" | "undo") => Promise<void>;
+  /** ★ T21：给 SSE 推送用（事件到了就重拉一次，不做本地增量拼接——列表是唯一真相）。 */
+  reload: () => Promise<void>;
 } {
   const [status, setStatus] = useState<ZoneStatus>("loading");
   const [pending, setPending] = useState<ProposalRow[]>([]);
@@ -169,7 +172,7 @@ function useProposals(): {
     [reload],
   );
 
-  return { status, pending, approved, busyId, lastError, act };
+  return { status, pending, approved, busyId, lastError, act, reload };
 }
 
 const STATUS_TEXT: Record<ZoneStatus, string> = {
@@ -182,6 +185,9 @@ const STATUS_TEXT: Record<ZoneStatus, string> = {
 export default function CollabApp() {
   const sight = useSight();
   const proposals = useProposals();
+  // ★ T21：提案的四种状态变更是 SSE 推来的 → 收到就重拉（挂载时那次拉取仍然保留，
+  //   它是「断线/无 EventSource 时」的兜底）。
+  useProposalStream(proposals.reload);
 
   return (
     <section className="collab-surface" data-testid="collab-root" aria-label="共处工作台">

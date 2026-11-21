@@ -690,9 +690,17 @@
 }
 
 .windows__surface .collab-status,
-.windows__surface .collab-card {
+.windows__surface .collab-card,
+.windows__surface .collab-detail {
   pointer-events: auto;
 }
+/* ★ 白名单陷阱（2026-11-22 05:36 实测）：上面是**白名单**，不是黑名单 ——
+   `.collab-surface` 整体 pointer-events:none 之后，**任何没被列进来的层都是鼠标穿透的**，
+   而且是「看得见、点不到」：elementFromPoint 会返回它底下的卡片，看起来像点了没反应。
+   05:36 实测：提案详情抽屉（`.collab-detail`）漏在名单外 → 「关闭」「执行参数 · 展开」全都点不动，
+   整块抽屉甚至不能滚轮滚动；T27 补的键盘路径（Esc/焦点）掩盖了这条，鼠标用户完全卡死。
+   ⇒ 以后在共处工作台里**新增任何浮层（抽屉/弹层/悬浮操作条），必须同时加进这份白名单**，
+     并且用真浏览器 elementFromPoint 验一次 —— jsdom 没有布局，永远测不出来。 */
 /* —— U3 桌面级双侧栏 —— */
 .desktop-sidebar {
   position: relative;

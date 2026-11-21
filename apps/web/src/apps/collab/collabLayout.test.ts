@@ -61,3 +61,40 @@ describe("T30 · 它做过的面板高度（CSS 自指陷阱回归钉子）", ()
     expect(list).toMatch(/overflow-y\s*:\s*auto/);
   });
 });
+/**
+ * ★ T31 · 浮层鼠标穿透回归钉子（2026-11-22 05:36 实测撞出来的）。
+ *
+ * `desktop.css` 里 `.windows__surface` 与它下面的 `.collab-surface` 都是
+ * **pointer-events:none**（背景面不吃鼠标，桌面右键/拖选才不被挡），靠一份**白名单**
+ * 把可交互的层重新打开 auto。
+ *
+ * 白名单是「列进来才可点」，不是「列出去才不可点」：漏一个 = 那个层整块鼠标穿透。
+ * 05:36 真浏览器实测：提案详情抽屉 `.collab-detail` 漏在名单外 →
+ *   · 「关闭」「执行参数 · 展开」elementFromPoint 全落到下面卡片的 BUTTON 上，点不动
+ *   · 抽屉连滚轮滚动都收不到
+ *   · T27 补的键盘路径（Esc / 焦点）掩盖了它 —— 键盘用户没事，鼠标用户整个卡死
+ *
+ * 为什么只能钉规则文本：jsdom 没有排版与命中测试，`elementFromPoint` 不存在，
+ * 渲染测试永远测不出这一类。真验收必须在真浏览器里 elementFromPoint 一次。
+ */
+const desktopCss = readFileSync("src/kernel/desktop.css", "utf8");
+
+describe("T31 · 共处工作台浮层的 pointer-events 白名单", () => {
+  it("读到的是真样式表（空串会让下面两条假绿）", () => {
+    expect(desktopCss.length).toBeGreaterThan(1000);
+  });
+
+  it("背景面整体不吃鼠标（白名单的前提还在，否说明重构后这条钉子已无意义）", () => {
+    expect(blockOf(desktopCss, ".windows__surface .collab-surface")).toMatch(/pointer-events\s*:\s*none/);
+  });
+
+  it("提案详情抽屉在白名单里（漏掉 = 看得见、点不到）", () => {
+    expect(blockOf(desktopCss, ".windows__surface .collab-detail")).toMatch(/pointer-events\s*:\s*auto/);
+  });
+
+  it("已签/撤销等卡片与状态条仍在白名单（防止改这条时顺手删掉旧的）", () => {
+    const card = blockOf(desktopCss, ".windows__surface .collab-card,");
+    const status = blockOf(desktopCss, ".windows__surface .collab-status,");
+    expect(card + status).toMatch(/pointer-events\s*:\s*auto/);
+  });
+});

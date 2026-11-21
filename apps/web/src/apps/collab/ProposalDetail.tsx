@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { api, ApiError } from "@/shared/api/client";
-import { actorLabel, undoNote, ymdhm } from "./proposalFormat";
+import { actorLabel, signerLabel, undoNote, ymdhm } from "./proposalFormat";
 import { BeforePreview, JsonField } from "./proposalView";
 
 /** ProposalOut 全字段（services/api/modules/proposals/schema.py）。 */
@@ -34,7 +34,11 @@ export interface ProposalDetailData {
   executed_at?: string | null;
   executed_id?: string | null;
   executed_status?: number | null;
+  /** ★ T26：谁签的字（审计字段，73a0519）。老数据为 null。 */
+  executed_by?: string | null;
   undone_at?: string | null;
+  /** ★ T26：谁撤销的。老数据为 null。 */
+  undone_by?: string | null;
   undo_result?: string | null;
 }
 
@@ -195,6 +199,16 @@ function DetailBody({ d }: { d: ProposalDetailData }) {
                 <span className="collab-proposal__note">无（执行结果里没有 id）</span>
               )}
             </Row>
+            {/* ★ T26：谁签的字。null ≠ 「AI 签的」——是「这条提案早于该字段」，如实说。 */}
+            <Row k="签字人">
+              {signerLabel(d.executed_by) ? (
+                <span data-testid="detail-executed-by">{signerLabel(d.executed_by)}</span>
+              ) : (
+                <span className="collab-proposal__note" data-testid="detail-executed-by-missing">
+                  未记录（该提案早于签字人字段）
+                </span>
+              )}
+            </Row>
           </>
         ) : (
           <p className="collab-empty" data-testid="detail-not-executed">
@@ -207,6 +221,15 @@ function DetailBody({ d }: { d: ProposalDetailData }) {
         {d.status === "undone" ? (
           <>
             <Row k="撤销时间">{ymdhm(d.undone_at) || "未返回"}</Row>
+            <Row k="撤销人">
+              {signerLabel(d.undone_by) ? (
+                <span data-testid="detail-undone-by">{signerLabel(d.undone_by)}</span>
+              ) : (
+                <span className="collab-proposal__note" data-testid="detail-undone-by-missing">
+                  未记录（该提案早于撤销人字段）
+                </span>
+              )}
+            </Row>
             <Row k="撤销语义">{undoNote(d.action) || "未知动作"}</Row>
             <Row k="撤销回执">
               {/* ★ 真栈实测（T25）：撤销 create 走 DELETE → 204 无正文 → 服务端把回执记成

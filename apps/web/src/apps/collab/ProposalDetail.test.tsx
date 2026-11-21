@@ -37,7 +37,9 @@ const undoneRow = {
   executed_at: "2026-11-22T02:31:00+08:00",
   executed_id: "t3",
   executed_status: 200,
+  executed_by: "human",
   undone_at: "2026-11-22T02:33:00+08:00",
+  undone_by: "human",
   undo_result: '{"id": "t3", "text": "原文"}',
 };
 
@@ -144,6 +146,27 @@ describe("提案详情抽屉（T25 全字段）", () => {
     fireEvent.click(screen.getByText("重试"));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
     expect(await screen.findByTestId("detail-target")).toBeTruthy();
+  });
+
+  it("★ T26 审计：谁签的字 / 谁撤销的 都显示；老数据（null）说「未记录」，不冒充 human", async () => {
+    get.mockResolvedValue(undoneRow);
+    const { unmount } = render(<ProposalDetail proposalId="p12" onClose={() => {}} />);
+    expect((await screen.findByTestId("detail-executed-by")).textContent).toBe("你（human）");
+    expect(screen.getByTestId("detail-undone-by").textContent).toBe("你（human）");
+    unmount();
+
+    // AI 签的字必须一眼分得开（审计字段的真实用途）
+    get.mockResolvedValue({ ...undoneRow, executed_by: "mcp:nx-t26", undone_by: "mcp:nx-t26" });
+    const r2 = render(<ProposalDetail proposalId="p13" onClose={() => {}} />);
+    expect((await screen.findByTestId("detail-executed-by")).textContent).toBe("AI（nx-t26）");
+    expect(screen.getByTestId("detail-undone-by").textContent).toBe("AI（nx-t26）");
+    r2.unmount();
+
+    // 73a0519 之前的老提案：null 是「没这个字段」，不是「human」
+    get.mockResolvedValue({ ...undoneRow, executed_by: null, undone_by: null });
+    render(<ProposalDetail proposalId="p14" onClose={() => {}} />);
+    expect((await screen.findByTestId("detail-executed-by-missing")).textContent).toContain("未记录");
+    expect(screen.getByTestId("detail-undone-by-missing").textContent).toContain("未记录");
   });
 
   it("关闭按钮回调 onClose", async () => {

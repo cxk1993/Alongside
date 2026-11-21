@@ -37,6 +37,18 @@ export function actorLabel(actor?: string): string {
 }
 
 /**
+ * ★ T26：审计字段（谁签的字 `executed_by` / 谁撤销的 `undone_by`，73a0519 落库）。
+ * 和「谁提的议」不是一回事，不能共用 actorLabel —— 把签字人写成「你签发」会读成提案来源。
+ * 空值返回 ""，由调用方决定说「未记录」还是整行不显示。
+ */
+export function signerLabel(who?: string | null): string {
+  if (!who) return "";
+  if (who === "human") return "你（human）";
+  if (who.startsWith("mcp:")) return `AI（${who.slice(4) || "未命名 PAT"}）`;
+  return who;
+}
+
+/**
  * ★ T20 修正（契约 8ccef3b）：三种撤销语义不同，文案必须说清「撤掉的是什么」。
  *   契约原文：delete → 用 before 重建（新 id 同内容）｜update → 用 before 回写原 id
  *   ｜create → 删除 executed_id 指向的那条。

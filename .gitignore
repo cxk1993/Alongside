@@ -80,3 +80,8 @@ apps/web/dist_old_*/
 !plugins/mooc/web/dist/index.js
 !plugins/ucampus/web/dist/
 !plugins/ucampus/web/dist/index.js
+
+# ── 演示/调试用的 token 占位文件（3 段但总长 13 的无效 JWT），绝不入库 ──
+# 05:18 汐瑶发现：仓库根 demo_token.txt 未被忽略，一旦有人 `git add -A` 会跟着
+# 已有提交推到公开远端。文件本身已消失，这里补规则防止再生（2026-11-22 bidiu）
+demo_token.txt

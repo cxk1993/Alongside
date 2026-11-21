@@ -29,7 +29,11 @@
   ],
   "optionalDependencies": [],
   "slots": [],
-  "emits": [],
+  "emits": [
+    "ai-chat.turn.started",
+    "ai-chat.tool.called",
+    "ai-chat.turn.completed"
+  ],
   "consumes": [],
   "permissions": [
     "db:own"

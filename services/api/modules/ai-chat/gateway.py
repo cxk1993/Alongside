@@ -60,15 +60,42 @@ class ModelGateway:
             return ChatTurn("assistant", text="AI_CHAT_BASE_URL 未配置（model-gateway）")
         msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for t in turns:
-            if t.role == "user":
+            role = getattr(t, "role", "")
+            if role == "user":
                 msgs.append({"role": "user", "content": t.text})
-            elif t.role == "assistant":
+            elif role == "assistant" and getattr(t, "tool_name", None):
+                # ★ M1：assistant **发起** tool_call 的那一条必须显式带 tool_calls，
+                #   否则后面的 role:"tool" 消息无所依附 ⇒ 严格网关
+                #   `messages with role 'tool' must be a response to a preceding
+                #   message with 'tool_calls'` 400。
+                #   content 用 None（OpenAI 规范：带 tool_calls 的 assistant 可为 null）。
+                msgs.append(
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": t.tool_call_id or t.tool_name,
+                                "type": "function",
+                                "function": {
+                                    "name": t.tool_name,
+                                    "arguments": json.dumps(
+                                        t.tool_args or {}, ensure_ascii=False
+                                    ),
+                                },
+                            }
+                        ],
+                    }
+                )
+            elif role == "assistant":
                 msgs.append({"role": "assistant", "content": t.text})
-            elif t.role == "tool":
+            elif role == "tool":
+                # ★ M1：tool_call_id 用模型返回的 tc.id（不再是工具名），
+                #   且必须与上面 assistant 那条的 id 逐字相同。
                 msgs.append(
                     {
                         "role": "tool",
-                        "tool_call_id": t.tool_name or "t",
+                        "tool_call_id": t.tool_call_id or t.tool_name or "t",
                         "content": json.dumps(t.tool_result or {}, ensure_ascii=False)[:2000],
                     }
                 )
@@ -92,7 +119,17 @@ class ModelGateway:
                 parsed = json.loads(args) if isinstance(args, str) else args
             except Exception:
                 parsed = {}
-            return ChatTurn("assistant", tool_name=fn.get("name"), tool_args=parsed)
+            # ★ M1：带上模型返回的 tc.id —— 回填 tool 结果时必须用它，
+            #   用工具名当 id 会被严格网关判为「对不上号的 tool 响应」。
+            return ChatTurn(
+                "assistant",
+                tool_name=fn.get("name"),
+                tool_args=parsed if isinstance(parsed, dict) else {},
+                tool_call_id=tc.get("id"),
+                # ★ 并行调用只执行第一个（V1 4 工具面不变）；剩下的**记数**，
+                #   由循环写进 audit —— 静默丢调用是最难排查的那类缺陷。
+                dropped_tool_calls=max(0, len(tcs) - 1),
+            )
         return ChatTurn("assistant", text=str(msg.get("content") or ""))
 
 

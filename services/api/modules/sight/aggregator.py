@@ -38,7 +38,15 @@ from .tensions import compute as compute_tensions
 logger = logging.getLogger(__name__)
 
 # 单子调用超时（毫秒）—— 与 dashboard 对齐，保持全项目同一个体感
-CALL_TIMEOUT_MS = 800
+# ★ 2026-11-22 02:12：800 → 1500。理由不是「慢就放宽」，而是**这两个调用不是一类东西**：
+#   · dashboard 的 800ms 打的是 `/health` 探针（几乎零成本）
+#   · sight 打的是 `/events` 这类 data 端点（查库 + 序列化 + 时区换算）
+#   用同一个阈值 = 拿探针的标准要求查询。
+#   实测（汐瑶 T15 真栈 ×6 次，结果完全一致）：三个源稳定卡在 866ms 总耗时，
+#   每个子调用都贴着 800ms 被切断 → 不是冷启动、不是偶发，是**阈值本身定错了**。
+#   1500ms 给 2 倍余量；同时每源耗时进日志——若真超过 1000ms，要查根因，
+#   不是继续放宽。放宽阈值只能让「看不见」变成「看不见得更久」。
+CALL_TIMEOUT_MS = 1500
 CALL_TIMEOUT_S = CALL_TIMEOUT_MS / 1000.0
 
 FetchFn = Callable[[str], Awaitable[Any]]
@@ -59,21 +67,51 @@ NOT_WIRED: list[tuple[str, str]] = [
 
 
 # ----------------------------- 自调凭据 -----------------------------
+#
+# ★ 这三个函数做了**进程级缓存**。原因：`read_setting` 每次都会重读 .env 文件
+#   （`core/config._dotenv_values` 无缓存），而 sight 一次 `/now` 要调 `self_headers()`
+#   三次（每源一次）+ `get_self_base()` 若干次 → 一次请求读十几次磁盘。
+#   单次几 ms 看着不算什么，但它正好发生在超时细线上。
+#   **能省的固定开销必须先省掉，再去谈「是不是真的慢」。**
+
+_base_cache: str | None = None
+_token_cache: str | None = None
+
 
 def get_self_base() -> str:
-    """同机 API 根地址。优先 SIGHT_SELF_BASE，其次沿用 DASHBOARD_SELF_BASE，最后默认 18000。"""
-    for key in ("SIGHT_SELF_BASE", "DASHBOARD_SELF_BASE"):
-        v = (read_setting(key, "") or "").strip()
-        if v:
-            return v.rstrip("/")
-    return "http://127.0.0.1:18000"
+    """同机 API 根地址。优先 SIGHT_SELF_BASE，其次沿用 DASHBOARD_SELF_BASE，最后默认 18000。
+
+    进程内缓存：地址在运行期不变，每请求重读 .env 是纯浪费。
+    """
+    global _base_cache
+    if _base_cache is None:
+        for key in ("SIGHT_SELF_BASE", "DASHBOARD_SELF_BASE"):
+            v = (read_setting(key, "") or "").strip()
+            if v:
+                _base_cache = v.rstrip("/")
+                break
+        else:
+            _base_cache = "http://127.0.0.1:18000"
+    return _base_cache
 
 
 def get_self_token() -> str:
-    tok = (read_setting("SIGHT_SELF_TOKEN", "") or "").strip()
-    if tok:
-        return tok
-    return create_access_token("admin")
+    """内网自调 token：SIGHT_SELF_TOKEN 优先，否则现签一个 admin JWT。
+
+    缓存理由同上。JWT 自带过期，但本进程寿命远短于它，故不做过期校验。
+    """
+    global _token_cache
+    if _token_cache is None:
+        tok = (read_setting("SIGHT_SELF_TOKEN", "") or "").strip()
+        _token_cache = tok or create_access_token("admin")
+    return _token_cache
+
+
+def reset_credential_caches() -> None:
+    """清缓存（测试用：改了 setting 之后需要重取）。"""
+    global _base_cache, _token_cache
+    _base_cache = None
+    _token_cache = None
 
 
 def self_headers() -> dict[str, str]:
@@ -128,7 +166,22 @@ _WEEKDAY = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # ----------------------------- 取数 -----------------------------
 
 async def _fetch_json(path: str) -> dict[str, Any]:
-    """取一个上游端点。永远不抛 —— 失败也要变成可记录的结果。"""
+    """取一个上游端点（带耗时日志）。永远不抛 —— 失败也要变成可记录的结果。
+
+    ★ 每个源都记一行日志，不只记失败。
+    理由：汐瑶报「稳定 timeout×3」时，响应体里看不到任何耗时（契约不允许带 _meta），
+    于是只能猜。日志是唯一的定位入口——**看不见的慢，等于没慢**。
+    """
+    res = await _fetch_one(path)
+    logger.info(
+        "sight.fetch path=%s ok=%s reason=%s elapsed=%sms",
+        path.split("?")[0], res["ok"], res.get("reason") or "-", res.get("elapsed_ms"),
+    )
+    return res
+
+
+async def _fetch_one(path: str) -> dict[str, Any]:
+    """真正的取数。永远不抛。"""
     started = time.perf_counter()
     try:
         if _fetch_override is not None:

@@ -221,3 +221,46 @@ def test_no_async_test_is_silently_skipped():
         "本文件不许使用 @pytest.mark.asyncio —— 项目未装 pytest-asyncio，"
         "它会让异步测试被静默 skip（假绿）。请用 asyncio.run()。"
     )
+
+
+# ----------------------------- T16：MCP 暴露 -----------------------------
+
+def test_manifest_provides_derive_mcp_tool():
+    """★ T16 的回归证据：manifest 的 provides 必须能派生成可用的 MCP 工具。
+
+    这是「加一个工具 = manifest 多一行 provides」这条设计的**验收**：
+    若 provides 写错（动词不在动词表 / 段数 <3），derive_tool 会返回 None
+    —— 工具就静默消失了。**静默消失比报错更危险**，所以要用测试钉住。
+    """
+    from modules.mcp.registry_adapter import derive_tool
+
+    mf = json.loads(
+        (Path(__file__).resolve().parents[1] / "modules" / "sight" / "manifest.json")
+        .read_text(encoding="utf-8")
+    )
+    base = mf["api"]["base"]
+    routes = mf["api"].get("tools") or {}
+
+    derived = []
+    for pvd in mf["provides"]:
+        t = derive_tool(pvd, base, mf["id"], routes)
+        assert t is not None, (
+            f"provides「{pvd}」派生不出工具 —— 检查动词是否在 _METHOD_BY_VERB 里、段数是否 >=3"
+        )
+        derived.append((t.name, t.method, t.path, t.scope))
+
+    assert ("sight_now_read", "GET", "/api/v1/sight/now", "sight:read") in derived, f"实际派生：{derived}"
+
+
+def test_manifest_is_loadable_and_pure():
+    """manifest 必须能被内核机械读取；且 sight 是只读聚合器，不许持有业务表。"""
+    mf = json.loads(
+        (Path(__file__).resolve().parents[1] / "modules" / "sight" / "manifest.json")
+        .read_text(encoding="utf-8")
+    )
+    assert mf["id"] == "sight"
+    assert mf["api"]["base"] == "/api/v1/sight"
+    assert mf["api"]["health"] == "/api/v1/sight/health"
+    assert mf["provides"], "至少要暴露一个能力"
+    assert mf["migrations"] is None, "sight 是只读聚合器，不许持有业务表"
+    assert all("net:out" in x for x in mf["permissions"]), "只该申请出网（聚合用）"

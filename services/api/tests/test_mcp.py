@@ -850,3 +850,63 @@ def test_s2_create_pat_default_no_expiry(client):
     pid = r.json()["id"]
     rows = client.get("/api/v1/mcp/pats", headers=AUTH).json()
     assert next(x for x in rows if x["id"] == pid)["expires_at"] is None
+
+
+# ─────────────── T11 · 存量 PAT 过期补救（0002 迁移 · bidiu 2026-11-22） ───────────────
+# 背景：S2 只补了写路径；早于此签发的 PAT 全部 expires_at=NULL（永不过期），
+# 开放接待处前必须收口。0002 迁移幂等补 +30 天宽限。
+
+
+def _load_migration_0002():
+    """按内核的方式（文件路径）加载迁移，测试同一份代码。"""
+    import importlib.util
+    from pathlib import Path as _Path
+
+    p = _Path(__file__).resolve().parents[1] / "modules/mcp/migrations/0002_pat_expiry_backfill.py"
+    spec = importlib.util.spec_from_file_location("mcp_mig_0002_probe", p)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_pat_expiry_backfill_migration(client):
+    """存量 NULL PAT 被 0002 补齐（+30 天），迁移幂等，且 PAT 今天仍可用。"""
+    # ① 造一枚「历史 PAT」（创建不传 expires_at → NULL，正是存量形态）
+    r = client.post(
+        "/api/v1/mcp/pats",
+        json={"name": "bidiu-t11-legacy", "scopes": ["calendar:read"]},
+        headers=AUTH,
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    pid, token = body["id"], body["token"]
+    # 前置：列表里该 PAT 的 expires_at 为 NULL（存量形态；创建响应不含该字段）
+    rows0 = client.get("/api/v1/mcp/pats", headers=AUTH).json()
+    assert next(x for x in rows0 if x["id"] == pid)["expires_at"] is None, "前置：存量形态 = 永不过期"
+
+    # ② 跑 0002 迁移
+    from db.engine import get_engine as _ge
+
+    mig = _load_migration_0002()
+    mig.upgrade(_ge())
+
+    # ③ 补齐成功
+    rows = client.get("/api/v1/mcp/pats", headers=AUTH).json()
+    row = next(x for x in rows if x["id"] == pid)
+    assert row["expires_at"] is not None, "迁移后应有过期时间"
+    first_deadline = row["expires_at"]
+
+    # ④ 幂等：再跑一次不改变已补的值
+    mig.upgrade(_ge())
+    rows2 = client.get("/api/v1/mcp/pats", headers=AUTH).json()
+    assert next(x for x in rows2 if x["id"] == pid)["expires_at"] == first_deadline, "二次迁移不得改动"
+
+    # ⑤ 旧 PAT 今天仍能鉴权（30 天宽限期内）
+    r = client.post(
+        "/api/v1/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "initialize",
+              "params": {"protocolVersion": "2024-11-05", "capabilities": {}}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200, r.text

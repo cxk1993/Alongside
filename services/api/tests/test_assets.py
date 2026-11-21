@@ -162,3 +162,33 @@ def test_events_published(client, monkeypatch):
     assert "assets.asset.deleted" in topics
     prop = [(t, p, kw) for t, p, kw in seen if t.startswith("assets.")]
     assert all(kw.get("source") == "assets" for _, _, kw in prop)
+
+def test_concurrent_supersede_same_old_asset(client):
+    """两并发 create 同时 supersede 同一旧条：一个 201 一个 422（写锁防指针覆盖）。"""
+    import threading
+
+    old = client.post("/api/v1/assets", json=_asset(title="并发取代旧条"), headers=AUTH).json()
+    results: list[int] = []
+    barrier = threading.Barrier(2)
+
+    def call(i: int):
+        barrier.wait()
+        r = client.post(
+            "/api/v1/assets",
+            json=_asset(title=f"并发取代-{i}", supersedes=[old["id"]]),
+            headers=AUTH,
+        )
+        results.append(r.status_code)
+
+    ts = [threading.Thread(target=call, args=(i,)) for i in (1, 2)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+
+    assert sorted(results) == [201, 422], results
+    old2 = client.get(f"/api/v1/assets/{old['id']}", headers=AUTH).json()
+    assert old2["status"] == "superseded"
+    assert old2["superseded_by"], "旧条必须指向唯一胜者（不被覆盖成空）"
+    winner = client.get(f"/api/v1/assets/{old2['superseded_by']}", headers=AUTH).json()
+    assert winner["supersedes"] == [old["id"]]

@@ -10,6 +10,7 @@ SSE：assets.asset.created / assets.asset.superseded / assets.asset.deleted
 """
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from typing import Any
 
@@ -23,6 +24,13 @@ from .models import Asset
 from .schema import AssetCreate
 
 log = get_logger("assets.service")
+
+#: 资产写操作串行化（create 含 supersede 双向连线、delete 含反链清理）。
+#: ★ 防的是「两个并发 create 同时 supersede 同一旧条」→ 旧条 superseded_by 被后写覆盖，
+#:   第一个新条声称 supersedes 它但旧条不认（数据不一致）。
+#: ★ 范围：单进程有效（uvicorn 单 worker）；多 worker 需 DB 级约束
+#:   （如唯一部分索引 / 事务内 SELECT … 再判），与 proposals ISSUE-015 同类。
+_WRITE_LOCK = threading.Lock()
 
 
 def _dump(row: Asset) -> dict[str, Any]:
@@ -60,6 +68,10 @@ class AssetsService:
 
     def create(self, body: AssetCreate) -> Asset:
         """新建一条资产。带 supersedes 时同一事务里把旧条标 superseded + 反向指针。"""
+        with _WRITE_LOCK:
+            return self._create_locked(body)
+
+    def _create_locked(self, body: AssetCreate) -> Asset:
         # supersedes 必指向真实存在的旧条（不猜、不静默丢弃）
         old_rows: list[Asset] = []
         for old_id in body.supersedes:
@@ -138,6 +150,10 @@ class AssetsService:
     # ───────────────────────── 硬删（契约硬规则 3） ─────────────────────────
 
     def delete(self, asset_id: str) -> None:
+        with _WRITE_LOCK:
+            self._delete_locked(asset_id)
+
+    def _delete_locked(self, asset_id: str) -> None:
         row = self.get(asset_id)
         # 被别的资产 supersede 时，ssuperseded_by 指向它 —— 清理反链，避免悬挂指针
         children = self.db.exec(

@@ -26,6 +26,7 @@ import httpx
 from sqlmodel import Session, select
 
 from core.errors import NotFoundError, ValidationError
+from core.events import event_bus
 from core.logging import get_logger
 from core.security import USER_SUB, create_access_token
 
@@ -128,6 +129,35 @@ def _digest(data: Any, limit: int = 2000) -> str:
         return str(data)[:limit]
 
 
+def _dump(row: ChangeProposal) -> dict[str, Any]:
+    """提案行 → 事件载荷（状态变更时随 SSE 推给前端）。
+
+     manifest `emits` 声明的 4 个 topic 是契约（G17/G20 门禁要求「声明了必须真发」），
+    此前一个都没 publish —— 声明与实现不符（判据 5）。时间统一 ISO 字符串。
+    """
+    def _iso(v: Any) -> str | None:
+        return v.isoformat() if isinstance(v, datetime) else v
+
+    return {
+        "id": row.id,
+        "title": row.title,
+        "tool_name": row.tool_name,
+        "action": row.action,
+        "method": row.method,
+        "path": row.path,
+        "payload": row.payload,
+        "before": row.before,
+        "actor": row.actor,
+        "status": row.status,
+        "created_at": _iso(row.created_at),
+        "executed_at": _iso(row.executed_at),
+        "executed_id": row.executed_id,
+        "executed_status": row.executed_status,
+        "undone_at": _iso(row.undone_at),
+        "undo_result": row.undo_result,
+    }
+
+
 class ProposalsService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -149,6 +179,7 @@ class ProposalsService:
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)
+        event_bus.publish("proposals.proposal.created", _dump(row), source="proposals")
         log.info("提案已签发", extra={"proposal": row.id, "tool": row.tool_name, "actor": row.actor})
         return row
 
@@ -187,6 +218,7 @@ class ProposalsService:
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)
+        event_bus.publish("proposals.proposal.approved", _dump(row), source="proposals")
         log.info("提案已签字执行", extra={"proposal": row.id, "http": status, "executed_id": row.executed_id})
         return row, detail
 
@@ -198,6 +230,7 @@ class ProposalsService:
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)
+        event_bus.publish("proposals.proposal.rejected", _dump(row), source="proposals")
         return row
 
     # ───────────────────────── 撤销回放 ─────────────────────────
@@ -232,6 +265,7 @@ class ProposalsService:
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)
+        event_bus.publish("proposals.proposal.undone", _dump(row), source="proposals")
         log.info("提案已撤销", extra={"proposal": row.id, "action": row.action, "http": status})
         return row, detail
 

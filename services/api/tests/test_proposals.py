@@ -434,3 +434,76 @@ def test_create_proposal_requires_method_and_path(client):
         headers=AUTH,
     )
     assert r.status_code == 422, r.text
+
+
+# ─────────────── SSE 事件契约（manifest emits 必须真发 · bidiu 2026-11-22） ───────────────
+# 背景：manifest 声明了 proposals.proposal.{created,approved,rejected,undone} 四个 topic，
+# 但 service 此前一个都没 publish —— 声明与实现不符（判据 5）。此测试钉住四个都真发。
+
+
+def test_proposal_lifecycle_publishes_events(client, fake_internal, monkeypatch):
+    """create → approve → undo 全链：三个事件各发一次，载荷含 id/status。"""
+    from modules.proposals import service as svc
+
+    seen: list[tuple] = []
+    monkeypatch.setattr(
+        svc.event_bus, "publish", lambda topic, payload=None, **kw: seen.append((topic, payload, kw))
+    )
+
+    row = _make_todo(client, "SSE 事件验证（create/approve/undo）")
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "事件验证",
+            "tool_name": "todo_item_delete",
+            "action": "delete",
+            "method": "DELETE",
+            "path": "/api/v1/todo/items/{item_id}",
+            "payload": {"item_id": row["id"]},
+            "before": row,
+            "actor": "human",
+        },
+        headers=AUTH,
+    )
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    assert client.post(f"/api/v1/proposals/{pid}/approve", headers=AUTH).status_code == 200
+    assert client.post(f"/api/v1/proposals/{pid}/undo", headers=AUTH).status_code == 200
+
+    topics = [t for t, _, _ in seen]
+    assert "proposals.proposal.created" in topics, topics
+    assert "proposals.proposal.approved" in topics, topics
+    assert "proposals.proposal.undone" in topics, topics
+    # 载荷契约：created 带 id+status=pending；approved 带 status=approved
+    created = next(p for t, p, _ in seen if t == "proposals.proposal.created")
+    assert created["id"] == pid and created["status"] == "pending"
+    approved = next(p for t, p, _ in seen if t == "proposals.proposal.approved")
+    assert approved["executed_status"] == 204
+    # source 声明（只看 proposals.* —— _make_todo 会顺带发 todo.item.created）
+    prop_events = [(t, p, kw) for t, p, kw in seen if t.startswith("proposals.")]
+    assert prop_events and all(kw.get("source") == "proposals" for _, _, kw in prop_events), prop_events
+
+
+def test_proposal_reject_publishes_event(client, monkeypatch):
+    from modules.proposals import service as svc
+
+    seen: list[tuple] = []
+    monkeypatch.setattr(
+        svc.event_bus, "publish", lambda topic, payload=None, **kw: seen.append((topic, payload, kw))
+    )
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "会被作废",
+            "tool_name": "x",
+            "action": "update",
+            "method": "PATCH",
+            "path": "/x",
+            "payload": {},
+            "actor": "human",
+        },
+        headers=AUTH,
+    )
+    pid = r.json()["id"]
+    assert client.post(f"/api/v1/proposals/{pid}/reject", headers=AUTH).status_code == 200
+    assert [t for t, _, _ in seen if t == "proposals.proposal.rejected"], seen

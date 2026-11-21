@@ -74,12 +74,14 @@ function useProposals(): {
   pending: ProposalRow[];
   approved: ProposalRow[];
   busyId: string | null;
+  lastError: string | null;
   act: (id: string, op: "approve" | "reject" | "undo") => Promise<void>;
 } {
   const [status, setStatus] = useState<ZoneStatus>("loading");
   const [pending, setPending] = useState<ProposalRow[]>([]);
   const [approved, setApproved] = useState<ProposalRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -102,8 +104,11 @@ function useProposals(): {
   const act = useCallback(
     async (id: string, op: "approve" | "reject" | "undo") => {
       setBusyId(id);
+      setLastError(null);
       try {
         await api.post(`/api/v1/proposals/${id}/${op}`, {});
+      } catch (e) {
+        setLastError(e instanceof Error ? e.message : String(e));
       } finally {
         setBusyId(null);
         await reload();
@@ -112,7 +117,7 @@ function useProposals(): {
     [reload],
   );
 
-  return { status, pending, approved, busyId, act };
+  return { status, pending, approved, busyId, lastError, act };
 }
 
 const STATUS_TEXT: Record<ZoneStatus, string> = {
@@ -188,6 +193,11 @@ export default function CollabApp() {
             <p className="collab-empty collab-empty--warn">提案列表暂不可用</p>
           )}
           {proposals.status === "loading" && <p className="collab-empty">读取中…</p>}
+          {proposals.lastError && (
+            <p className="collab-empty collab-empty--warn" data-testid="proposal-error">
+              操作失败：{proposals.lastError}
+            </p>
+          )}
           {proposals.status === "ready" && (
             <div className="collab-groups">
               {proposals.pending.length ? (

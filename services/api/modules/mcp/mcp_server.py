@@ -48,11 +48,39 @@ _PROPOSAL_MODE_ENV = "MCP_PROPOSAL_MODE"
 #: approve/reject/undo 是提案层自己的动作——拦了就无限递归——故不拦。
 _PROPOSABLE_VERBS = frozenset({"write", "create", "update", "patch", "delete", "remove"})
 
-#: ★ 只允许**人类登录会话**（REST/JWT）的动词：提案的签字/作废/撤销。
-#:   MCP 来路（PAT）调它们 = AI 给自己盖章 → 403（与 S1 自我提权同类）。
+#: ★ 只允许**人类登录会话**（REST/JWT）的动词：提案签字 + 改平台本身。
+#:   MCP 来路（PAT）调它们 = AI 给自己盖章 / 自己装卸平台 → 403（与 S1 自我提权同类）。
 #:   实测漏洞（bidiu 2026-11-22 自查）：带 proposals:approve scope 的 PAT 能通过
 #:   tools/call 自己 approve 自己的提案 → 数据被删，「人签字」形同虚设。
-_HUMAN_ONLY_VERBS = frozenset({"approve", "reject", "undo"})
+#:
+#:   ★ 2026-11-22 第二次补（ISSUE-016 / 云昔 18 号 verb 审计）：
+#:     下面这 8 个「改平台」的 verb **本来就不在工具面**——但那是 `derive_tool` 恰好
+#:     不认识它们的**巧合**（判据 41：安全不能靠巧合）。显式列在这里，将来谁给
+#:     `_METHOD_BY_VERB` 加了映射，也不会一夜之间把「AI 能装卸插件」放出去。
+_HUMAN_ONLY_VERBS = frozenset(
+    {
+        # 提案层：签字 / 作废 / 撤销 —— 人的动作
+        "approve",
+        "reject",
+        "undo",
+        # 插件与包：装卸/启停/组包/注册 —— 改平台本身，绝不给 AI
+        "install",
+        "uninstall",
+        "enable",
+        "disable",
+        "assemble",
+        "manage",
+        "register",
+        "unregister",
+    }
+)
+
+#: 「能力声明」而非「可调用端点」的 verb：它们出现在 `provides` 里只是告诉聚合器
+#: 「我能供这类数据」（如 `x.day.peek` / `x.summary.today`），由 dashboard 之类的
+#: 聚合者环回调用，**本身没有独立 REST 端点**（manifest 的 api.tools 里也没有映射）。
+#: ★ 别把它们当成「AI 够不着的损失」去补 `_METHOD_BY_VERB` —— 补了只会推导出错误路径。
+#:   AI 拿「今日摘要」的正门是 `dashboard.today.read`（真栈实测 200 + 真数据）。
+_CAPABILITY_ONLY_VERBS = frozenset({"peek", "today"})
 
 #: verb → 提案 action（提案层的动作三分）
 _VERB_TO_ACTION = {

@@ -971,3 +971,41 @@ def test_mcp_cannot_self_approve_proposal(client, pat):
     # 提案仍是 pending（没有被偷偷批准）
     got = client.get(f"/api/v1/proposals/{pid}", headers=AUTH).json()
     assert got["status"] == "pending"
+
+
+# ─────────── ISSUE-016 / 判据 41：安全不能靠巧合（bidiu 2026-11-22 二补） ───────────
+
+
+def test_human_only_verbs_explicitly_cover_platform_mutators():
+    """装卸/启停/组包类 verb 必须**显式** human-only。
+
+    它们今天不在工具面，只是因为 `derive_tool` 恰好不认识这些 verb——
+    那叫巧合，不叫策略（判据 41）。显式列进 `_HUMAN_ONLY_VERBS` 后，
+    就算将来有人给 `_METHOD_BY_VERB` 补了映射，也只会 403 而不是放行。
+    """
+    from modules.mcp.mcp_server import _HUMAN_ONLY_VERBS
+
+    must = {
+        "approve", "reject", "undo",                                    # 人的签字动作
+        "install", "uninstall", "enable", "disable",                    # 插件生命周期
+        "assemble", "manage", "register", "unregister",                 # pack / 注册表
+    }
+    missing = must - set(_HUMAN_ONLY_VERBS)
+    assert not missing, f"这些 verb 必须显式 human-only（安全不能靠巧合）：{sorted(missing)}"
+
+
+def test_capability_only_verbs_never_become_tools(client, pat):
+    """`x.day.peek` / `x.summary.today` 是能力声明，不是端点——不该出现在工具面。
+
+    它们是给 dashboard 之类聚合器供数用的（manifest 无 api.tools 映射、无独立 REST 端点）；
+    AI 拿「今日摘要」的正门是 `dashboard.today.read`。把它们当「损失」去补映射，
+    只会推导出错误路径。
+    """
+    _, headers, _ = pat
+    r = client.post("/api/v1/mcp", json=_rpc("tools/list", {}), headers=headers)
+    assert r.status_code == 200, r.text
+    names = [t["name"] for t in r.json()["result"]["tools"]]
+    leaked = [n for n in names if n.startswith("x_")]
+    assert not leaked, f"能力声明不该变成可调用工具：{leaked}"
+    # 正门在：AI 拿今日摘要靠 dashboard
+    assert any(n.startswith("dashboard_today") for n in names), names[:20]

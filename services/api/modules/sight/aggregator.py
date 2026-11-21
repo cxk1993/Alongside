@@ -360,7 +360,14 @@ async def aggregate_now(now: datetime | None = None) -> dict[str, Any]:
         "tensions": compute_tensions(events=raw["calendar"], todos=raw["todo"], now=now),
         "degraded": degraded,
     }
+    # ★ 三种语义必须分开（此前把「源挂了」和「没日程」混成了同一种「缺失」，是真 bug）：
+    #   ① 源成功 + 有日程 → time 有内容
+    #   ② 源成功 + 没日程 → time 是**空对象**（"知道了，确实没有"）
+    #   ③ 源失败        → **不给 time**，degraded 里已记（"不知道"）
+    # 为什么不能混：null/缺失表示「不知道」，空对象表示「知道且为空」。
+    # 混在一起，前端就没法区分「今天真没安排」和「日程模块挂了」——
+    # 而这两种情况，人应该得到完全不同的提示。
     t_block = _build_time(raw["calendar"], now)
-    if t_block is not None:
-        out["time"] = t_block
+    if results["calendar"]["ok"]:
+        out["time"] = t_block or {"busy_until": None, "next_event": None, "free_slots": []}
     return out

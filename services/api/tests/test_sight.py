@@ -359,3 +359,47 @@ def test_stale_item_not_duplicated_in_attention():
 
     assert not out["attention"], f"没有 due_at 的老账不该进 attention：{out['attention']}"
     assert any(t["kind"] == "stale_item" for t in out["tensions"])
+
+
+# ----------------------------- time 的三态语义（2026-11-22 夜班修） -----------------------------
+#
+# 这里钉死的是一条**语义 bug**：此前 `time` 只有「有内容」和「缺失」两种，
+# 于是「今天真没安排」与「日程模块挂了」长得一模一样。
+# 前端拿到同一个形状，就无法给人不同的提示 —— 而这两种情况人该得到完全不同的答案。
+
+def test_time_is_empty_object_when_calendar_ok_but_no_events():
+    """① 源成功 + 没日程 -> time 是**空对象**（"知道且为空"），不是缺失。"""
+
+    async def fake(path: str):
+        if "/calendar/events" in path:
+            return []
+        if "/todo/items" in path:
+            return {"items": []}
+        return []
+
+    set_fetch_override(fake)
+    try:
+        out = asyncio.run(aggregate_now(now=NOW))
+    finally:
+        set_fetch_override(None)
+
+    assert "time" in out, "源成功就该有 time 块（哪怕是空的）"
+    assert out["time"] == {"busy_until": None, "next_event": None, "free_slots": []}
+
+
+def test_time_absent_when_calendar_failed():
+    """② 源失败 -> **不给 time**（"不知道"），且 degraded 里有 calendar 记录。"""
+
+    async def fake(path: str):
+        if "/calendar/events" in path:
+            raise RuntimeError("calendar down")
+        return []
+
+    set_fetch_override(fake)
+    try:
+        out = asyncio.run(aggregate_now(now=NOW))
+    finally:
+        set_fetch_override(None)
+
+    assert "time" not in out, "源挂了就不该假装有时间信息"
+    assert any(d["source"] == "calendar" for d in out["degraded"]), "失败必须留在 degraded 里"

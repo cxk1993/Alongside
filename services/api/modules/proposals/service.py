@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
@@ -34,6 +35,34 @@ from .models import ChangeProposal
 from .schema import ProposalCreate
 
 log = get_logger("proposals.service")
+
+#: 每提案一把执行锁（approve/undo 序列化）。
+#: ★ 防的是 TOCTOU：两个并发请求都读到 status=pending → 都执行 HTTP（双删！）。
+#: ★ 范围：**单进程有效**（uvicorn 单 worker）。多 worker 部署需要 DB 级锁
+#:   （SQLite 用 `UPDATE … WHERE status='pending'` 原子抢位 + rowcount 判胜），
+#:   v1 不做——记 issue（判据 17：发现问题记 issue，不当场扩修）。
+_EXEC_LOCKS: dict[str, threading.Lock] = {}
+_EXEC_LOCKS_GUARD = threading.Lock()
+
+
+def _exec_lock(pid: str) -> threading.Lock:
+    with _EXEC_LOCKS_GUARD:
+        return _EXEC_LOCKS.setdefault(pid, threading.Lock())
+
+
+def _serialized(fn: Any) -> Any:
+    """按 pid 序列化执行（方法签名 self, pid, …）。"""
+
+    def wrapper(self: Any, pid: str, *args: Any, **kwargs: Any) -> Any:
+        lock = _exec_lock(pid)
+        if not lock.acquire(blocking=False):
+            raise ValidationError("该提案正在处理中（并发请求），请稍后刷新")
+        try:
+            return fn(self, pid, *args, **kwargs)
+        finally:
+            lock.release()
+
+    return wrapper
 
 #: 撤销重建时要剥掉的**系统字段**（id 由后端生成、时间戳由后端写）。
 #: 只认系统级字段名，不认业务字段——保持零业务词。
@@ -199,6 +228,7 @@ class ProposalsService:
 
     # ───────────────────────── 签字 / 作废 ─────────────────────────
 
+    @_serialized
     def approve(self, pid: str, by: str = "human") -> tuple[ChangeProposal, str]:
         """签字：按提案记下的方法/路径/参数正向执行一次内部 HTTP。
 
@@ -238,6 +268,7 @@ class ProposalsService:
 
     # ───────────────────────── 撤销回放 ─────────────────────────
 
+    @_serialized
     def undo(self, pid: str, by: str = "human") -> tuple[ChangeProposal, str]:
         """撤销：按 action 回放 before。**失败不推进状态**（可重试）。"""
         row = self.get(pid)

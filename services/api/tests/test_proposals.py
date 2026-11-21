@@ -561,3 +561,42 @@ def test_audit_fields_record_signer(client, fake_internal):
     assert got["executed_by"], "签字人必须留痕"
     assert got["undone_by"], "撤销人必须留痕"
     assert got["actor"] == "mcp:probe", "发起者不变"
+
+
+def test_concurrent_approve_only_one_wins(client, fake_internal):
+    """并发两个 approve 同一提案：一个 200、一个 422（执行锁防 TOCTOU 双执行）。"""
+    import threading
+
+    row = _make_todo(client, "并发 approve 验证（只能删一次）")
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "并发批准",
+            "tool_name": "todo_item_delete",
+            "action": "delete",
+            "method": "DELETE",
+            "path": "/api/v1/todo/items/{item_id}",
+            "payload": {"item_id": row["id"]},
+            "before": row,
+            "actor": "human",
+        },
+        headers=AUTH,
+    )
+    pid = r.json()["id"]
+    results: list[int] = []
+    barrier = threading.Barrier(2)
+
+    def call():
+        barrier.wait()  # 尽量同时开火
+        results.append(client.post(f"/api/v1/proposals/{pid}/approve", headers=AUTH).status_code)
+
+    ts = [threading.Thread(target=call) for _ in range(2)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+
+    assert sorted(results) == [200, 422], results
+    assert not _todo_exists(client, row["text"]), "只执行一次删除"
+    got = client.get(f"/api/v1/proposals/{pid}", headers=AUTH).json()
+    assert got["status"] == "approved"

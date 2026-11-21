@@ -379,3 +379,58 @@ def test_pat_never_expired_still_valid(client, pat):
     _, headers = pat
     r = client.post("/api/v1/mcp", json=_rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}}), headers=headers)
     assert r.status_code == 200
+
+
+# ─────────────── P1 修复回归（汐瑶实测 · bidiu 2026-11-22） ───────────────
+# ① 提案 path 用**真实 id**（非占位符）时，undo 必须仍能降成集合路径（旧实现 405）
+# ② method/path 已改必填（此前注释称「空=服务端推导」与实现不符）
+
+
+def test_collection_path_strips_placeholder_and_real_id():
+    """`_collection_path`：占位符与真实 id 都降成集合路径；集合路径原样。"""
+    from modules.proposals.service import _collection_path
+
+    assert _collection_path("/api/v1/todo/items/{item_id}") == "/api/v1/todo/items"
+    assert (
+        _collection_path("/api/v1/todo/items/04a94fb5b15d4e358f86cebb06619b52")
+        == "/api/v1/todo/items"
+    )
+    assert _collection_path("/api/v1/calendar/events/12") == "/api/v1/calendar/events"
+    assert _collection_path("/api/v1/todo/items") == "/api/v1/todo/items"
+
+
+def test_delete_proposal_with_real_id_path_undo_restores(client, fake_internal):
+    """真实 id 路径的 delete 提案：签发→approve 真删→undo 复原（P1 场景端到端）。"""
+    row = _make_todo(client, "P1 真实 id 路径 undo 必须能复原")
+    item_id = row["id"]
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "真实 id 路径删除",
+            "tool_name": "todo_item_delete",
+            "action": "delete",
+            "method": "DELETE",
+            "path": f"/api/v1/todo/items/{item_id}",  # ★ 真实 id，不是占位符
+            "payload": {},
+            "before": row,
+            "actor": "human",
+        },
+        headers=AUTH,
+    )
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    assert client.post(f"/api/v1/proposals/{pid}/approve", headers=AUTH).status_code == 200
+    assert not _todo_exists(client, row["text"]), "approve 后应真删"
+    r2 = client.post(f"/api/v1/proposals/{pid}/undo", headers=AUTH)
+    assert r2.status_code == 200, r2.text  # 旧实现此处 405
+    assert _todo_exists(client, row["text"]), "undo 后应复原"
+
+
+def test_create_proposal_requires_method_and_path(client):
+    """method/path 必填（此前注释说可省，实现未推导——按判据 5 改诚实）。"""
+    r = client.post(
+        "/api/v1/proposals",
+        json={"title": "缺路径", "tool_name": "x", "action": "create", "payload": {}},
+        headers=AUTH,
+    )
+    assert r.status_code == 422, r.text

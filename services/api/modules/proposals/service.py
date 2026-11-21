@@ -68,15 +68,23 @@ def _substitute_path(path: str, payload: dict[str, Any]) -> tuple[str, dict[str,
     return path, body
 
 
+#: 末段「像 id」的模式（真实 UUID/hex/纯数字）——undo 回放时同样视为单资源段剥掉。
+#   ★ 2026-11-22（汐瑶 P1 实测）：提案 path 用**真实 id**（非 {占位符}）时，
+#   旧实现原样返回 → 撤销 POST 打到 `/items/<id>` → 405。占位符与真实 id 都必须能降成集合路径。
+_ID_SEG_RE = re.compile(r"^(?:[0-9a-fA-F]{8,}|[0-9a-fA-F][0-9a-fA-F-]{15,}|\d+)$")
+
+
 def _collection_path(path: str) -> str:
-    """把「单资源路径」降成「集合路径」：剥掉末尾的 `/{占位}` 或 `/{id}` 段。
+    """把「单资源路径」降成「集合路径」：剥掉末尾的 `/{占位}` 或 `/{真实 id}` 段。
 
     `/api/v1/todo/items/{item_id}` → `/api/v1/todo/items`
-    只做**结构**判断（末段是否是占位符），不认业务名。
+    `/api/v1/todo/items/04a94fb5b15d4e358f86cebb06619b52` → `/api/v1/todo/items`
+    只做**结构**判断（占位符 / id 形态），不认业务名。
     """
     parts = path.rstrip("/").split("/")
-    # 末段整段是占位符 → 剥掉；否则原样返回（调用方应确认这是单资源路径）
-    if parts and _PATH_PARAM_RE.fullmatch(parts[-1]):
+    if parts and (
+        _PATH_PARAM_RE.fullmatch(parts[-1]) or _ID_SEG_RE.match(parts[-1] or "")
+    ):
         return "/".join(parts[:-1])
     return path.rstrip("/")
 

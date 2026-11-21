@@ -18,8 +18,16 @@ class ProposalCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300, description="要做什么（人话，签字时给人看的）")
     tool_name: str = Field(min_length=1, max_length=128, description="执行工具（MCP 工具名，如 todo_item_delete）")
     action: str = Field(description="create / update / delete")
-    method: str = Field(default="", description="执行 HTTP 方法（空=服务端按工具机械推导）")
-    path: str = Field(default="", description="执行路径（空=服务端按工具机械推导）")
+    # ★ 2026-11-22（汐瑶 P1 实测）：此前注释写「空=服务端按工具机械推导」，但推导
+    #   **未实现**（执行时 422）——按「声明与实现必须说同一句话」（团队判据 5）改为必填：
+    #   MCP 拦截点会带工具方法/路径模板；人工签发由前端填。提案层不 import 业务模块，
+    #   无法在服务端反查工具映射。
+    method: str = Field(min_length=1, max_length=10, description="执行 HTTP 方法（必填；MCP 拦截点自动带）")
+    path: str = Field(
+        min_length=1,
+        max_length=500,
+        description="执行路径（必填；推荐用 {占位符} 模板，真实 id 亦可，撤销时按结构降为集合路径）",
+    )
     payload: dict[str, Any] = Field(default_factory=dict, description="执行参数")
     before: dict[str, Any] | None = Field(default=None, description="变更前快照（create 应为 null）")
     actor: str = Field(default="human", max_length=80, description="发起者（mcp:<pat name> / human）")

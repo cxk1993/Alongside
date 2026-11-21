@@ -133,11 +133,10 @@ def find_overload(
 ) -> list[dict[str, Any]]:
     """今天排得太满（日程多 或 待办积压）。两条都超才报 high。"""
     n_ev = len(events or [])
-    due = [
-        t
-        for t in (todos or [])
-        if not t.get("done") and (t.get("due_at") or t.get("status") in ("overdue", "due"))
-    ]
+    # ★ 只认 due_at：TodoItemOut 没有 status 字段（todo/schema.py L14-33），
+    #   原来那句 `t.get("status") in ("overdue","due")` 是死逻辑——永远为 False。
+    #   死逻辑比 bug 更难查：它看起来像在工作。
+    due = [t for t in (todos or []) if not t.get("done") and t.get("due_at")]
     n_due = len(due)
     ev_over = n_ev >= OVERLOAD_EVENTS
     td_over = n_due >= OVERLOAD_TODOS_DUE

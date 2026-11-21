@@ -20,10 +20,12 @@ finance / health / notes / diary **故意不接**——它们要么没有稳定�
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -32,6 +34,8 @@ from core.config import get_settings, read_setting
 from core.security import create_access_token
 
 from .tensions import compute as compute_tensions
+
+logger = logging.getLogger(__name__)
 
 # 单子调用超时（毫秒）—— 与 dashboard 对齐，保持全项目同一个体感
 CALL_TIMEOUT_MS = 800
@@ -50,6 +54,7 @@ NOT_WIRED: list[tuple[str, str]] = [
     ("health", "not_implemented"),
     ("notes", "not_implemented"),
     ("diary", "not_implemented"),
+    ("course", "not_implemented"),
 ]
 
 
@@ -199,11 +204,15 @@ def _build_time(events: list[dict[str, Any]], now: datetime) -> dict[str, Any] |
     next_event = None
     if upcoming:
         s, e = upcoming[0]
+        # ★ next() 必须给 default：events 里若某条结构异常，生成器可能一条都匹配不上
+        #   → StopIteration 从 async 冒穿 → /now 500。「永远 200」是契约级承诺，这里不能赌。
+        matched = next((_t for _t in events if _p(_t.get("start_at")) == s), None)
         next_event = {
-            "title": str(next(_t.get("title") for _t in events if _p(_t.get("start_at")) == s) or "日程"),
+            "title": str((matched or {}).get("title") or "日程"),
             "start_at": s.isoformat(timespec="seconds"),
             "minutes_until": max(0, int((s - now).total_seconds() // 60)),
-            "location": None,
+            # EventOut 有 location（calendar/schema.py L30）——透传，不硬编码 None
+            "location": (matched or {}).get("location"),
         }
 
     # 空档：从「现在或最后一个已结束事件」到当天结束，只保留 ≥30 分钟
@@ -227,8 +236,18 @@ def _build_time(events: list[dict[str, Any]], now: datetime) -> dict[str, Any] |
             "next_event": next_event, "free_slots": free[:5]}
 
 
-def _build_attention(todos: list[dict[str, Any]], now: datetime) -> list[dict[str, Any]]:
-    """挑「该看这几件」：逾期 → 快到期。最多 10 条，按紧迫度排。"""
+def _build_attention(
+    todos: list[dict[str, Any]], habits: list[dict[str, Any]], now: datetime
+) -> list[dict[str, Any]]:
+    """挑「该看这几件」。最多 10 条，按紧迫度排。
+
+    两个来源：
+      · 待办 —— 已逾期(high) / 24h 内到期(medium)
+      · 习惯 —— **只在晚上还没打卡才算 missed**（早上没打卡是常态，报出来只是噪音）
+
+    「挂了很久」**故意不在这里报** —— 它归 `tensions.stale_item`。
+    同一件事在两个板块各报一次，人会以为有两件事。
+    """
     rank = {"high": 0, "medium": 1, "low": 2}
     out: list[dict[str, Any]] = []
 
@@ -248,7 +267,8 @@ def _build_attention(todos: list[dict[str, Any]], now: datetime) -> list[dict[st
         created = _due(t.get("created_at"))
         text = str(t.get("text") or t.get("title") or "（未命名待办）")
         entry = {
-            "kind": None, "title": text[:40],
+            "kind": None,
+            "title": text[:40],
             "ref": {"module": "todo", "id": str(t.get("id") or ""), "path": None},
             "age_days": (now - created).days if created else None,
             "due_at": due.isoformat(timespec="seconds") if due else None,
@@ -259,11 +279,26 @@ def _build_attention(todos: list[dict[str, Any]], now: datetime) -> list[dict[st
             entry["severity"] = "high"
         elif due and (due - now) <= timedelta(hours=24):
             entry["kind"] = "todo_due_soon"
-        elif created and (now - created).days >= 7:
-            entry["kind"] = "todo_overdue"
         else:
             continue
         out.append(entry)
+
+    # 习惯：只在晚上还没打卡才算 missed（清晨看「今天没打卡」是噪音，不是提醒）
+    if _part_of_day(now.hour) in ("evening", "late_night"):
+        for h in habits:
+            # today_status 枚举: done | pending | rest（habits/schema.py L35）
+            if str(h.get("today_status") or "") != "pending":
+                continue
+            streak = int(h.get("streak") or 0)
+            out.append({
+                "kind": "habit_missed",
+                "title": f"「{h.get('name') or '习惯'}」今天还没打卡"[:40],
+                "ref": {"module": "habits", "id": str(h.get("id") or ""), "path": None},
+                "age_days": None,
+                "due_at": None,
+                # 有连续记录的人断了更疼 → medium；本来就没建起来的 → low
+                "severity": "medium" if streak > 0 else "low",
+            })
 
     out.sort(key=lambda e: (rank.get(e["severity"], 9), e["due_at"] or "9999"))
     return out[:10]
@@ -275,8 +310,18 @@ async def aggregate_now(now: datetime | None = None) -> dict[str, Any]:
     now = now or local_now()
     day_start, day_end = local_day_bounds(now)
 
+    # ★ 必须 quote(..., safe='')：`+08:00` 里的 `+` 在 query 里会被服务端解码成空格，
+    #   calendar 直接 4xx。dashboard L262-273 踩过同一个坑（当时实证 404）。
+    #   后果链很狠：calendar 永远 degraded → time 块永缺 → schedule_conflict 永不触发
+    #   → 90 秒验收第一拍废。所以这不是「建议修」，是**必修**。
+    def _q(s: str) -> str:
+        return quote(s, safe="")
+
     paths = {
-        "calendar": f"/api/v1/calendar/events?from={day_start.isoformat()}&to={day_end.isoformat()}",
+        "calendar": (
+            f"/api/v1/calendar/events?from={_q(day_start.isoformat())}"
+            f"&to={_q(day_end.isoformat())}"
+        ),
         "todo": "/api/v1/todo/items?status=todo&limit=100",
         "habits": "/api/v1/habits",
     }
@@ -292,8 +337,16 @@ async def aggregate_now(now: datetime | None = None) -> dict[str, Any]:
         else:
             raw[k] = []
             degraded.append({"source": k, "reason": r["reason"], "detail": r.get("detail")})
-    for src, reason in NOT_WIRED:
-        degraded.append({"source": src, "reason": reason, "detail": "v1 未接入"})
+    for src_name, reason in NOT_WIRED:
+        degraded.append({"source": src_name, "reason": reason, "detail": "v1 未接入"})
+
+    # ★ v1 只取 100 条待办、不追 next_cursor。超过就静默截断——
+    #   这不能忍「不说」，所以要留日志（响应体里放不下：契约 additionalProperties=false）。
+    if len(raw["todo"]) >= 100:
+        logger.warning(
+            "sight: todo 达到上限 100 条，可能有截断（v1 不追 next_cursor）；"
+            "attention/tensions 只基于前 100 条计算"
+        )
 
     # ★ 契约里 `time` **不是 required**：没有日程时就不该有这一块。
     #   所以这里「没有就省略」，而不是塞一个 null（null 在契约里不合法）。
@@ -303,7 +356,7 @@ async def aggregate_now(now: datetime | None = None) -> dict[str, Any]:
         "schema_version": 1,
         "generated_at": now.isoformat(timespec="seconds"),
         "head": _build_head(now),
-        "attention": _build_attention(raw["todo"], now),
+        "attention": _build_attention(raw["todo"], raw["habits"], now),
         "tensions": compute_tensions(events=raw["calendar"], todos=raw["todo"], now=now),
         "degraded": degraded,
     }

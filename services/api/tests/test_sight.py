@@ -264,3 +264,98 @@ def test_manifest_is_loadable_and_pure():
     assert mf["provides"], "至少要暴露一个能力"
     assert mf["migrations"] is None, "sight 是只读聚合器，不许持有业务表"
     assert all("net:out" in x for x in mf["permissions"]), "只该申请出网（聚合用）"
+
+
+# ----------------------------- T9-fix：硬化回归 -----------------------------
+
+def test_calendar_path_is_url_encoded():
+    """★ 必修项：`+08:00` 的 `+` 在 query 里会被服务端解码成空格 -> calendar 4xx。
+
+    后果链：calendar 永远 degraded -> time 块永缺 -> schedule_conflict 永不触发
+    -> 90 秒验收第一拍废。所以要锁死「送出去的 path 必须含 %2B」。
+    """
+    seen = []
+
+    async def capture(path: str):
+        seen.append(path)
+        return []
+
+    set_fetch_override(capture)
+    try:
+        asyncio.run(aggregate_now(now=NOW))
+    finally:
+        set_fetch_override(None)
+
+    cal = [x for x in seen if "/calendar/events" in x]
+    assert cal, "没调用 calendar"
+    assert "%2B" in cal[0], f"calendar 路径未编码，+ 会被解成空格：{cal[0]}"
+    assert "+08:00" not in cal[0], f"路径里不该出现裸 +：{cal[0]}"
+
+
+def test_course_is_listed_as_not_wired():
+    """course 既不在 SOURCES 也不在 NOT_WIRED 时，它会**静默消失**——
+    调用方无从知道「course 是没接，还是今天没事」。必须如实列。"""
+
+    async def empty(path: str):
+        return []
+
+    set_fetch_override(empty)
+    try:
+        out = asyncio.run(aggregate_now(now=NOW))
+    finally:
+        set_fetch_override(None)
+
+    assert "course" in {d["source"] for d in out["degraded"]}
+
+
+def test_habit_missed_only_in_evening():
+    """习惯没打卡：早上不算 missed（那是噪音），晚上才算。"""
+
+    async def feats(path: str):
+        if "/habits" in path:
+            return [
+                {"id": "h1", "name": "喝水", "today_status": "pending", "streak": 0},
+                {"id": "h2", "name": "跑步", "today_status": "pending", "streak": 5},
+                {"id": "h3", "name": "早睡", "today_status": "done", "streak": 3},
+            ]
+        return []
+
+    morning = NOW.replace(hour=9)
+    set_fetch_override(feats)
+    try:
+        out_am = asyncio.run(aggregate_now(now=morning))
+    finally:
+        set_fetch_override(None)
+    assert not [a for a in out_am["attention"] if a["kind"] == "habit_missed"], "早上不该报 habit_missed"
+
+    night = NOW.replace(hour=22)
+    set_fetch_override(feats)
+    try:
+        out_pm = asyncio.run(aggregate_now(now=night))
+    finally:
+        set_fetch_override(None)
+    hits = {a["ref"]["id"]: a["severity"] for a in out_pm["attention"] if a["kind"] == "habit_missed"}
+    assert set(hits) == {"h1", "h2"}, f"实际：{hits}"
+    assert hits["h2"] == "medium" and hits["h1"] == "low", f"实际：{hits}"
+
+
+def test_stale_item_not_duplicated_in_attention():
+    """挂了很久的待办只该在 tensions.stale_item 出现，不该同时进 attention 当 todo_overdue。
+
+    同一件事在两个板块各报一次，人会以为有两件事。
+    """
+
+    async def stale_todo(path: str):
+        if "/todo/items" in path:
+            return {"items": [{"id": "t1", "text": "老账", "done": False,
+                               "created_at": _iso(NOW - timedelta(days=20))}]}
+        return []
+
+    set_fetch_override(stale_todo)
+    try:
+        out = asyncio.run(aggregate_now(now=NOW))
+    finally:
+        set_fetch_override(None)
+
+    assert not out["attention"], f"没有 due_at 的老账不该进 attention：{out['attention']}"
+    assert any(t["kind"] == "stale_item" for t in out["tensions"])

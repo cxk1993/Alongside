@@ -46,7 +46,9 @@ def _out(row: object) -> ProposalOut:
         executed_at=r.executed_at,
         executed_id=r.executed_id,
         executed_status=r.executed_status,
+        executed_by=r.executed_by,
         undone_at=r.undone_at,
+        undone_by=r.undone_by,
         undo_result=r.undo_result,
     )
 
@@ -93,7 +95,7 @@ def approve_proposal(
     _user: UserDep = Depends(get_current_user),
 ) -> ProposalOpOut:
     """签字执行。失败不推进状态（可重试）。"""
-    row, detail = ProposalsService(db).approve(proposal_id)
+    row, detail = ProposalsService(db).approve(proposal_id, by=_user.sub)
     return ProposalOpOut(id=row.id, status=row.status, detail=detail)
 
 
@@ -114,5 +116,5 @@ def undo_proposal(
     _user: UserDep = Depends(get_current_user),
 ) -> ProposalOpOut:
     """撤销回放：delete→重建 / update→回写 / create→删除。"""
-    row, detail = ProposalsService(db).undo(proposal_id)
+    row, detail = ProposalsService(db).undo(proposal_id, by=_user.sub)
     return ProposalOpOut(id=row.id, status=row.status, detail=detail)

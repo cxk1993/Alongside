@@ -153,7 +153,9 @@ def _dump(row: ChangeProposal) -> dict[str, Any]:
         "executed_at": _iso(row.executed_at),
         "executed_id": row.executed_id,
         "executed_status": row.executed_status,
+        "executed_by": row.executed_by,
         "undone_at": _iso(row.undone_at),
+        "undone_by": row.undone_by,
         "undo_result": row.undo_result,
     }
 
@@ -197,7 +199,7 @@ class ProposalsService:
 
     # ───────────────────────── 签字 / 作废 ─────────────────────────
 
-    def approve(self, pid: str) -> tuple[ChangeProposal, str]:
+    def approve(self, pid: str, by: str = "human") -> tuple[ChangeProposal, str]:
         """签字：按提案记下的方法/路径/参数正向执行一次内部 HTTP。
 
         ★ 执行失败**不推进状态**（签字人可重试）；成功才落 approved + 执行证据。
@@ -214,6 +216,7 @@ class ProposalsService:
         row.executed_at = datetime.now(UTC)
         row.executed_status = status
         row.executed_id = _extract_id(data)
+        row.executed_by = (by or "human")[:80]
         detail = _digest(data)
         self.db.add(row)
         self.db.commit()
@@ -235,7 +238,7 @@ class ProposalsService:
 
     # ───────────────────────── 撤销回放 ─────────────────────────
 
-    def undo(self, pid: str) -> tuple[ChangeProposal, str]:
+    def undo(self, pid: str, by: str = "human") -> tuple[ChangeProposal, str]:
         """撤销：按 action 回放 before。**失败不推进状态**（可重试）。"""
         row = self.get(pid)
         if row.status != "approved":
@@ -267,6 +270,7 @@ class ProposalsService:
             raise ValidationError(f"撤销失败 HTTP {status}：{_digest(data, 300)}")
         row.status = "undone"
         row.undone_at = datetime.now(UTC)
+        row.undone_by = (by or "human")[:80]
         detail = _digest(data)
         row.undo_result = detail
         self.db.add(row)

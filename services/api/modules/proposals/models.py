@@ -53,8 +53,12 @@ class ChangeProposal(PkMixin, TimestampMixin, table=True):
     # ── 状态机 ──
     status: str = Field(default="pending", max_length=16, index=True)
     executed_at: datetime | None = Field(default=None, sa_type=TimestampTZ)
-    #: 执行成功且响应带资源 id 时记下（create 类撤销定位用；V1 create 不可撤销故仅留证）
+    #: 执行成功且响应带资源 id 时记下（create 类撤销定位用：undo=DELETE /{executed_id}）
     executed_id: str | None = Field(default=None, max_length=64)
     executed_status: int | None = Field(default=None, description="执行时的 HTTP 状态码")
+    #: ★ 谁签的字（审计留痕：内部 HTTP 身份是 admin，但「签字人」必须是真实主体）
+    executed_by: str | None = Field(default=None, max_length=80)
     undone_at: datetime | None = Field(default=None, sa_type=TimestampTZ)
+    #: ★ 谁撤销的
+    undone_by: str | None = Field(default=None, max_length=80)
     undo_result: str | None = Field(default=None, sa_column=Column(Text))

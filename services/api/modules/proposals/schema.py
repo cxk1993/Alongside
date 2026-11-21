@@ -59,7 +59,9 @@ class ProposalOut(BaseModel):
     executed_at: datetime | None
     executed_id: str | None
     executed_status: int | None
+    executed_by: str | None = None
     undone_at: datetime | None
+    undone_by: str | None = None
     undo_result: str | None
 
 

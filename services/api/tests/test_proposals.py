@@ -535,3 +535,29 @@ def test_create_action_undo_deletes_created_row(client, fake_internal):
     r2 = client.post(f"/api/v1/proposals/{pid}/undo", headers=AUTH)
     assert r2.status_code == 200, r2.text
     assert not _todo_exists(client, "create 撤销验证（建了要能删）"), "undo 应删掉刚建那条"
+
+
+def test_audit_fields_record_signer(client, fake_internal):
+    """审计留痕：executed_by / undone_by 必须落库（内部 HTTP 是 admin，但签字人要可追）。"""
+    row = _make_todo(client, "审计字段验证")
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "审计字段",
+            "tool_name": "todo_item_delete",
+            "action": "delete",
+            "method": "DELETE",
+            "path": "/api/v1/todo/items/{item_id}",
+            "payload": {"item_id": row["id"]},
+            "before": row,
+            "actor": "mcp:probe",
+        },
+        headers=AUTH,
+    )
+    pid = r.json()["id"]
+    assert client.post(f"/api/v1/proposals/{pid}/approve", headers=AUTH).status_code == 200
+    assert client.post(f"/api/v1/proposals/{pid}/undo", headers=AUTH).status_code == 200
+    got = client.get(f"/api/v1/proposals/{pid}", headers=AUTH).json()
+    assert got["executed_by"], "签字人必须留痕"
+    assert got["undone_by"], "撤销人必须留痕"
+    assert got["actor"] == "mcp:probe", "发起者不变"

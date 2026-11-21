@@ -284,7 +284,14 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   workspaces: [newWorkspace(1)],
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   topbarCollapsed: false,
-  bottombarCollapsed: false,
+  // ★ T17（2026-11-22）：**Dock 默认隐藏**（主人 22:27「Dock 先隐藏，留退路（不退役）」）。
+  //   为什么改默认值而不是删组件：`bottombarCollapsed` 从罗盘扇区 → toggleBottombar →
+  //   savePersisted 白名单 → hydrate 恢复，整条可逆链已经通；改 1 行就拿到「隐藏 + 一键找回 +
+  //   刷新保持」，且 `desktop.css` 的 `--dock-h:0px` 让隐藏后**不占位**（窗口自动全扩展）。
+  //   ⚠️ Dock 隐藏期罗盘「底栏」扇区 = Dock 开关（语义借用）；若将来真删 Dock，
+  //   必须在同一个提交里撤掉罗盘底栏扇区，别留一个点了没反应的按钮。
+  //   另一条找回路径：命令面板「显示 Dock（模块坞）」（`kernel/commands.ts`）。
+  bottombarCollapsed: true,
 
   registerModule: (m) => {
     const persisted = loadPersisted();

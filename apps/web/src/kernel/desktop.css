@@ -674,6 +674,25 @@
   position: relative;
   min-width: 0;
 }
+
+/* —— 共处工作台背景面（desktop.widget · v1 灰盒）——
+   铺满 .windows 的底层；整体不吃鼠标（保证桌面右键/拖选不被挡），
+   只有真正的卡片与状态条可交互；窗口层 z-index 更高，天然盖在上面。 */
+.windows__surface {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.windows__surface .collab-surface {
+  pointer-events: none;
+}
+
+.windows__surface .collab-status,
+.windows__surface .collab-card {
+  pointer-events: auto;
+}
 /* —— U3 桌面级双侧栏 —— */
 .desktop-sidebar {
   position: relative;
@@ -1335,6 +1354,17 @@
 .search__item:hover {
   background: var(--accent-soft);
   color: var(--txt);
+}
+/* ★ T17：命令面板分组（模块 / 动作 / 能力（只读））。
+   分组标题只是视觉分隔，不进键盘序列（键盘走扁平下标）。 */
+.search__group + .search__group {
+  margin-top: var(--sp-2);
+}
+.search__group-title {
+  padding: 2px var(--sp-3);
+  color: var(--txt-faint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }
 .search__empty {
   padding: var(--sp-4);

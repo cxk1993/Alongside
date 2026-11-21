@@ -63,6 +63,9 @@ beforeEach(() => {
     windows: [],
     workspaces: [makeWorkspace(1)],
     activeWorkspaceId: "ws1",
+    // ★ T17：Dock 默认隐藏（主人 22:27）。**本文件测的就是 Dock 本身**（图标/点击/单例），
+    //   所以这里显式展开；Dock 隐藏与命令面板的默认态由 kernel/commandPalette.test.tsx 钉住。
+    bottombarCollapsed: false,
   } satisfies Partial<DesktopState> as unknown as DesktopState);
 });
 

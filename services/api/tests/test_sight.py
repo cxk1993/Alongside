@@ -403,3 +403,43 @@ def test_time_absent_when_calendar_failed():
 
     assert "time" not in out, "源挂了就不该假装有时间信息"
     assert any(d["source"] == "calendar" for d in out["degraded"]), "失败必须留在 degraded 里"
+
+
+# ─────────── sight 自调 token 过期续签（bidiu 2026-11-22 · 演示阻断修复） ───────────
+# 背景：原实现「本进程寿命远短于 JWT 有效期，故不做过期校验」——演示栈跑了 50 分钟后
+# 缓存里的 admin JWT 早已过期，/sight/now 的 calendar/todo/habits 三源全 401，
+# tensions 归零、time 变空，演示第 1 拍直接空屏。
+
+
+def test_self_token_renews_after_expiry(monkeypatch):
+    """token 过期后必须重签；未过期必须复用（否则每请求都签新 JWT）。"""
+    from modules.sight import aggregator as agg
+
+    agg.reset_credential_caches()
+    calls: list[str] = []
+
+    def fake_create(sub: str) -> str:
+        calls.append(sub)
+        return f"tok-{len(calls)}"
+
+    monkeypatch.setattr(agg, "create_access_token", fake_create)
+
+    assert agg.get_self_token() == "tok-1"
+    assert agg.get_self_token() == "tok-1", "未过期应复用缓存"
+    assert len(calls) == 1
+
+    monkeypatch.setattr(agg, "_token_deadline", 0.0)  # 视为已过期
+    assert agg.get_self_token() == "tok-2", "过期后必须重签"
+    assert len(calls) == 2
+
+
+def test_self_token_prefers_injected_and_never_expires(monkeypatch):
+    """外部注入的 SIGHT_SELF_TOKEN 优先，且不猜它的过期时间。"""
+    from modules.sight import aggregator as agg
+
+    agg.reset_credential_caches()
+    monkeypatch.setattr(
+        agg, "read_setting", lambda k, d=None: "injected-tok" if k == "SIGHT_SELF_TOKEN" else (d if d is not None else "")
+    )
+    assert agg.get_self_token() == "injected-tok"
+    assert agg._token_deadline == float("inf")

@@ -76,6 +76,8 @@ NOT_WIRED: list[tuple[str, str]] = [
 
 _base_cache: str | None = None
 _token_cache: str | None = None
+#: token 失效时刻（epoch 秒）。`float("inf")` = 外部注入的 SIGHT_SELF_TOKEN，不猜过期。
+_token_deadline: float = 0.0
 
 
 def get_self_base() -> str:
@@ -98,20 +100,37 @@ def get_self_base() -> str:
 def get_self_token() -> str:
     """内网自调 token：SIGHT_SELF_TOKEN 优先，否则现签一个 admin JWT。
 
-    缓存理由同上。JWT 自带过期，但本进程寿命远短于它，故不做过期校验。
+    ★ 2026-11-22 修（bidiu）：原实现写着「JWT 自带过期，但本进程寿命远短于它，故不做
+      过期校验」——**这个前提是错的**。演示栈连续跑了 50 分钟后，缓存里的 admin JWT
+      早已过期，`/sight/now` 的 calendar/todo/habits 三个源全部 401，tensions 归零、
+      time 变空（演示第 1 拍直接空屏）。
+
+      现在缓存 token 的同时记下失效时刻，**提前 5 分钟重签**；外部注入的
+      SIGHT_SELF_TOKEN 视为长期有效（不猜别人的过期时间）。
     """
-    global _token_cache
-    if _token_cache is None:
-        tok = (read_setting("SIGHT_SELF_TOKEN", "") or "").strip()
-        _token_cache = tok or create_access_token("admin")
+    global _token_cache, _token_deadline
+    if _token_cache is not None and time.time() < _token_deadline:
+        return _token_cache
+    tok = (read_setting("SIGHT_SELF_TOKEN", "") or "").strip()
+    if tok:
+        _token_cache, _token_deadline = tok, float("inf")
+        return _token_cache
+    _token_cache = create_access_token("admin")
+    try:
+        minutes = int(read_setting("JWT_ACCESS_MINUTES", "30") or "30")
+    except (TypeError, ValueError):
+        minutes = 30
+    # 提前 5 分钟续签，至少留 60 秒寿命（防止配成极小值导致每请求都重签）
+    _token_deadline = time.time() + max(60, (minutes - 5) * 60)
     return _token_cache
 
 
 def reset_credential_caches() -> None:
     """清缓存（测试用：改了 setting 之后需要重取）。"""
-    global _base_cache, _token_cache
+    global _base_cache, _token_cache, _token_deadline
     _base_cache = None
     _token_cache = None
+    _token_deadline = 0.0
 
 
 def self_headers() -> dict[str, str]:

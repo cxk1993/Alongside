@@ -31,6 +31,13 @@ class PatCreateIn(BaseModel):
         max_length=1024,
         description="能力清单，每条形如「域:动词」（首段为能力域、末段为动词）。具体有哪些，看 tools/list 里每个工具名的前两段。**空列表 = 这枚令牌什么都调不了**（安全默认）",
     )
+    # ★ S2（bidiu 2026-11-21）：可选过期时刻（ISO8601，建议带时区）。
+    #   此前 expires_at 列「有校验、无写入路径」→ 所有 PAT 事实永不过期。
+    #   缺省 None = 不设期限（与存量行为一致，不破坏已发的 PAT）。
+    expires_at: datetime | None = Field(
+        default=None,
+        description="可选：到期时刻（ISO8601，如 2026-12-31T00:00:00+08:00）。到点该 PAT 自动 401。不传 = 永不过期",
+    )
 
     @field_validator("name")
     @classmethod

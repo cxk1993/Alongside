@@ -753,3 +753,86 @@ def test_tools_call_accepts_top_level_named_arguments(client, pat, monkeypatch):
     }), headers=headers)
     assert r.status_code == 200, r.text
     assert seen["payload"]["from"] == "2026-09-01T00:00:00+08:00"
+
+
+# ─────────────── S1/S2 PAT 安全堵洞回归（bidiu 2026-11-21） ───────────────
+# S1：forward() 打到 PAT 管理端点的是 admin service JWT + X-Alongside-Client: mcp。
+#     不拦 = 一枚持有 mcp:patch 的 PAT 可经 tools/call 自我提权。
+# S2：expires_at 列此前「有校验、无写入路径」→ 补 create 写路径 + 过期 401 实证。
+
+
+def test_s1_mcp_origin_cannot_patch_pat(client, pat):
+    """mcp 来路（admin JWT + X-Alongside-Client: mcp）改 scopes → 403。"""
+    _, _, pid = pat
+    r = client.patch(
+        f"/api/v1/mcp/pats/{pid}",
+        json={"scopes": ["calendar:read", "calendar:write", "todo:read"]},
+        headers={**AUTH, "X-Alongside-Client": "mcp"},
+    )
+    assert r.status_code == 403, r.text
+    assert "自我提权" in r.json()["detail"]
+
+
+def test_s1_mcp_origin_cannot_revoke_pat(client, pat):
+    """mcp 来路吊销 → 403，且该 PAT 仍然有效（没被真的吊销）。"""
+    _, headers, pid = pat
+    r = client.delete(
+        f"/api/v1/mcp/pats/{pid}",
+        headers={**AUTH, "X-Alongside-Client": "mcp"},
+    )
+    assert r.status_code == 403, r.text
+    # 原 PAT 没被动过：还能鉴权
+    r2 = client.get("/api/v1/mcp/tools", headers=AUTH)
+    assert r2.status_code == 200
+
+
+def test_s1_human_origin_pat_management_still_works(client, pat):
+    """人（登录 JWT、无来路头）改 scopes / 吊销 → 原行为不变（200/204）。"""
+    _, _, pid = pat
+    r = client.patch(
+        f"/api/v1/mcp/pats/{pid}",
+        json={"scopes": ["notes:read"]},
+        headers=AUTH,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["scopes"] == ["notes:read"]
+    assert client.delete(f"/api/v1/mcp/pats/{pid}", headers=AUTH).status_code == 204
+
+
+def test_s2_create_pat_with_expiry_writes_and_enforces(client):
+    """S2：expires_at 可写入；到点的 PAT 真 401（不再「有校验、无来源」）。"""
+    r = client.post(
+        "/api/v1/mcp/pats",
+        json={
+            "name": "过期探针",
+            "scopes": ["calendar:read"],
+            "expires_at": "2000-01-01T00:00:00+00:00",  # 过去时刻
+        },
+        headers=AUTH,
+    )
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    plain = r.json()["token"]
+    # 列表可见过期时刻（非空）
+    rows = client.get("/api/v1/mcp/pats", headers=AUTH).json()
+    assert any(x["id"] == pid and x["expires_at"] is not None for x in rows)
+    # 到点的 PAT 调 MCP 端点 → 401 已过期
+    r3 = client.post(
+        "/api/v1/mcp",
+        json=_rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}}),
+        headers={"Authorization": f"Bearer {plain}"},
+    )
+    assert r3.status_code == 401, r3.text
+
+
+def test_s2_create_pat_default_no_expiry(client):
+    """不传 expires_at → 该列仍为 None（存量行为不变，已发 PAT 不受影响）。"""
+    r = client.post(
+        "/api/v1/mcp/pats",
+        json={"name": "永久探针", "scopes": ["calendar:read"]},
+        headers=AUTH,
+    )
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    rows = client.get("/api/v1/mcp/pats", headers=AUTH).json()
+    assert next(x for x in rows if x["id"] == pid)["expires_at"] is None

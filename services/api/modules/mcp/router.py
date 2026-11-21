@@ -29,7 +29,8 @@ from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
 from core.deps import get_current_user, get_db
-from core.errors import NotFoundError, ValidationError
+from core.errors import ForbiddenError, NotFoundError, ValidationError
+from core.mcp_writes import is_mcp_call
 from core.security import User
 
 from . import audit
@@ -166,13 +167,18 @@ def create_pat(
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
 ) -> PatCreatedOut:
-    """创建 PAT。**明文只在本次响应出现一次**，落库只有哈希。"""
+    """创建 PAT。**明文只在本次响应出现一次**，落库只有哈希。
+
+    ★ S2（bidiu 2026-11-21）：expires_at 补上**写入路径**——此前该列有校验、无来源，
+    所有 PAT 事实永不过期。现在可选传入，缺省 None=不设期限（向后兼容）。
+    """
     plain, token_hash, prefix = generate_pat()
     row = McpPat(
         name=body.name,
         token_hash=token_hash,
         token_prefix=prefix,
         scopes=",".join(body.scopes),
+        expires_at=body.expires_at,
     )
     db.add(row)
     db.commit()
@@ -201,10 +207,21 @@ def list_pats(
 def patch_pat(
     pat_id: Annotated[str, FPath(min_length=1, description="PAT id（从 GET /pats 列表里取）")],
     body: PatScopesPatch,
+    request: Request,
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
 ) -> PatOut:
-    """改 PAT scopes（重新授权 / 收窄范围）。"""
+    """改 PAT scopes（重新授权 / 收窄范围）。
+
+    ★ S1（bidiu 2026-11-21）：MCP 来路一律拒绝。
+    forward() 打到本端点的是 admin service JWT + X-Alongside-Client: mcp——
+    不拦的话，一枚持有 mcp:patch scope 的 PAT 可经 tools/call 把自己（或别的
+    PAT）scopes 改成全权限 = 自我提权。密钥管理是主人登录会话的专属动作。
+    """
+    if is_mcp_call(request):
+        raise ForbiddenError(
+            "PAT 改权只允许主人登录会话操作；MCP tools/call 来路一律拒绝（防自我提权）"
+        )
     row = db.get(McpPat, pat_id)
     if row is None:
         raise NotFoundError(f"PAT 不存在：{pat_id}")
@@ -218,9 +235,18 @@ def patch_pat(
 @router.delete("/pats/{pat_id}")
 def revoke_pat(
     pat_id: Annotated[str, FPath(min_length=1, description="PAT id（从 GET /pats 列表里取）")],
+    request: Request,
     db: DbDep = Depends(get_db),
     user: UserDep = Depends(get_current_user),
 ) -> Response:
-    """吊销 PAT：置 revoked_at，之后该 PAT 立即 401。幂等。"""
+    """吊销 PAT：置 revoked_at，之后该 PAT 立即 401。幂等。
+
+    ★ S1（bidiu 2026-11-21）：MCP 来路一律拒绝——吊销他人/自己的密钥
+    同样属密钥管理，只归主人登录会话。
+    """
+    if is_mcp_call(request):
+        raise ForbiddenError(
+            "PAT 吊销只允许主人登录会话操作；MCP tools/call 来路一律拒绝"
+        )
     mark_pat_revoked(db, pat_id, by=user.sub)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

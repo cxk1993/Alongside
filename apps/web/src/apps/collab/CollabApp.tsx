@@ -76,6 +76,18 @@ function actorLabel(actor?: string): string {
  *      而不是留一个空白框让人以为快照是空的；
  *   3. 有快照 → 默认折叠（卡片上已经有一行标题，快照是签字时才要细看的东西）。
  */
+/**
+ * ★ T20 修正（契约 8ccef3b）：三种撤销语义不同，文案必须说清「撤掉的是什么」。
+ *   契约原文：delete → 用 before 重建（新 id 同内容）｜update → 用 before 回写原 id
+ *   ｜create → 删除 executed_id 指向的那条。
+ */
+function undoNote(action?: string): string {
+  if (action === "create") return "撤销 = 删除刚建的那条";
+  if (action === "delete") return "撤销 = 用快照重建（会得到新 id，不是同一行）";
+  if (action === "update") return "撤销 = 用快照回写原行";
+  return "";
+}
+
 function BeforePreview({ action, before }: { action?: string; before?: Record<string, unknown> | null }) {
   if (action === "create") {
     return <span className="collab-proposal__note">新建 · 无变更前快照</span>;
@@ -280,38 +292,24 @@ export default function CollabApp() {
                     {proposals.approved.map((p) => (
                       <li key={p.id} className="collab-proposal" data-testid="proposal-row-approved">
                         <span className="collab-proposal__title">{p.title ?? p.tool_name ?? p.id}</span>
-                                                <span className="collab-proposal__meta">
-                                                  已签 · {p.action ?? "?"} · {actorLabel(p.actor)}
-                                                </span>
-                                                <span className="collab-proposal__ops">
-                                                  {p.action === "create" ? (
-                                                    // ★ T20：契约 11 §三——create 没有 before 可回放，服务端会 409。
-                                                    //   所以这里**置灰 + 明说**，而不是做出一个按下去必然报错的按钮。
-                                                    <>
-                                                      <button
-                                                        type="button"
-                                                        className="collab-btn"
-                                                        disabled
-                                                        title="此操作不可撤销"
-                                                        data-testid="undo-disabled"
-                                                      >
-                                                        撤销
-                                                      </button>
-                                                      <span className="collab-proposal__note">
-                                                        新建的提案不可撤销（没有可回放的快照）
-                                                      </span>
-                                                    </>
-                                                  ) : (
-                                                    <button
-                                                      type="button"
-                                                      className="collab-btn collab-btn--primary"
-                                                      disabled={proposals.busyId === p.id}
-                                                      onClick={() => void proposals.act(p.id, "undo")}
-                                                    >
-                                                      撤销
-                                                    </button>
-                                                  )}
-                                                </span>
+                        <span className="collab-proposal__meta">
+                          已签 · {p.action ?? "?"} · {actorLabel(p.actor)}
+                        </span>
+                        <span className="collab-proposal__ops">
+                          {/* ★ T20 修正（契约 8ccef3b）：三种动作**都可撤销**——原契约
+                              「create 不可撤销 409」已被实现 5cff08a 推翻并改口。
+                              但语义不同，按钮必须说清撤掉的是什么，否则只是另一种假按钮。 */}
+                          <button
+                            type="button"
+                            className="collab-btn collab-btn--primary"
+                            disabled={proposals.busyId === p.id}
+                            onClick={() => void proposals.act(p.id, "undo")}
+                            data-testid="undo-btn"
+                          >
+                            {p.action === "create" ? "撤销（删掉刚建的那条）" : "撤销"}
+                          </button>
+                          <span className="collab-proposal__note">{undoNote(p.action)}</span>
+                        </span>
                       </li>
                     ))}
                   </ul>

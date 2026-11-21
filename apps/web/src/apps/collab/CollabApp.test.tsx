@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CollabApp from "./CollabApp";
 
 vi.mock("@/shared/api/client", () => {
@@ -21,6 +21,7 @@ vi.mock("@/shared/api/client", () => {
 
 import { api, ApiError } from "@/shared/api/client";
 const get = api.get as unknown as ReturnType<typeof vi.fn>;
+const post = api.post as unknown as ReturnType<typeof vi.fn>;
 
 /** 404 响应替身：用 mock 的 ApiError 类构造（组件内 instanceof 判定 404→missing）。 */
 const ErrCtor = ApiError as unknown as new (status: number) => Error;
@@ -115,7 +116,7 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     expect(await screen.findByText(/新建 · 无变更前快照/)).toBeTruthy();
   });
 
-  it("★ T20：create 的已签提案 → 撤销置灰并注明不可撤销（不做按下去必报错的假按钮）", async () => {
+  it("★ T20 修正：create 的已签提案**可撤销**（契约 8ccef3b）——按钮文案说清删的是什么", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=pending")) return Promise.resolve([]);
       if (path.includes("/proposals")) {
@@ -126,9 +127,33 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
       return err404();
     });
     render(<CollabApp />);
-    const btn = (await screen.findByTestId("undo-disabled")) as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    expect(screen.getByText(/新建的提案不可撤销/)).toBeTruthy();
+    const btn = (await screen.findByTestId("undo-btn")) as HTMLButtonElement;
+    // 原契约「create 不可撤销 409」已被实现推翻 → 按钮必须可点，但文案要说清撤掉什么
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toContain("删掉刚建的那条");
+    expect(screen.getByText(/撤销 = 删除刚建的那条/)).toBeTruthy();
+    fireEvent.click(btn);
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/proposals/p3/undo", {}));
+  });
+
+  it("★ T20：delete 的撤销文案说明「会得到新 id，不是同一行」（契约 §撤销语义）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("status=pending")) return Promise.resolve([]);
+      if (path.includes("/proposals")) {
+        return Promise.resolve([
+          {
+            id: "p6",
+            title: "删除待办",
+            action: "delete",
+            actor: "mcp:pat",
+            before: { id: "t9", text: "x" },
+          },
+        ]);
+      }
+      return err404();
+    });
+    render(<CollabApp />);
+    expect(await screen.findByText(/撤销 = 用快照重建（会得到新 id，不是同一行）/)).toBeTruthy();
   });
 
   it("★ T20：actor 读得懂（AI 提案 vs 人自己签发一眼分开）", async () => {

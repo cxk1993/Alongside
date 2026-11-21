@@ -10,7 +10,8 @@ HTTP 契约（全项目统一，不许自创）：
 """
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path as FPath, Query, status
+from fastapi import APIRouter, Depends, Query, status
+from fastapi import Path as FPath
 from sqlmodel import Session
 
 from core.deps import get_current_user, get_db

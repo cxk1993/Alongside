@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ProposalCreate(BaseModel):
@@ -55,6 +55,24 @@ class ProposalCreate(BaseModel):
         if any(seg == ".." for seg in p.split("/")):
             raise ValueError("path 不允许包含 .. 段（路径穿越防护）")
         return p
+
+    @model_validator(mode="after")
+    def _before_required_for_destructive(self) -> "ProposalCreate":
+        """★ 破坏性动作必须带 before 快照（bidiu 2026-11-22 边界自查）。
+
+        提案层的核心承诺是「可撤销」；但 delete 的 undo 靠 before 整行重建、
+        update 的 undo 靠 before 回写。**没有快照的 delete/update 签了就是永久删除**——
+        那与「事后悔可撤」直接矛盾（判据 5：声明与实现同一句话）。
+
+        实测：before=null 的 delete 提案 approve 能执行（数据真删），undo 才报 422
+        ——用户已经丢了数据，补偿性报错来不及了。⇒ 在**签发时**就拒绝。
+        """
+        if self.action in ("delete", "update") and self.before is None:
+            raise ValueError(
+                f"action={self.action} 需要 before 快照——否则签字执行后无法撤销"
+                "（提案层承诺「可撤销」）。删/改前先取当前值再签发。"
+            )
+        return self
     payload: dict[str, Any] = Field(default_factory=dict, description="执行参数")
     before: dict[str, Any] | None = Field(default=None, description="变更前快照（create 应为 null）")
     actor: str = Field(default="human", max_length=80, description="发起者（mcp:<pat name> / human）")

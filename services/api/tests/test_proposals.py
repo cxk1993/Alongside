@@ -194,6 +194,7 @@ def test_reject_terminal(client):
             "method": "DELETE",
             "path": "/api/v1/todo/items/{item_id}",
             "payload": {"item_id": "nonexistent"},
+            "before": {"id": "nonexistent", "text": "占位快照（破坏性动作必须有 before）"},
             "actor": "human",
         },
         headers=AUTH,
@@ -220,6 +221,7 @@ def test_approve_failure_keeps_pending(client, monkeypatch):
             "method": "DELETE",
             "path": "/api/v1/todo/items/{item_id}",
             "payload": {"item_id": "no-such-id"},
+            "before": {"id": "no-such-id", "text": "占位快照"},
             "actor": "human",
         },
         headers=AUTH,
@@ -366,7 +368,7 @@ def test_mcp_proposal_tools_not_self_intercepted(client, pat, fake_mcp_forward, 
         client,
         headers,
         "proposals_proposal_write",
-        {"payload": {"title": "工具面直发的提案", "tool_name": "manual", "action": "update", "method": "PATCH", "path": "/x"}},
+        {"payload": {"title": "工具面直发的提案", "tool_name": "manual", "action": "create", "method": "POST", "path": "/x"}},
         msg_id=9,
     )
     assert not err, body
@@ -500,6 +502,7 @@ def test_proposal_reject_publishes_event(client, monkeypatch):
             "method": "PATCH",
             "path": "/x",
             "payload": {},
+            "before": {"id": "x", "v": 1},
             "actor": "human",
         },
         headers=AUTH,
@@ -646,3 +649,43 @@ def test_proposal_rejects_unknown_http_method(client):
         headers=AUTH,
     )
     assert r.status_code == 422, r.text
+
+
+def test_destructive_action_requires_before_snapshot(client):
+    """delete/update 无 before → 签发即 422（否则签字执行后永远撤不回来）。"""
+    for action, method in [("delete", "DELETE"), ("update", "PATCH")]:
+        r = client.post(
+            "/api/v1/proposals",
+            json={
+                "title": "缺快照的破坏性动作",
+                "tool_name": "todo_item_delete",
+                "action": action,
+                "method": method,
+                "path": "/api/v1/todo/items/{item_id}",
+                "payload": {"item_id": "x"},
+                "before": None,
+                "actor": "mcp:probe",
+            },
+            headers=AUTH,
+        )
+        assert r.status_code == 422, (action, r.text)
+        assert "before" in r.text
+
+
+def test_create_action_accepts_null_before(client):
+    """create 不需要 before（新东西没有「变更前」）。"""
+    r = client.post(
+        "/api/v1/proposals",
+        json={
+            "title": "新建（无快照）",
+            "tool_name": "todo_item_create",
+            "action": "create",
+            "method": "POST",
+            "path": "/api/v1/todo/items",
+            "payload": {"text": "x"},
+            "before": None,
+            "actor": "mcp:probe",
+        },
+        headers=AUTH,
+    )
+    assert r.status_code == 201, r.text

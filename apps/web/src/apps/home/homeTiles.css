@@ -9,6 +9,7 @@
 }
 
 .home-tiles__head {
+  position: relative; /* 区头「＋」的列表挂靠在这里，不是挂到 section 上 */
   display: flex;
   align-items: baseline;
   gap: var(--sp-2);
@@ -314,8 +315,9 @@
   opacity: 0.92;
 }
 
-/* 编辑态两个把手都压在卡角上：给内容让出 26px，说明行/子入口不被盖住。 */
+/* 编辑态三个按钮都压在卡角上：给内容让出 26px，名字/说明行/子入口不被盖住。 */
 .home-tiles.is-editing .home-tile__card {
+  padding-left: 26px;
   padding-bottom: 26px;
 }
 
@@ -581,4 +583,108 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── 区头的「＋」（2026-11-22 汐瑶回执第一条） ──────────────────
+   网格里的槽在满格时自隐，而「想换一块」这件事不能跟着消失：满格 + 没有这个入口
+   = 只能拖 / 只能缩、不能换，用户读作功能死了。常驻，点开与槽内同一个列表。
+   只有加满（所有模块都上墙）时才不渲染——那时点开也是空列表，不造空按钮。 */
+.home-tiles__head-add {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: auto; /* 靠右；「编辑」紧跟在它后面，不再各占一个 auto */
+}
+
+.home-tiles__head-add + .home-tiles__edit {
+  margin-left: 0;
+}
+
+.home-tiles__add-head {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--txt-dim);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.home-tiles__add-head:hover,
+.home-tiles__add-head[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.home-tiles__add-head:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 区头列表**向下长**：它挂在页首，下面是整片画布；槽内列表则贴底向上（那边下面没有空间）。 */
+.home-tiles__pick--head {
+  left: auto;
+  right: 0;
+  bottom: auto;
+  top: calc(100% + var(--sp-2));
+  width: 288px;
+  z-index: 40;
+}
+
+/* 满格提示：告诉用户唯一出口，不是一句「不能加了」。 */
+.home-tiles__pick-full {
+  margin: 0 0 2px;
+  padding: 3px 6px;
+  border-radius: var(--r-xs);
+  background: var(--accent-soft);
+  color: var(--txt);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ── 移除（编辑态） ─────────────────────────────────────────────
+   满格后换块的唯一出口，所以它必须「看得见、点得到、不误触」：
+   24×24 且只在编辑态渲染（浏览态没有它 = 没有误删的可能，与拖 / 缩同一条纪律）。 */
+.home-tile__remove {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--txt-faint);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.home-tiles.is-editing .home-tile__remove {
+  border-color: var(--line-strong);
+  color: var(--txt-dim);
+}
+
+.home-tile__remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--surface-3);
+}
+
+.home-tile__remove:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }

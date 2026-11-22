@@ -18,10 +18,12 @@ import {
   TILE_MIN_W,
   TILE_W,
   firstFreeSlot,
+  hydrateLayout,
   initialLayout,
   overlaps,
   resolveSize,
   resolveSlot,
+  serializeLayout,
 } from "./HomeTiles";
 import type { TileLayout } from "./HomeTiles";
 
@@ -648,5 +650,167 @@ describe("区块区 · 子入口", () => {
     expect(open.querySelector(".home-tile__entry")).toBeNull();
     const entry = screen.getByTestId("tile-entry-todo-study");
     expect(entry.closest("button")).toBe(entry);
+  });
+});
+
+// ── 满格后的出口 + 移除（2026-11-22 汐瑶回执：满格即封闭态是真问题） ──
+// 前提：网格 6 块 = 容量。6 块满格后槽自隐，而「想换一块」不能跟着消失。
+// 单测必须是 7 个模块——SIX 全上墙时 addable=0，区头「＋」按设计不渲染（点开也是空列表）。
+const SEVEN = { ...SIX, agents: mod("agents", "AI 编排") };
+
+/** 先把 6 块铺满（第 6 块走槽内入口，与真实路径一致）。 */
+function fillToCapacity() {
+  render(<HomeTiles />);
+  fireEvent.click(screen.getByTestId("home-tiles-add"));
+  fireEvent.click(screen.getByTestId("add-tile-health"));
+  expect(screen.queryByTestId("home-tiles-add-slot")).toBeNull();
+}
+
+describe("区块区 · 满格入口与移除", () => {
+  it("满格后槽自隐，但区头「＋」仍在（入口不跟着格子消失）", () => {
+    useDesktopStore.setState({ modules: SEVEN });
+    fillToCapacity();
+    expect(screen.getByTestId("home-tiles-add-head")).toBeTruthy();
+    // 默认收起，不先给一整块面板
+    expect(screen.queryByTestId("home-tiles-add-picker")).toBeNull();
+  });
+
+  it("满格点「＋」→ 列表照开；选中 → 不新增第 7 块，给「先移除一块」的出口", () => {
+    useDesktopStore.setState({ modules: SEVEN });
+    fillToCapacity();
+
+    fireEvent.click(screen.getByTestId("home-tiles-add-head"));
+    const picker = screen.getByTestId("home-tiles-add-picker");
+    expect(picker.dataset.at).toBe("head");
+    fireEvent.click(screen.getByTestId("add-tile-agents"));
+
+    // 不静默塞第 7 块（网格装不下），也不替用户选一块替换掉
+    expect(screen.queryByTestId("tile-agents")).toBeNull();
+    expect(screen.getAllByTestId(/^tile-(calendar|todo|habits|finance|notes|health)$/)).toHaveLength(6);
+    const hint = screen.getByTestId("home-tiles-full-hint");
+    expect(hint.textContent).toContain("先点块上的 × 移除一块");
+    expect(hint.textContent).toContain("AI 编排");
+  });
+
+  it("区头列表向下侧挂（槽内那份贴底向上长，两处不能共用同一套定位）", () => {
+    const r = /\.home-tiles__pick--head\s*\{([^}]*)\}/.exec(css);
+    const body = r?.[1] ?? "";
+    expect(body).toMatch(/top:\s*calc\(100% \+ var\(--sp-2\)\)/);
+    expect(body).toMatch(/z-index:\s*40/);
+  });
+
+  it("浏览态没有移除按钮；编辑态每块一个（与拖 / 缩同一条纪律）", () => {
+    render(<HomeTiles />);
+    expect(screen.queryAllByTestId(/^tile-remove-/)).toHaveLength(0);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    expect(screen.getAllByTestId(/^tile-remove-/)).toHaveLength(5);
+  });
+
+  it("点 × → 那块消失、满格解除、空格槽立即复现（换块闭环）", () => {
+    useDesktopStore.setState({ modules: SEVEN });
+    fillToCapacity();
+
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    fireEvent.click(screen.getByTestId("tile-remove-health"));
+    expect(screen.queryByTestId("tile-health")).toBeNull();
+    expect(screen.getByTestId("home-tiles-add-slot")).toBeTruthy();
+  });
+
+  it("移除按钮 24×24 且在左上角（与右上拖 / 右下缩三个角错开）", () => {
+    const r = /\.home-tile__remove\s*\{([^}]*)\}/.exec(css);
+    const body = r?.[1] ?? "";
+    expect(body).toMatch(/width:\s*24px/);
+    expect(body).toMatch(/height:\s*24px/);
+    expect(body).toMatch(/left:\s*2px/);
+    expect(body).toMatch(/top:\s*2px/);
+  });
+});
+
+// ── 布局持久化：刷回来还是自己的排布，不是初始 5 块 ──────────────
+describe("区块区 · 布局持久化", () => {
+  const KEY = "alongside.hometiles.v1";
+
+  it("hydrateLayout：合法快照原样还原；未知模块 / 重叠 / 越界 / 坏数据都清掉", () => {
+    const known = new Set(["a", "b"]);
+    expect(hydrateLayout(null, known)).toBeNull();
+    expect(hydrateLayout("{bad", known)).toBeNull();
+    expect(hydrateLayout("[]", known)).toBeNull();
+
+    const one = hydrateLayout(JSON.stringify([{ moduleId: "a", x: 0, y: 0, w: 4, h: 2 }]), known);
+    expect(one).toHaveLength(1);
+    expect(one?.[0]).toMatchObject({ moduleId: "a", x: 0, y: 0, w: 4, h: 2 });
+
+    // 模块已不存在 → 整条丢（快照比模块清单活得久是常态，不丢就是一开就空的死块）
+    expect(
+      hydrateLayout(JSON.stringify([{ moduleId: "gone", x: 0, y: 0, w: 4, h: 2 }]), known),
+    ).toBeNull();
+
+    // 两块叠在同一格 → 第二块挪到最近空位（曼哈顿距离：(0,2) 距 2 < (4,0) 距 4），不是叠着渲染
+    const two = hydrateLayout(
+      JSON.stringify([
+        { moduleId: "a", x: 0, y: 0, w: 4, h: 2 },
+        { moduleId: "b", x: 0, y: 0, w: 4, h: 2 },
+      ]),
+      known,
+    );
+    expect(two).toHaveLength(2);
+    expect(two?.[1]).toMatchObject({ moduleId: "b", x: 0, y: 2 });
+
+    // 越界坐标夹回网格内：不凭空造一块画在 canvas 外面的块
+    const clamped = hydrateLayout(
+      JSON.stringify([{ moduleId: "a", x: 99, y: 99, w: 99, h: 99 }]),
+      known,
+    );
+    expect(clamped?.[0]).toMatchObject({ x: 0, y: 0, w: 12, h: 4 });
+  });
+
+  it("写回形状只含几何与 id（模块改名后旧快照不会僵在半旧名字上）", () => {
+    expect(serializeLayout([tile("a", 0, 0)])).toBe(
+      '{"v":1,"tiles":[{"moduleId":"a","x":0,"y":0,"w":4,"h":2}]}',
+    );
+  });
+
+  it("移除一块 → 写进快照；模拟 F5 重挂 → 仍是移除后的样子，不是初始 5 块", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    fireEvent.click(screen.getByTestId("tile-remove-notes"));
+    expect(localStorage.getItem(KEY)).not.toContain("notes");
+
+    cleanup(); // 卸载 = 关掉组件；localStorage 留着
+    render(<HomeTiles />);
+    expect(screen.queryByTestId("tile-notes")).toBeNull();
+    expect(screen.getAllByTestId(/^tile-(calendar|todo|habits|finance|notes|health)$/)).toHaveLength(4);
+  });
+
+  it("挪过位置的块，刷回来位置不丢（存的是 x/y，不是只有顺序）", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    // 键盘等价物挪一格：不依赖 pointer capture（jsdom 没有）
+    fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), { key: "ArrowRight", altKey: true });
+    expect(screen.getByTestId("tile-calendar").dataset.x).toBe("1");
+
+    cleanup();
+    render(<HomeTiles />);
+    expect(screen.getByTestId("tile-calendar").dataset.x).toBe("1");
+  });
+
+  it("模块还没到时绝不写盘（快照不被空桌面洗掉）", () => {
+    localStorage.setItem(KEY, JSON.stringify([{ moduleId: "notes", x: 0, y: 0, w: 4, h: 2 }]));
+    useDesktopStore.setState({ modules: {} });
+    render(<HomeTiles />);
+    expect(localStorage.getItem(KEY)).toContain("notes");
+  });
+
+  it("快照里的模块已停用 → 不渲染死块，剩下的照常还原", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify([
+        { moduleId: "calendar", x: 0, y: 0, w: 4, h: 2 },
+        { moduleId: "gone", x: 4, y: 0, w: 4, h: 2 },
+      ]),
+    );
+    render(<HomeTiles />);
+    expect(screen.getByTestId("tile-calendar")).toBeTruthy();
+    expect(screen.queryByTestId("tile-gone")).toBeNull();
   });
 });

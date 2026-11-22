@@ -272,6 +272,92 @@ export function firstFreeSlot(tiles: TileLayout[], rows = TILE_ROWS): Slot | nul
   return null;
 }
 
+/**
+ * 布局持久化：只存「哪一块在哪」，不存内容。
+ *
+ * 键名带版本：TileLayout 形状变更、或需要整体重置用户已存布局时才 bump 到 v2——
+ * 不 bump 直接改形状，旧快照会被静默读成坏数据（界面看着像「块全没了」）。
+ */
+export const TILES_STORAGE_KEY = "alongside.hometiles.v1";
+
+function readStore(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    /* 隐私模式 / 存储被禁：退回内存态，不打断渲染 */
+    return null;
+  }
+}
+
+function writeStore(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* 配额满 / 隐私模式：布局这一轮只活在内存里，错误不往上抛 */
+  }
+}
+
+/** 单块形状校验：坐标越界就夹回网格内，类型不对整条丢（不猜、不半修）。 */
+function readTile(raw: unknown): TileLayout | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.moduleId !== "string" || !o.moduleId) return null;
+  const nums = [o.x, o.y, o.w, o.h];
+  if (!nums.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
+  const w = Math.min(Math.max(Math.round(o.w as number), TILE_MIN_W), TILE_COLS);
+  const h = Math.min(Math.max(Math.round(o.h as number), TILE_MIN_H), TILE_ROWS);
+  return {
+    i: typeof o.i === "string" && o.i ? o.i : (o.moduleId as string),
+    moduleId: o.moduleId as string,
+    name: typeof o.name === "string" && o.name ? o.name : (o.moduleId as string),
+    x: Math.min(Math.max(Math.round(o.x as number), 0), TILE_COLS - w),
+    y: Math.min(Math.max(Math.round(o.y as number), 0), TILE_ROWS - h),
+    w,
+    h,
+  };
+}
+
+/**
+ * 从存储还布局。三道过滤，缺一条都会把「坏快照」变成「坏界面」：
+ *   ① 形状不合法 → 丢（不半修）；
+ *   ② 模块已不存在 / 未启用 → 丢（**快照比模块清单活得久是常态**：插件停用后
+ *      快照里还留着它，不丢就会渲染出一块点开是空的死块）；
+ *   ③ 与已接受的块重叠 → 挪到最近空位；整张网格都放不下 → 丢。
+ * 返回 null = 没有可用快照，调用方回落到初始排布。
+ */
+export function hydrateLayout(raw: string | null, known: Set<string>): TileLayout[] | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const list = Array.isArray(parsed) ? parsed : (parsed as { tiles?: unknown })?.tiles;
+  if (!Array.isArray(list)) return null;
+  const out: TileLayout[] = [];
+  for (const item of list) {
+    const t = readTile(item);
+    if (!t || !known.has(t.moduleId)) continue;
+    if (out.some((o) => overlaps(t, o))) {
+      const slot = resolveSlot({ x: t.x, y: t.y }, { w: t.w, h: t.h }, out);
+      if (!slot) continue;
+      out.push({ ...t, x: slot.x, y: slot.y });
+    } else {
+      out.push(t);
+    }
+  }
+  return out.length ? out : null;
+}
+
+/** 写回的形状：只有几何与 id —— name 从模块清单重建，模块改名后旧快照不会僵在半旧名字上。 */
+export function serializeLayout(tiles: TileLayout[]): string {
+  return JSON.stringify({
+    v: 1,
+    tiles: tiles.map(({ moduleId, x, y, w, h }) => ({ moduleId, x, y, w, h })),
+  });
+}
+
 interface DragState {
   i: string;
   pointerId: number;
@@ -335,18 +421,30 @@ export function HomeTiles() {
   const [editing, setEditing] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [resizeId, setResizeId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const seeded = useRef(false);
+  /** 列表开在哪：格子里的槽（`slot`）/ 区头的「＋」（`head`，满格时唯一入口）/ 关着（null）。 */
+  const [adding, setAdding] = useState<"slot" | "head" | null>(null);
+  /** 满格时选中某块的提示：不静默失败，也不自作主张替换别人的块。 */
+  const [fullHint, setFullHint] = useState<string | null>(null);
+  /** 快照是否已尝试还原 —— **没还原过就写盘，会把上一轮的真实布局洗成初始 5 块**。 */
+  const [hydrated, setHydrated] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const resizeRef = useRef<ResizeState | null>(null);
 
-  // 模块是异步来的：第一次非空时铺一次，之后不再重置（同一份教训：挂载即跑会被空列表洗掉）。
+  // 模块是异步来的：**等模块首次非空再还原**——挂载即跑会被空列表过滤成空桌面（hydrate 的老坑）。
+  // 有快照就用快照（未知模块 / 重叠已在 hydrateLayout 里清掉），没有才回初始 5 块。
   useEffect(() => {
-    if (seeded.current || candidates.length === 0) return;
-    seeded.current = true;
-    setTiles(initialLayout(candidates));
-  }, [candidates]);
+    if (hydrated || candidates.length === 0) return;
+    const known = new Set(candidates.map((c) => c.id));
+    setTiles(hydrateLayout(readStore(TILES_STORAGE_KEY), known) ?? initialLayout(candidates));
+    setHydrated(true);
+  }, [candidates, hydrated]);
+
+  // 只在还原之后写盘：否则初始 `tiles=[]` 会立刻把上一轮布局覆盖成空（F5 后块全丢的真因）。
+  useEffect(() => {
+    if (!hydrated) return;
+    writeStore(TILES_STORAGE_KEY, serializeLayout(tiles));
+  }, [tiles, hydrated]);
 
   /** 已上墙的模块 id —— 添加列表里不再出现（同一模块不放两块）。 */
   const placedIds = useMemo(() => new Set(tiles.map((t) => t.moduleId)), [tiles]);
@@ -368,19 +466,30 @@ export function HomeTiles() {
     };
   }, [candidates, placedIds]);
 
-  /** 加一块到空格位。满了 / 重复模块 -> 不动（不做静默替换，也不编一个位置）。 */
+  /**
+   * 加一块到空格位。满格 → **不静默失败，也不自作主张替换别人的块**：
+   * 直接说清唯一出口（点块上的 × 移除一块）。「问换哪块」= 让用户自己选要牺牲哪块，
+   * 替人选是替他做决定；而静默 return 会让用户以为按钮坏了。
+   */
   const addTile = (m: { id: string; name: string }) => {
-    setTiles((list) => {
-      if (list.length >= TILE_CAPACITY) return list;
-      if (list.some((t) => t.moduleId === m.id)) return list;
-      const slot = firstFreeSlot(list);
-      if (!slot) return list;
-      return [
-        ...list,
-        { i: m.id, moduleId: m.id, name: m.name, x: slot.x, y: slot.y, w: TILE_W, h: TILE_H },
-      ];
-    });
-    setAdding(false);
+    if (tiles.some((t) => t.moduleId === m.id)) return;
+    const slot = firstFreeSlot(tiles);
+    if (!slot) {
+      setFullHint(`已满 ${TILE_CAPACITY} 块 —— 先点块上的 × 移除一块，再放「${m.name}」`);
+      return;
+    }
+    setTiles([
+      ...tiles,
+      { i: m.id, moduleId: m.id, name: m.name, x: slot.x, y: slot.y, w: TILE_W, h: TILE_H },
+    ]);
+    setAdding(null);
+    setFullHint(null);
+  };
+
+  /** 移除一块：满格后换块的**唯一出口**，所以与拖 / 缩同一条纪律——编辑态才有。 */
+  const removeTile = (i: string) => {
+    setTiles((list) => list.filter((t) => t.i !== i));
+    setFullHint(null);
   };
 
   const pickRow = (list: { id: string; name: string }[]) =>
@@ -398,11 +507,53 @@ export function HomeTiles() {
       </li>
     ));
 
+  /**
+   * 模块列表本体。槽内与区头共用同一份 —— 两处各写一遍就是两套行为，
+   * 而这两处存在的意义恰好是「满格前后都能加」。
+   */
+  const renderPicker = (at: "slot" | "head") => (
+    <div
+      className={`home-tiles__pick${at === "head" ? " home-tiles__pick--head" : ""}`}
+      role="group"
+      aria-label="选择要添加的区块"
+      data-testid="home-tiles-add-picker"
+      data-at={at}
+    >
+      <div className="home-tiles__pick-head">
+        <p className="home-tiles__pick-hint">放哪一块到这一格</p>
+        {/* 面板铺满整格 / 盖住区头按钮 —— 鼠标路径必须有自己的出口，不能只靠 Esc。 */}
+        <button
+          type="button"
+          className="home-tiles__pick-close"
+          aria-label="收起模块列表"
+          onClick={() => setAdding(null)}
+          data-testid="home-tiles-add-close"
+        >
+          ×
+        </button>
+      </div>
+      {fullHint ? (
+        <p className="home-tiles__pick-full" role="status" data-testid="home-tiles-full-hint">
+          {fullHint}
+        </p>
+      ) : null}
+      <ul className="home-tiles__pick-list">
+        {pickRow(addable.skill)}
+        {addable.others.length ? (
+          <>
+            <li className="home-tiles__pick-sect">其它模块（内核 / 管理类）</li>
+            {pickRow(addable.others)}
+          </>
+        ) : null}
+      </ul>
+    </div>
+  );
+
   // Esc 收起模块列表——键盘路径不能只剩鼠标一条。
   useEffect(() => {
     if (!adding) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAdding(false);
+      if (e.key === "Escape") setAdding(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -611,6 +762,25 @@ export function HomeTiles() {
         <span className="home-tiles__hint" data-testid="home-tiles-hint">
           {hint}
         </span>
+        {/* 区头常驻「＋」：网格满了，槽会自隐，但「想换一块」不能跟着消失——
+            否则主墙进入「只能拖 / 只能缩、不能换」的封闭态，用户读作功能死了。
+            只在「还有没上墙的模块」时渲染：全都上墙了按钮点开也是空列表。 */}
+        {addable.total > 0 && !busy ? (
+          <div className="home-tiles__head-add">
+            <button
+              type="button"
+              className="home-tiles__add-head"
+              aria-expanded={adding === "head"}
+              aria-label="添加区块"
+              title="添加区块（满格时会提示先移除一块）"
+              onClick={() => setAdding((v) => (v === "head" ? null : "head"))}
+              data-testid="home-tiles-add-head"
+            >
+              ＋
+            </button>
+            {adding === "head" ? renderPicker("head") : null}
+          </div>
+        ) : null}
         <button
           type="button"
           className="home-tiles__edit"
@@ -713,6 +883,20 @@ export function HomeTiles() {
                     ))}
                   </div>
                 ) : null}
+                {/* 移除：与拖 / 缩同一条纪律——24×24、独立入口、编辑态才在 DOM 里。
+                    位置在左上角，三个角各管一件事（删除 / 拖动 / 缩放），不叠在一起。 */}
+                {editing ? (
+                  <button
+                    type="button"
+                    className="home-tile__remove"
+                    aria-label={`移除${t.name}`}
+                    title="移除这一块（之后可以再加回来）"
+                    onClick={() => removeTile(t.i)}
+                    data-testid={`tile-remove-${t.moduleId}`}
+                  >
+                    ×
+                  </button>
+                ) : null}
                 {/* 底线②：只有这个 24×24 的把手能起拖；底线③：编辑态才渲染 */}
                 {editing ? (
                   <button
@@ -772,44 +956,14 @@ export function HomeTiles() {
             <button
               type="button"
               className="home-tiles__add-btn"
-              aria-expanded={adding}
+              aria-expanded={adding === "slot"}
               aria-label="添加区块"
-              onClick={() => setAdding((v) => !v)}
+              onClick={() => setAdding((v) => (v === "slot" ? null : "slot"))}
               data-testid="home-tiles-add"
             >
               ＋ 添加区块
             </button>
-            {adding ? (
-              <div
-                className="home-tiles__pick"
-                role="group"
-                aria-label="选择要添加的区块"
-                data-testid="home-tiles-add-picker"
-              >
-                <div className="home-tiles__pick-head">
-                  <p className="home-tiles__pick-hint">放哪一块到这一格</p>
-                  {/* 面板铺满整格、盖住了入口按钮 —— 鼠标路径必须有自己的出口，不能只靠 Esc。 */}
-                  <button
-                    type="button"
-                    className="home-tiles__pick-close"
-                    aria-label="收起模块列表"
-                    onClick={() => setAdding(false)}
-                    data-testid="home-tiles-add-close"
-                  >
-                    ×
-                  </button>
-                </div>
-                <ul className="home-tiles__pick-list">
-                  {pickRow(addable.skill)}
-                  {addable.others.length ? (
-                    <>
-                      <li className="home-tiles__pick-sect">其它模块（内核 / 管理类）</li>
-                      {pickRow(addable.others)}
-                    </>
-                  ) : null}
-                </ul>
-              </div>
-            ) : null}
+            {adding === "slot" ? renderPicker("slot") : null}
           </div>
         ) : null}
 

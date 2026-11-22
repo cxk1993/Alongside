@@ -1,0 +1,82 @@
+/* 侧栏槽贡献（desktop.dock-left / desktop.dock-right）的样式。
+   只排内件，宽度由宿主 .desktop-sidebar 决定；颜色/间距全部用设计令牌（G18）。 */
+
+.sidebar-dock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+}
+
+.sidebar-dock__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-dock__group-title {
+  padding: 2px var(--sp-2);
+  font-size: 11px;
+  color: var(--txt-faint);
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.sidebar-dock__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--sp-2);
+  border-radius: var(--r-sm);
+  color: var(--txt);
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.sidebar-dock__row:hover {
+  background: var(--surface-2);
+}
+
+.sidebar-dock__abbr {
+  flex: 0 0 auto;
+  min-width: 16px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--txt-dim);
+}
+
+.sidebar-dock__label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-dock__tag {
+  flex: 0 0 auto;
+  margin-left: 2px;
+  font-size: 10px;
+  color: var(--txt-faint);
+}
+
+/* 便签/公告：summary 当行，正文按需展开 */
+.sidebar-dock__note > summary {
+  list-style: none;
+}
+
+.sidebar-dock__note > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar-dock__body {
+  margin: 2px var(--sp-2) var(--sp-2) 24px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--txt-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 14em;
+  overflow: auto;
+}

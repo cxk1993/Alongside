@@ -16,6 +16,9 @@ import type { MouseEvent } from "react";
 
 import { api, ApiError } from "@/shared/api/client";
 import { useSightNow } from "@/shared/api/now";
+import { useDesktopStore } from "../../kernel/store";
+import { ActivityStrip } from "./ActivityStrip";
+import { CapabilityBar } from "./CapabilityBar";
 import { ProposalDetail } from "./ProposalDetail";
 import { actorLabel, hhmm, undoNote, type ProposalRow } from "./proposalFormat";
 import { BeforePreview } from "./proposalView";
@@ -176,6 +179,8 @@ const STATUS_TEXT: Record<ZoneStatus, string> = {
 export default function CollabApp() {
   const sight = useSightNow();
   const proposals = useProposals();
+  /** ★ P0-c：能力条点一下就开窗——与 Ctrl+K 里的「模块」命令同一个动作（store.openWindow）。 */
+  const openWindow = useDesktopStore((s) => s.openWindow);
   // ★ T25：详情抽屉当前的提案 id（null = 关闭）。抽屉自己发 GET，不复用列表快照。
   const [detailId, setDetailId] = useState<string | null>(null);
   /** ★ T27：「已签（可撤销）」默认收起。
@@ -219,6 +224,10 @@ export default function CollabApp() {
         </span>
         <span className="collab-status__hint">v1 灰盒 · 数据未接入时如实空态，不造假</span>
       </header>
+
+      {/* ★ P0-c：入口与活动都在状态条正下方 —— 一眼看得见，不用先学 Ctrl+K */}
+      <CapabilityBar onOpen={openWindow} />
+      <ActivityStrip />
 
       <div className="collab-grid">
         <section className="collab-card" aria-label="它看见的">

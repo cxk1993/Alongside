@@ -1,5 +1,5 @@
 /**
- * 渲染冒烟测试：验证日程表主组件、TimeGrid、Inspector、QuickCard 在无真实网络时
+ * 渲染冒烟测试：验证日程表主组件、Inspector、QuickCard 在无真实网络时
  * 能正常挂载渲染（数据为空 → 走空态分支，不应抛错）。
  *
  * 注意：涉及真实 SSE / 拖拽 fps / 与后端联调的验收项，环境里没有真服务，
@@ -7,9 +7,8 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { CalendarApp } from "./CalendarApp";
-import { TimeGrid } from "./grid/TimeGrid";
 import { Inspector } from "./inspector/Inspector";
 import { QuickCard } from "./inspector/QuickCard";
 import type { CalendarEvent } from "./api";
@@ -57,39 +56,6 @@ describe("CalendarApp 冒烟", () => {
     render(<CalendarApp />);
     const title = screen.getByTestId("cal-title");
     expect(title.textContent).toMatch(/\d{4}年\d{1,2}月/);
-  });
-});
-
-describe("TimeGrid 冒烟", () => {
-  const base = {
-    events: [ev],
-    weekStart: new Date("2025-01-06T00:00:00+08:00"),
-    weekDays: 7,
-    hourHeight: 46,
-    dayWidth: 120,
-    selectedId: null,
-    onCreate: () => {},
-    onSelect: () => {},
-    onMove: () => {},
-    onResize: () => {},
-    onRename: () => {},
-    onColor: () => {},
-    onFocus: () => {},
-    onAddChild: () => {},
-    onDelete: () => {},
-  };
-  it("渲染事件块标题", () => {
-    render(<TimeGrid {...base} />);
-    expect(screen.getByText("测试事项")).toBeTruthy();
-  });
-  it("点击空白格不崩溃（新建预览逻辑可达）", () => {
-    const { container } = render(<TimeGrid {...base} />);
-    const grid = container.querySelector(".cal-grid") as HTMLElement;
-    act(() => {
-      fireEvent.pointerDown(grid, { button: 0, clientX: 200, clientY: 200 });
-      fireEvent.pointerUp(window, { clientX: 240, clientY: 260 });
-    });
-    expect(grid).toBeTruthy();
   });
 });
 

@@ -11,11 +11,13 @@ import { useTodoUI } from "../todo/state";
 import type { ModuleManifest } from "../../kernel/types";
 import {
   HomeTiles,
+  TILE_CAPACITY,
   TILE_DESC,
   TILE_MAX,
   TILE_MIN_H,
   TILE_MIN_W,
   TILE_W,
+  firstFreeSlot,
   initialLayout,
   overlaps,
   resolveSize,
@@ -322,8 +324,111 @@ describe("区块区 · 落位预览", () => {
   });
 });
 
-// ── 对齐：画布左右补回 --sp-1（区块卡外缘与上方摘要卡同一条线） ──────
-describe("区块区 · 对齐", () => {
+// ── 添加槽（2026-11-22 团队裁定选 B）：空格 = 显式入口 ─────────────
+describe("区块区 · 添加槽", () => {
+  const FIVE = [
+    tile("a", 0, 0),
+    tile("b", 4, 0),
+    tile("c", 8, 0),
+    tile("d", 0, 2),
+    tile("e", 4, 2),
+  ];
+
+  it("firstFreeSlot：5 块占满前两行 → 空格在第三列第二行 (8,2)", () => {
+    expect(firstFreeSlot(FIVE)).toEqual({ x: 8, y: 2 });
+  });
+
+  it("firstFreeSlot：网格满（6 块 = 容量）→ null，不硬造一个放不下的槽", () => {
+    expect(TILE_CAPACITY).toBe(6);
+    expect(firstFreeSlot([...FIVE, tile("f", 8, 2)])).toBeNull();
+  });
+
+  it("firstFreeSlot：别人挪出更靠前的空格时，槽跟着走（不是写死 8,2）", () => {
+    const moved = [tile("a", 8, 0), tile("b", 4, 0), tile("c", 0, 2), tile("d", 4, 2)];
+    expect(firstFreeSlot(moved)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("浏览态在空格画添加槽，位置与格坐标一致（不是装饰图）", () => {
+    render(<HomeTiles />);
+    const slot = screen.getByTestId("home-tiles-add-slot");
+    expect(slot.dataset.gx).toBe("8");
+    expect(slot.dataset.gy).toBe("2");
+    expect(screen.getByTestId("home-tiles-add").textContent).toContain("添加区块");
+    // 列表默认收起：先给一个入口，不先给一整块面板。
+    expect(screen.queryByTestId("home-tiles-add-picker")).toBeNull();
+  });
+
+  it("点开列表：只列没上墙的模块（模块 id 不重复放第二块）", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-add"));
+    expect(screen.getByTestId("home-tiles-add-picker")).toBeTruthy();
+    expect(screen.getByTestId("add-tile-health")).toBeTruthy();
+    expect(screen.queryByTestId("add-tile-calendar")).toBeNull();
+    expect(screen.queryByTestId("add-tile-notes")).toBeNull();
+  });
+
+  it("列表分两段：能当墙面块的在前，内核/管理类在后（不隐藏）", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-add"));
+    const list = screen.getByTestId("home-tiles-add-picker");
+    const order = [...list.querySelectorAll("[data-testid^=add-tile-]")].map(
+      (el) => el.getAttribute("data-testid"),
+    );
+    // SIX 里的 6 个模块都在 TILE_DESC 里 → 全是第一段，排序按注册顺序。
+    expect(order).toEqual(["add-tile-health"]);
+    expect(list.textContent).not.toContain("其它模块");
+  });
+
+  it("内核模块排在「其它模块」段里，不被隐藏（宁散勿丢）", () => {
+    useDesktopStore.setState({
+      modules: { ...SIX, agents: mod("agents", "AI 编排"), auth: mod("auth", "账户与鉴权") },
+    });
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-add"));
+    const list = screen.getByTestId("home-tiles-add-picker");
+    expect(list.textContent).toContain("其它模块（内核 / 管理类）");
+    const order = [...list.querySelectorAll("[data-testid^=add-tile-]")].map(
+      (el) => el.getAttribute("data-testid"),
+    );
+    // 有说明的 health 在前；无说明的 agents / auth 在后。
+    expect(order).toEqual(["add-tile-health", "add-tile-agents", "add-tile-auth"]);
+  });
+
+  it("面板自带关闭出口（它铺满整格、盖住了入口按钮）", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-add"));
+    fireEvent.click(screen.getByTestId("home-tiles-add-close"));
+    expect(screen.queryByTestId("home-tiles-add-picker")).toBeNull();
+    expect(screen.getByTestId("home-tiles-add")).toBeTruthy();
+  });
+
+  it("选一块 → 落到空格、槽与列表一起消失（网格满了就没有添加槽）", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-add"));
+    fireEvent.click(screen.getByTestId("add-tile-health"));
+    expect(screen.queryByTestId("home-tiles-add-slot")).toBeNull();
+    expect(screen.queryByTestId("home-tiles-add-picker")).toBeNull();
+    const el = screen.getByTestId("tile-health");
+    expect(el.dataset.x).toBe("8");
+    expect(el.dataset.y).toBe("2");
+    expect(screen.getAllByTestId(/^tile-(calendar|todo|habits|finance|notes|health)$/)).toHaveLength(6);
+  });
+
+  it("Esc 收起列表（键盘路径不只剩鼠标）", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-add"));
+    expect(screen.getByTestId("home-tiles-add-picker")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("home-tiles-add-picker")).toBeNull();
+  });
+
+  it("添加槽规格钉在 CSS 上：虚线 + 列表在槽内自滚", () => {
+    const btn = /\.home-tiles__add-btn\s*\{([^}]*)\}/.exec(css);
+    expect(btn?.[1] ?? "").toMatch(/border:\s*1px dashed var\(--line-strong\)/);
+    const list = /\.home-tiles__pick-list\s*\{([^}]*)\}/.exec(css);
+    expect(list?.[1] ?? "").toMatch(/overflow-y:\s*auto/);
+  });
+
   it("画布左右各补回 --sp-1：卡片外缘与上方摘要卡对齐（实测 16 / 1350）", () => {
     const canvas = /\.home-tiles__canvas\s*\{([^}]*)\}/.exec(css);
     const body = canvas?.[1] ?? "";

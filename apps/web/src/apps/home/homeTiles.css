@@ -429,3 +429,156 @@
   outline: none;
   box-shadow: var(--focus-ring);
 }
+
+/* ── 添加槽：网格里的空格 = 显式入口（团队 2026-11-22 裁定选 B） ──
+   虚线槽占住那一格，让人看见「这块地方还能长东西」；点开只给一个模块列表。
+   z-index 必须给：列表铺满那一格时要能盖住同排邻居的卡（同层级后渲染，但排布不许靠运气）。 */
+.home-tiles__add {
+  position: absolute;
+  box-sizing: border-box;
+  padding: var(--sp-1);
+  z-index: 30;
+}
+
+.home-tiles__add-btn {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--txt-faint);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.home-tiles__add-btn:hover {
+  border-color: var(--accent);
+  color: var(--txt);
+  background: var(--accent-soft);
+}
+
+.home-tiles__add-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 模块列表：贴着那一格**向上长**（max-height 320px）。
+   只铺满一格的话可视区只有 ~104px ≈ 4 行，39 个模块要滚十屏——列表内滚留给人挑，
+   方向选上：底部行下沿是页面底，往下长会被视口切掉。 */
+.home-tiles__pick {
+  position: absolute;
+  left: var(--sp-1);
+  right: var(--sp-1);
+  bottom: var(--sp-1);
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-2);
+  box-sizing: border-box;
+}
+
+.home-tiles__pick-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: 2px;
+}
+
+.home-tiles__pick-hint {
+  margin: 0;
+  color: var(--txt-faint);
+  font-size: 11px;
+}
+
+/* 关闭出口：面板盖住了入口按钮，鼠标用户不能只靠 Esc。 */
+.home-tiles__pick-close {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--txt-faint);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.home-tiles__pick-close:hover {
+  color: var(--txt);
+  background: var(--surface-3);
+}
+
+.home-tiles__pick-close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 分段标题：内核 / 管理类排在后半段，不隐藏（宁散勿丢），但先让人看见能当墙面块的那批。 */
+.home-tiles__pick-sect {
+  padding: 3px 6px 1px;
+  color: var(--txt-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+
+.home-tiles__pick-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.home-tiles__pick-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 3px 6px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--txt);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-tiles__pick-item:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.home-tiles__pick-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.home-tiles__pick-name {
+  flex: 0 0 auto;
+}
+
+.home-tiles__pick-desc {
+  color: var(--txt-faint);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

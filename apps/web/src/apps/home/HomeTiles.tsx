@@ -34,9 +34,12 @@ export const TILE_ROWS = 4;
 /** 一块默认占 4 列 × 2 行（12 列 → 一排 3 块）。 */
 export const TILE_W = 4;
 export const TILE_H = 2;
-/** 最多几块。刻意留空位（4 行 × 3 列能放 6 块，这里只放 5）——没有空位的网格「怎么拖都弹回」，
- *  用户会读成「拖拽坏了」。 */
+/** **初始**铺几块：5 块 = 2 行 × 3 列留一格（那一格是「＋ 添加区块」槽，团队 2026-11-22 选 B）。
+ *  刻意留空位——没有空位的网格「怎么拖都弹回」，用户会读成「拖拽坏了」。
+ *  ⚠️ 这是**初始**数量，不是上限：上限见 `TILE_CAPACITY`（网格容量）。 */
 export const TILE_MAX = 5;
+/** 网格容量：默认 4×2 的块在 12 列 × 4 行的网格里最多 6 块（2 行 × 3 列）。 */
+export const TILE_CAPACITY = Math.floor(TILE_ROWS / TILE_H) * Math.floor(TILE_COLS / TILE_W);
 /** 缩放的最小尺寸：1 行 × 3 列（再小就装不下「名字 + 一句能力」）。 */
 export const TILE_MIN_W = 3;
 export const TILE_MIN_H = 1;
@@ -246,6 +249,29 @@ export function initialLayout(mods: { id: string; name: string }[]): TileLayout[
   }));
 }
 
+/**
+ * 空格位：按默认块尺寸（4×2）逐格试放，返回第一个放得下的格子。
+ * 添加槽就画在这儿——它是「这块地方还能长东西」的显式信号，不是装饰。
+ * 纯函数、jsdom 可测；占位判定与 `resolveSlot` 同口径（同一个 `overlaps`）。
+ */
+export function firstFreeSlot(tiles: TileLayout[], rows = TILE_ROWS): Slot | null {
+  for (let y = 0; y + TILE_H <= rows; y += 1) {
+    for (let x = 0; x + TILE_W <= TILE_COLS; x += TILE_W) {
+      const probe: TileLayout = {
+        i: "__free__",
+        moduleId: "",
+        name: "",
+        x,
+        y,
+        w: TILE_W,
+        h: TILE_H,
+      };
+      if (!tiles.some((t) => overlaps(probe, t))) return { x, y };
+    }
+  }
+  return null;
+}
+
 interface DragState {
   i: string;
   pointerId: number;
@@ -309,6 +335,7 @@ export function HomeTiles() {
   const [editing, setEditing] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [resizeId, setResizeId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const seeded = useRef(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -320,6 +347,66 @@ export function HomeTiles() {
     seeded.current = true;
     setTiles(initialLayout(candidates));
   }, [candidates]);
+
+  /** 已上墙的模块 id —— 添加列表里不再出现（同一模块不放两块）。 */
+  const placedIds = useMemo(() => new Set(tiles.map((t) => t.moduleId)), [tiles]);
+  /** 添加槽位置：网格里第一个还放得下默认块的格子；满了就是 null（不硬造槽）。 */
+  const freeSlot = useMemo(() => firstFreeSlot(tiles), [tiles]);
+  /**
+   * 可添加的模块，**分两段**：先「能当墙面块」的（有 `TILE_DESC` = 我们核对过它能干什么），
+   * 再「其它模块」（内核 / 管理类：账户与鉴权、系统、外观……）。
+   * 为什么只排序不隐藏：真去掉了就等于替用户做主（宁散勿丢）；但注册顺序在最前面的
+   * 恰恰是 `agents` / `assets` / `auth` 这批内核模块，39 条平铺一屏全是它们，
+   * 用户会读成「这个入口是给人添乱的」。
+   */
+  const addable = useMemo(() => {
+    const rest = candidates.filter((m) => !placedIds.has(m.id));
+    return {
+      skill: rest.filter((m) => TILE_DESC[m.id]),
+      others: rest.filter((m) => !TILE_DESC[m.id]),
+      total: rest.length,
+    };
+  }, [candidates, placedIds]);
+
+  /** 加一块到空格位。满了 / 重复模块 -> 不动（不做静默替换，也不编一个位置）。 */
+  const addTile = (m: { id: string; name: string }) => {
+    setTiles((list) => {
+      if (list.length >= TILE_CAPACITY) return list;
+      if (list.some((t) => t.moduleId === m.id)) return list;
+      const slot = firstFreeSlot(list);
+      if (!slot) return list;
+      return [
+        ...list,
+        { i: m.id, moduleId: m.id, name: m.name, x: slot.x, y: slot.y, w: TILE_W, h: TILE_H },
+      ];
+    });
+    setAdding(false);
+  };
+
+  const pickRow = (list: { id: string; name: string }[]) =>
+    list.map((m) => (
+      <li key={m.id}>
+        <button
+          type="button"
+          className="home-tiles__pick-item"
+          onClick={() => addTile(m)}
+          data-testid={`add-tile-${m.id}`}
+        >
+          <span className="home-tiles__pick-name">{m.name}</span>
+          {TILE_DESC[m.id] ? <span className="home-tiles__pick-desc">{TILE_DESC[m.id]}</span> : null}
+        </button>
+      </li>
+    ));
+
+  // Esc 收起模块列表——键盘路径不能只剩鼠标一条。
+  useEffect(() => {
+    if (!adding) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAdding(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [adding]);
 
   const onGripDown = (e: ReactPointerEvent<HTMLButtonElement>, t: TileLayout) => {
     if (!editing || e.button > 0) return;
@@ -665,6 +752,66 @@ export function HomeTiles() {
             </article>
           );
         })}
+
+        {/* 添加槽（团队 2026-11-22 裁定选 B）：网格里最后一个空格 = 「＋ 添加区块」。
+            交互刻意保持最小——虚线槽 + 点开一个模块列表，先不做「拖进格子」。
+            有空格且还有没上墙的模块才出现；拖动/缩放期间让位（那时在做排布，不掺加块）。 */}
+        {freeSlot && addable.total > 0 && !busy ? (
+          <div
+            className="home-tiles__add"
+            data-testid="home-tiles-add-slot"
+            data-gx={freeSlot.x}
+            data-gy={freeSlot.y}
+            style={{
+              left: `${(freeSlot.x / TILE_COLS) * 100}%`,
+              width: `${(TILE_W / TILE_COLS) * 100}%`,
+              top: freeSlot.y * TILE_ROW_H,
+              height: TILE_H * TILE_ROW_H,
+            }}
+          >
+            <button
+              type="button"
+              className="home-tiles__add-btn"
+              aria-expanded={adding}
+              aria-label="添加区块"
+              onClick={() => setAdding((v) => !v)}
+              data-testid="home-tiles-add"
+            >
+              ＋ 添加区块
+            </button>
+            {adding ? (
+              <div
+                className="home-tiles__pick"
+                role="group"
+                aria-label="选择要添加的区块"
+                data-testid="home-tiles-add-picker"
+              >
+                <div className="home-tiles__pick-head">
+                  <p className="home-tiles__pick-hint">放哪一块到这一格</p>
+                  {/* 面板铺满整格、盖住了入口按钮 —— 鼠标路径必须有自己的出口，不能只靠 Esc。 */}
+                  <button
+                    type="button"
+                    className="home-tiles__pick-close"
+                    aria-label="收起模块列表"
+                    onClick={() => setAdding(false)}
+                    data-testid="home-tiles-add-close"
+                  >
+                    ×
+                  </button>
+                </div>
+                <ul className="home-tiles__pick-list">
+                  {pickRow(addable.skill)}
+                  {addable.others.length ? (
+                    <>
+                      <li className="home-tiles__pick-sect">其它模块（内核 / 管理类）</li>
+                      {pickRow(addable.others)}
+                    </>
+                  ) : null}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* 落位预览：虚线框标出松手会去的格子。只在「当前压着别人」时出现。 */}
         {ghost ? (

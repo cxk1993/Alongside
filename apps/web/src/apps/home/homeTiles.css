@@ -326,6 +326,17 @@
   cursor: grabbing;
 }
 
+/* 落位预览：松手会去的那个格子（虚线圈）。压着别人时才出现，不复述现状。 */
+.home-tiles__ghost {
+  position: absolute;
+  box-sizing: border-box;
+  z-index: 55;
+  border: 1px dashed var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+
 /* 底线①：inset:0 遮罩。拖动时任何子内容（iframe / canvas / 内嵌站）都收不到指针。 */
 .home-tiles__veil {
   position: absolute;

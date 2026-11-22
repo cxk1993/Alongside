@@ -489,6 +489,19 @@ export function HomeTiles() {
     });
   };
 
+  /**
+   * 拖动中的落位预览：与松手时**同一个** `resolveSlot`，不是另写一套「看起来差不多」的算法。
+   * 预览与落位不一致，比没有预览更坏——用户会记住那一帧。
+   */
+  const ghost = useMemo(() => {
+    if (!dragId) return null;
+    const me = tiles.find((t) => t.i === dragId);
+    if (!me) return null;
+    const others = tiles.filter((t) => t.i !== dragId);
+    if (!others.some((o) => overlaps(me, o))) return null;
+    return resolveSlot({ x: me.x, y: me.y }, { w: me.w, h: me.h }, others);
+  }, [dragId, tiles]);
+
   const dragName = dragId ? tiles.find((t) => t.i === dragId)?.name : undefined;
   const resizeName = resizeId ? tiles.find((t) => t.i === resizeId)?.name : undefined;
   const busy = Boolean(dragId || resizeId);
@@ -568,7 +581,11 @@ export function HomeTiles() {
                     data-testid={`tile-chip-${t.moduleId}`}
                     aria-hidden
                   >
-                    {isResize ? `${t.w}×${t.h} 格` : colliding ? "重叠 · 松手让位" : `${t.x},${t.y}`}
+                    {isResize
+                      ? `${t.w}×${t.h} 格`
+                      : colliding
+                        ? `重叠 · 松手落到 ${ghost ? `${ghost.x},${ghost.y}` : "原处"}`
+                        : `${t.x},${t.y}`}
                   </span>
                 ) : null}
                 <button
@@ -648,6 +665,23 @@ export function HomeTiles() {
             </article>
           );
         })}
+
+        {/* 落位预览：虚线框标出松手会去的格子。只在「当前压着别人」时出现。 */}
+        {ghost ? (
+          <div
+            className="home-tiles__ghost"
+            aria-hidden
+            data-testid="home-tiles-ghost"
+            data-gx={ghost.x}
+            data-gy={ghost.y}
+            style={{
+              left: `${(ghost.x / TILE_COLS) * 100}%`,
+              width: `${((tiles.find((t) => t.i === dragId)?.w ?? TILE_W) / TILE_COLS) * 100}%`,
+              top: ghost.y * TILE_ROW_H,
+              height: (tiles.find((t) => t.i === dragId)?.h ?? TILE_H) * TILE_ROW_H,
+            }}
+          />
+        ) : null}
 
         {/* 底线①：拖动时盖住整个 canvas。pointer capture 在把手上，遮罩不会抢事件，
             但它挡住了下面所有内容（含将来会有的 iframe）——mousemove 才不会丢。 */}

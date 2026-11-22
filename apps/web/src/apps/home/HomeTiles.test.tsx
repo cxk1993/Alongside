@@ -273,6 +273,55 @@ describe("区块区 · 拖动", () => {
   });
 });
 
+// ── 落位预览：预览与落位必须是同一套算法 ─────────────────────────
+describe("区块区 · 落位预览", () => {
+  it("压着别人时出现虚线预览框，且位置 = 松手后真正落到的格子", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    expect(screen.queryByTestId("home-tiles-ghost")).toBeNull();
+
+    const grip = screen.getByTestId("tile-grip-calendar");
+    act(() => firePointer(grip, "pointerdown", { clientX: 10, clientY: 10, button: 0 }));
+    // +4 格 -> 整块压在 todo(4,0) 上
+    act(() => fireWindow("pointermove", { clientX: 410, clientY: 10 }));
+    const ghost = screen.getByTestId("home-tiles-ghost");
+    const gx = ghost.getAttribute("data-gx");
+    const gy = ghost.getAttribute("data-gy");
+    expect(Number(gx)).toBe(0);
+    expect(Number(gy)).toBe(0);
+
+    act(() => fireWindow("pointerup", { clientX: 410, clientY: 10 }));
+    // 松手后的实际坐标必须与预览一致（0,0），否则预览就是在骗人
+    expect(Number(screen.getByTestId("tile-calendar").getAttribute("data-x"))).toBe(Number(gx));
+    expect(Number(screen.getByTestId("tile-calendar").getAttribute("data-y"))).toBe(Number(gy));
+    expect(screen.queryByTestId("home-tiles-ghost")).toBeNull();
+  });
+
+  it("没压着别人时不画预览框（不重复叙述当前位置）", () => {
+    useDesktopStore.setState({ modules: { calendar: mod("calendar", "日程表") } });
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    act(() =>
+      firePointer(screen.getByTestId("tile-grip-calendar"), "pointerdown", {
+        clientX: 10,
+        clientY: 10,
+        button: 0,
+      }),
+    );
+    act(() => fireWindow("pointermove", { clientX: 110, clientY: 10 }));
+    expect(screen.queryByTestId("home-tiles-ghost")).toBeNull();
+    act(() => fireWindow("pointerup", { clientX: 110, clientY: 10 }));
+  });
+
+  it("预览框是虚线 + accent 底（视觉上区别于真块）", () => {
+    const m = /\.home-tiles__ghost\s*\{([^}]*)\}/.exec(css);
+    expect(m).toBeTruthy();
+    const body = m ? m[1] : "";
+    expect(body).toMatch(/border:\s*1px dashed var\(--accent\)/);
+    expect(body).toMatch(/pointer-events:\s*none/);
+  });
+});
+
 // ── 缩放：与拖动同三条底线，只是把 w/h 交给它 ─────────────────────
 describe("区块区 · 缩放", () => {
   it("resolveSize：不冲突时给请求尺寸", () => {

@@ -224,8 +224,27 @@ function loadPersisted(): PersistedShape | null {
   }
 }
 
+/**
+ * ★ ISSUE-017 真栈回归（2026-11-22）：hydrate 之前的「空桌面」不许覆盖旧快照。
+ *   实际时序：F5 后 store 先以 windows=[] 起来 → 后端插件同步（enableModule 等）会触发
+ *   savePersisted → 把「上一轮真实开着的窗口」洗掉 → 等 modules 非空再 hydrate 已经没东西可恢复。
+ *   单测抓不到（测试里没人在这中间保存），真浏览器一刷新就丢布局。
+ *   规则：**尚未 hydrate 过，且当前窗口为空，而快照里明明有窗口** → 这次保存直接跳过。
+ *   hydrate 一旦跑过（哪怕是「没有快照」），此后一切保存照旧（用户真空桌面也要能存）。
+ */
+let hydratedOnce = false;
+
+/** 测试专用：隔离模块级守卫（生产代码不要调用）。 */
+export function __resetHydrationGuardForTests(): void {
+  hydratedOnce = false;
+}
+
 function savePersisted(s: DesktopState): void {
   try {
+    if (!hydratedOnce && s.windows.length === 0) {
+      const prev = loadPersisted();
+      if (prev && Array.isArray(prev.windows) && prev.windows.length > 0) return;
+    }
     const enabled: Record<string, boolean> = {};
     for (const id in s.modules) enabled[id] = s.modules[id].enabled;
     // ★ T23：计数器已**下沉进工作区对象**，顶层不再写 topZ/topPinZ/seq
@@ -648,6 +667,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   },
 
   hydrate: () => {
+    hydratedOnce = true;
     const persisted = loadPersisted();
     if (!persisted) return;
     // ★ 2026-11-22（汐瑶）：壳偏好**不再从窗口快照恢复**（旧值一律丢弃）。

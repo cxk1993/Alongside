@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { activeWorkspace, makeWorkspace, useDesktopStore, type DesktopState } from "@/kernel/store";
+import {
+  __resetHydrationGuardForTests,
+  activeWorkspace,
+  makeWorkspace,
+  useDesktopStore,
+  type DesktopState,
+} from "@/kernel/store";
 import type { ModuleManifest } from "@/kernel/types";
 
 const alpha: ModuleManifest = {
@@ -34,7 +40,10 @@ function reset(): void {
 }
 
 describe("窗口系统 store", () => {
-  beforeEach(reset);
+  beforeEach(() => {
+    __resetHydrationGuardForTests();
+    reset();
+  });
 
   it("开窗：注册后 openWindow 生成一扇窗口，几何取自 manifest", () => {
     useDesktopStore.getState().registerModule(alpha);
@@ -142,4 +151,33 @@ describe("窗口系统 store", () => {
     st.openWindow("mod-alpha");
     expect(useDesktopStore.getState().windows).toHaveLength(0);
   });
-});
+
+  it("ISSUE-017：hydrate 之前的空桌面保存不许洗掉旧快照", () => {
+    const st = useDesktopStore.getState();
+    st.registerModule(alpha);
+    st.openWindow("mod-alpha");
+    const id = useDesktopStore.getState().windows[0].instanceId;
+    st.setGeo(id, { x: 88, y: 99 });
+
+    // 模拟 F5：内存清空，但快照里仍有一扇窗
+    useDesktopStore.setState({
+      modules: {},
+      windows: [],
+      workspaces: [makeWorkspace(1)],
+      activeWorkspaceId: "ws1",
+    });
+
+    // hydrate 之前，插件同步会调 enableModule → savePersisted —— 这一下不许把快照洗成空
+    const fresh = useDesktopStore.getState();
+    fresh.registerModule(alpha);
+    fresh.enableModule("mod-alpha");
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) as string);
+    expect(saved.windows).toHaveLength(1);
+    expect(saved.windows[0].geo.x).toBe(88);
+
+    // 模块齐了再 hydrate → 窗口回来
+    useDesktopStore.getState().hydrate();
+    expect(useDesktopStore.getState().windows).toHaveLength(1);
+    expect(useDesktopStore.getState().windows[0].geo.x).toBe(88);
+  });
+})

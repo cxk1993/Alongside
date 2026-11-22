@@ -376,3 +376,303 @@
   flex: 0 0 auto;
   margin-left: auto;
 }
+
+/* ★ P0-c · 鼠标命中的前提（2026-11-22 11:0x 实测撞出来的，与 T31 同一坑）：
+   宿主 `.windows__surface` / `.collab-surface` 整体 `pointer-events: none`（背景面不吃鼠标，
+   桌面右键/拖选才不被挡），靠白名单把可交互层重新打开 auto。**pointer-events 会继承**：
+   新做的层不显式写 auto，就继承 none —— 浏览器里看得见、elementFromPoint 落到 DIV.windows、
+   点击/滚轮全无反应。实测：能力芯片 pe=none，点中心命中 .windows。
+   这两块是本插件自己的层，所以在这里打开，不去动壳的 desktop.css（那是壳手术的领地）。 */
+.collab-caps,
+.collab-act {
+  pointer-events: auto;
+}
+
+/* ── 能力条（P0-c：看得见的模块入口 · 主人 10:06「不方便」）─────────────
+   为什么是常驻一行而不是下拉：壳收掉之后模块入口只剩 Ctrl+K，
+   而新用户不会先按快捷键。入口要「一眼看得见、一格点得到」。
+   展开态是行内 disclosure（不是弹层）：不抢焦点、不新增 z-index，
+   也不会掉进宿主 `pointer-events` 白名单的坑（桌面背景面是白名单制）。 */
+.collab-caps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.collab-caps__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.collab-caps__label {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--txt-faint);
+}
+
+.collab-caps__count {
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--txt-dim);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 单行横向滚动：21 个芯片在 1366 宽下也不换行、不挤压主墙 */
+.collab-caps__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+/* 展开态是全量网格：换行 + 上方 .collab-caps__grid 给**像素级**上限内滚
+   （★ T30 教训：百分比 max-height 在 auto 行里等于自指，会把内容压成一条缝） */
+.collab-caps__chips--wrap {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.collab-chip__item {
+  flex: 0 0 auto;
+  list-style: none;
+}
+
+.collab-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 3px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--txt);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.collab-chip:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.collab-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.collab-chip__badge {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.collab-caps__filter {
+  flex: 1 1 auto;
+  min-width: 120px;
+  padding: 3px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--txt);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.collab-caps__filter:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.collab-caps__more {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--txt-dim);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.collab-caps__more:hover {
+  color: var(--txt);
+  border-color: var(--accent);
+}
+
+.collab-caps__more:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.collab-caps__grid {
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+/* ── 活动条（AgentStream）：它正在做什么 ──────────────────────────
+   和「它做过的」分工：那张卡是提案终态（我签过/撤过/否过），
+   这里是不产生提案的动作流（AI 刚碰了日历、刚读了待办）。 */
+.collab-act {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+/* 展开态给像素上限 + 内滚，不让活动条撑破主墙 */
+.collab-act.is-open {
+  max-height: 180px;
+  overflow: auto;
+}
+
+.collab-act__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: 12px;
+}
+
+.collab-act__title {
+  flex: 0 0 auto;
+  color: var(--txt-dim);
+}
+
+.collab-act__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--txt-faint);
+}
+
+.collab-act__dot--live {
+  background: var(--ok);
+}
+
+.collab-act__dot--connecting {
+  background: var(--warn);
+}
+
+.collab-act__dot--offline {
+  background: var(--txt-faint);
+}
+
+.collab-act__state {
+  flex: 0 0 auto;
+  color: var(--txt-faint);
+}
+
+.collab-act__count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--txt-faint);
+}
+
+.collab-act__toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--txt-dim);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.collab-act__toggle:hover {
+  color: var(--txt);
+  border-color: var(--accent);
+}
+
+.collab-act__toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.collab-act__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.collab-act__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.collab-act__at,
+.collab-act__src {
+  flex: 0 0 auto;
+  color: var(--txt-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.collab-act__topic {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.collab-act__sum {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

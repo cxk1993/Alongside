@@ -98,3 +98,55 @@ describe("T31 · 共处工作台浮层的 pointer-events 白名单", () => {
     expect(card + status).toMatch(/pointer-events\s*:\s*auto/);
   });
 });
+
+/**
+ * ★ P0-c · 能力条 / 活动条的布局回归钉子（2026-11-22 10:5x）。
+ *
+ * 两块都是「新做出来的东西把主墙挤破」的高风险区：
+ *   · 能力条 21 个芯片若不强制单行横向滚动，1366×768 下会换三行、把提案卡挤没；
+ *   · 展开态若不设像素上限，全量网格会把主墙顶出可视区（而人被挤走后不知道该滚哪里）；
+ *   · 活动条展开同理。
+ *
+ * 与 T30 同一条教训：**max-height 在 auto 行里写百分比等于自指**，只许 px。
+ * 这条做成全表断言（不止这一次的两个块），以后谁写百分比都会红。
+ */
+describe("P0-c · 能力条与活动条的高度/滚动规则", () => {
+  it("能力条芯片单行横向滚动（换行会把主墙挤掉）", () => {
+    const chips = blockOf(raw, ".collab-caps__chips");
+    expect(chips).toMatch(/flex-wrap\s*:\s*nowrap/);
+    expect(chips).toMatch(/overflow-x\s*:\s*auto/);
+  });
+
+  it("全量网格与活动条展开态：像素上限 + 内滚", () => {
+    const grid = blockOf(raw, ".collab-caps__grid");
+    expect(grid).toMatch(/max-height\s*:\s*\d+px/);
+    expect(grid).toMatch(/overflow\s*:\s*auto/);
+
+    const act = blockOf(raw, ".collab-act.is-open");
+    expect(act).toMatch(/max-height\s*:\s*\d+px/);
+    expect(act).toMatch(/overflow\s*:\s*auto/);
+  });
+
+  it("全表不许出现百分比 max-height（T30 那类自指一处都不许回潮）", () => {
+    expect(stripComments(raw)).not.toMatch(/max-height\s*:\s*\d+(\.\d+)?%/);
+  });
+
+  it("能力芯片与「全部」按钮有 focus 环（键盘用户找得到自己在哪）", () => {
+    expect(blockOf(raw, ".collab-chip:focus-visible")).toMatch(/box-shadow\s*:\s*var\(--focus-ring\)/);
+    expect(blockOf(raw, ".collab-caps__more:focus-visible")).toMatch(/box-shadow\s*:\s*var\(--focus-ring\)/);
+  });
+});
+
+/**
+ * ★ P0-c · 鼠标命中前提（与 T31 同一坑，2026-11-22 11:0x 实测）。
+ *
+ * 宿主背景面 `pointer-events: none` + 白名单是**继承**关系：新层不显式写 auto
+ * 就继承 none，浏览器里看得见却点不到（elementFromPoint 落到 DIV.windows）。
+ * jsdom 测不出命中，只能钉规则文本 —— 真验收另做 elementFromPoint。
+ */
+describe("P0-c · 新层的 pointer-events（继承陷阱）", () => {
+  it("能力条与活动条自己打开指针事件（漏了 = 看得见、点不到）", () => {
+    const block = blockOf(raw, ".collab-caps,");
+    expect(block).toMatch(/pointer-events\s*:\s*auto/);
+  });
+});

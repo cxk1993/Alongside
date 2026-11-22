@@ -110,7 +110,7 @@
 }
 
 .home__favs-empty {
-  color: var(--txt-faint);
+  color: var(--txt-empty);
   font-size: 12px;
 }
 
@@ -213,7 +213,7 @@
 
 .home-empty {
   margin: 0;
-  color: var(--txt-faint);
+  color: var(--txt-empty);
   font-size: 12px;
   line-height: 1.6;
 }

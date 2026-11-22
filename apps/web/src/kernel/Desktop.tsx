@@ -19,6 +19,8 @@ import {
 import { TimeWidget } from "./shell/TimeWidget";
 import { useShortcuts, type ShortcutHandlers } from "./Shortcuts";
 import { TopBar } from "./TopBar";
+// ★ 两屏（主人 2026-11-22 13:48）：人的主屏组件。壳只按工作区决定「渲染谁」。
+import { HomeMyToday } from "@/apps/home/HomeMyToday";
 import { WindowManager } from "./WindowManager";
 import { DesktopSidebar, readSideCollapsed } from "./shell/DesktopSidebar";
 import { SlotHost } from "./slots/SlotHost";
@@ -146,6 +148,8 @@ export function Desktop() {
   const activeWorkspaceId = useDesktopStore((s) => s.activeWorkspaceId);
   const createWorkspace = useDesktopStore((s) => s.createWorkspace);
   const switchWorkspace = useDesktopStore((s) => s.switchWorkspace);
+  /** ★ 两屏：**第 1 个工作区 = 人的主屏**（我的今天），其余工作区 = AI 工作面（collab 原样）。 */
+  const isHomeWorkspace = workspaces[0]?.id === activeWorkspaceId;
   const toggleTheme = useTheme((s) => s.toggle);
 
   // 「插件管理」的落点用**能力发现**（与 WindowFrame.tsx:56 同一口径）：
@@ -426,8 +430,16 @@ export function Desktop() {
               （position:absolute + pointer-events:none + 白名单），窗口才是主区 ——
               这就是主人看到的「半改没改」：新墙与旧桌面并置，且新墙还点不到。
               现在：主墙吃满主区并自己滚；窗口降级为绝对定位的细节层（默认零窗口）。 */}
-          <main className="wall" data-testid="desktop-wall" aria-label="共处工作台">
-            <SlotHost slot="desktop.widget" className="wall__surface" fallback={<WallEmpty />} />
+          <main
+            className="wall"
+            data-testid="desktop-wall"
+            aria-label={isHomeWorkspace ? "我的今天" : "共处工作台"}
+          >
+            {isHomeWorkspace ? (
+              <HomeMyToday />
+            ) : (
+              <SlotHost slot="desktop.widget" className="wall__surface" fallback={<WallEmpty />} />
+            )}
           </main>
           {/* 细节层：容器不吃鼠标，窗口自身 auto —— 否则透明覆盖层会挡住主墙点击 */}
           <div className="windows">

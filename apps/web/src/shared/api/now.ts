@@ -45,6 +45,31 @@ export interface SightNow {
   attention?: SightAttentionItem[];
   tensions?: SightTensionItem[];
   degraded?: SightDegradedItem[];
+  /**
+   * ★ 2026-11-22：服务端**一直**在返回 `time`，但前端类型里此前没有它 —— 于是「下一件事 /
+   * 空档」在界面上不存在（顶栏和 collab 都只用了 head/attention/tensions）。
+   * 人的主屏（我的今天）第一屏就是靠这三项撑起来的，补上类型，不改契约（字段早已在响应里）。
+   */
+  time?: SightTime;
+}
+
+export interface SightNextEvent {
+  title?: string;
+  start_at?: string;
+  minutes_until?: number;
+  location?: string | null;
+}
+
+export interface SightFreeSlot {
+  start?: string;
+  end?: string;
+  minutes?: number;
+}
+
+export interface SightTime {
+  busy_until?: string | null;
+  next_event?: SightNextEvent | null;
+  free_slots?: SightFreeSlot[];
 }
 
 interface NowState {

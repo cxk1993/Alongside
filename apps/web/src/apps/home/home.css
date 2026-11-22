@@ -1,0 +1,345 @@
+/* 「我的今天」= 工作区 1（人的主屏）。颜色/间距只用设计令牌（G18：不写死色值）。 */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+  min-height: 0;
+  padding: var(--sp-4);
+  box-sizing: border-box;
+  overflow: auto;
+  color: var(--txt);
+  font-family: var(--font-sans);
+}
+
+.home__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.home__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.home__when {
+  color: var(--txt-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 我的常用 ─────────────────────────────────────────────── */
+.home__favs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.home__favs-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--txt-faint);
+  letter-spacing: 0.06em;
+}
+
+.home__fav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.home__fav-item {
+  list-style: none;
+}
+
+.home__fav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 5px var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--txt);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.home__fav:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.home__fav:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* × 只在悬停/聚焦时清楚可见，但始终在 DOM 里（键盘与触摸也能用） */
+.home__fav-x {
+  opacity: 0;
+  padding: 0 2px;
+  color: var(--txt-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.home__fav:hover .home__fav-x,
+.home__fav:focus-visible .home__fav-x {
+  opacity: 1;
+}
+
+.home__fav-x:hover {
+  color: var(--warn);
+}
+
+.home__favs-empty {
+  color: var(--txt-faint);
+  font-size: 12px;
+}
+
+.home__fav-add {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--txt-dim);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.home__fav-add:hover,
+.home__fav-add[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.home__fav-add:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 选择面板：行内展开（不是弹层）——不抢焦点、不需要 z-index。
+   高度用**像素上限 + 内滚**（百分比 max-height 在 auto 行里等于自指，见 T30 教训）。 */
+.home__pick {
+  flex: 1 0 100%;
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.home__pick-hint {
+  margin: 0 0 var(--sp-1);
+  color: var(--txt-faint);
+  font-size: 11px;
+}
+
+.home__pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-1);
+}
+
+.home__pick-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-1);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.home__pick-item:hover {
+  background: var(--surface-2);
+}
+
+.home__pick-item.is-disabled {
+  color: var(--txt-faint);
+  cursor: not-allowed;
+}
+
+/* ── 四块内容 ─────────────────────────────────────────────── */
+.home__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-3);
+  align-items: start;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.home-card__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt-dim);
+  letter-spacing: 0.06em;
+}
+
+.home-empty {
+  margin: 0;
+  color: var(--txt-faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.home-empty--warn {
+  color: var(--warn);
+}
+
+.home-next {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.home-next__label {
+  font-size: 11px;
+  color: var(--txt-faint);
+}
+
+.home-next__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.home-next__meta {
+  font-size: 12px;
+  color: var(--txt-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--txt-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-slots__min {
+  color: var(--txt-faint);
+}
+
+.home-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: 13px;
+}
+
+.home-list--warn li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1);
+}
+
+.home-tension__sum {
+  color: var(--warn);
+}
+
+.home-tension__sev {
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--warn);
+}
+
+.home-tension__act {
+  flex: 1 0 100%;
+  color: var(--txt-dim);
+  font-size: 12px;
+}
+
+/* ── 底部：降级源 + 去 AI 副屏 ─────────────────────────────── */
+.home__foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.home__sources {
+  color: var(--txt-faint);
+  font-size: 11px;
+}
+
+.home__sources summary {
+  cursor: pointer;
+}
+
+.home__sources p {
+  margin: var(--sp-1) 0 0;
+}
+
+.home__ai {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 5px var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--txt-dim);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.home__ai:hover {
+  color: var(--txt);
+  border-color: var(--accent);
+}
+
+.home__ai:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

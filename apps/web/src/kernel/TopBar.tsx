@@ -20,61 +20,57 @@ interface Props {
 }
 
 /**
- * 顶栏：品牌 / 全局搜索入口 / 走秒时钟（U2 今日摘要面板）/ 整理桌面 / 主题切换。
- * 锁定的「登录相关」不在内核职责内（鉴权由 T03 提供），这里只留一个无副作用的占位按钮位。
- */
-/**
- * ★ 2026-11-22（汐瑶 · 收壳 P1-a）：顶栏从「应用菜单」换成「此刻状态条」。
+ * 顶栏：品牌 / 全局搜索 / 此刻状态 / 时钟 / 工作区页签 / 整理桌面 / 主题。
  *
- * 只上屏**真数据**：今日摘要 BFF（`/api/v1/summary/today`）里 status=ok 的 provider，
- * 每项给「名字 + 条目数」。拿不到就整块不渲染 —— 宁缺不编（判据 16/25）。
- * 这是主人打开平台第一眼该读到的句子：现在是什么，而不是版本号。
+ * ★ 顶栏语义化（2026-11-22 汐瑶 · 云昔 13:5x 派活）：第一行该读到「现在是什么」，不是版本号 ——
+ *   ● AI 在场 · 下一件 19:00 · 今天 2 · 欠 0 · 张力 1
+ *
+ * 取数口径唯一：`useSightNow()`（shared/api/now.ts 单例，与 collab 同一份采样时刻）。
+ * 为什么不再自己拉一次：两处采样时刻可以不同，界面会自己跟自己打架。
+ * 「今天 N」来自今日摘要 BFF；摘要 unavailable 时**只省这一段**，其余照常。
+ * 诚实边界：sight 不是 ready 就整块不渲染（missing = 还没做，error = 坏了，都不许编）。
  */
 function ShellNow() {
-  const { data } = useSummaryToday();
-  const rows = (data?.providers ?? [])
-    .filter((p) => p.status === "ok")
-    .map((p) => ({
-      label: p.label ?? p.id,
-      n: Array.isArray(p.data?.items) ? p.data!.items!.length : 0,
-    }));
-  if (rows.length > 0) {
-    return (
-      <span className="topbar__now" data-testid="topbar-now" aria-label="此刻">
-        <span className="topbar__now-lead">此刻</span>
-        {rows.map((r) => (
-          <span key={r.label} className="topbar__now-item">
-            {r.label} <b>{r.n}</b>
-          </span>
-        ))}
-      </span>
-    );
-  }
-  // 摘要不可用时退到「它看见的」实测：在场 / 采样时刻 / 张力数。
-  // 为什么不是编一句：sight 有值才说，拿不到就整块不渲染（宁缺不编）。
-  return <ShellSightLine />;
-}
+  const { status, data } = useSightNow();
+  const { data: summary } = useSummaryToday();
+  if (status !== "ready" || !data) return null;
 
-function ShellSightLine() {
-  // ★ P0（2026-11-22）：与 collab 共享同一个 /sight/now 口径（shared/api/now）。
-  //   此前顶栏自己 useQuery、collab 自己 useEffect —— 两处采样时刻可以不同。
-  const { data: p } = useSightNow();
-  if (!p) return null;
-  const hhmm = p.head?.now_local ? String(p.head.now_local).slice(11, 16) : null;
-  const tensions = p.tensions?.length ?? 0;
-  if (!hhmm && tensions === 0) return null;
+  const t = data.time;
+  const hhmm = (iso?: string) => (iso ? String(iso).slice(11, 16) : null);
+
+  // 「正在做」：忙到几点 > 下一件几点 > 空闲（都取服务端 time 块，不推测）
+  const doing = t?.busy_until
+    ? `忙到 ${hhmm(t.busy_until) ?? "—"}`
+    : t?.next_event?.start_at
+      ? `下一件 ${hhmm(t.next_event.start_at) ?? "—"}`
+      : "空闲";
+
+  const okProviders = (summary?.providers ?? []).filter((p) => p.status === "ok");
+  const todayN = okProviders.reduce(
+    (acc, p) => acc + (Array.isArray(p.data?.items) ? p.data!.items!.length : 0),
+    0,
+  );
+  const owed = data.attention?.length ?? 0;
+  const tensions = data.tensions?.length ?? 0;
+
   return (
     <span className="topbar__now" data-testid="topbar-now" aria-label="此刻">
-      <span className="topbar__now-lead">此刻</span>
-      <span className="topbar__now-item">
-        <b>在场</b>
+      <span className="topbar__now-item topbar__now-live">
+        <i className="topbar__dot" aria-hidden="true" />
+        AI 在场
       </span>
-      {hhmm ? <span className="topbar__now-item">采样 {hhmm}</span> : null}
-      {tensions > 0 ? (
+      <span className="topbar__now-item">{doing}</span>
+      {okProviders.length > 0 ? (
         <span className="topbar__now-item">
-          张力 <b>{tensions}</b>
+          今天 <b>{todayN}</b>
         </span>
       ) : null}
+      <span className="topbar__now-item">
+        欠 <b>{owed}</b>
+      </span>
+      <span className="topbar__now-item">
+        张力 <b>{tensions}</b>
+      </span>
     </span>
   );
 }

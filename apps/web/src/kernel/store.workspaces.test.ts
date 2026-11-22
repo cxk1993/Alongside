@@ -51,7 +51,8 @@ function resetStore(windows: WindowState[] = []) {
   useDesktopStore.setState({
     modules: { m1: { manifest: MANIFEST, enabled: true } },
     windows,
-    workspaces: [makeWorkspace(1)],
+    // ★ 两屏：默认两张桌子（主屏 + AI 副屏），测试基线跟着产品基线走
+    workspaces: [makeWorkspace(1), makeWorkspace(2)],
     activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   });
 }
@@ -63,19 +64,22 @@ beforeEach(() => {
 
 // ───────────────────────── 基础 ─────────────────────────
 describe("工作区生命周期", () => {
-  it("默认一个「工作区 1」", () => {
-    const s = useDesktopStore.getState();
-    expect(s.workspaces).toHaveLength(1);
-    expect(s.workspaces[0].name).toBe("工作区 1");
-    expect(s.activeWorkspaceId).toBe(DEFAULT_WORKSPACE_ID);
-  });
-
-  it("新建工作区 → 自动切过去，名字是「工作区 2」（内核零业务）", () => {
-    const id = useDesktopStore.getState().createWorkspace();
+  it("默认两张桌子：我的今天（主屏）+ AI 工作面（副屏）", () => {
+    // ★ 主人 2026-11-22 13:48：「AI 单独切一个工作区，但始终是副屏」
+    //   ⇒ 副屏必须**开局就有**，否则这条裁决在界面上不可达。
     const s = useDesktopStore.getState();
     expect(s.workspaces).toHaveLength(2);
+    expect(s.workspaces[0].name).toBe("我的今天");
+    expect(s.workspaces[1].name).toBe("AI 工作面");
+    expect(s.activeWorkspaceId).toBe(DEFAULT_WORKSPACE_ID); // 默认落在主屏
+  });
+
+  it("新建工作区 → 自动切过去，第 3 张起回到「工作区 3」（内核零业务）", () => {
+    const id = useDesktopStore.getState().createWorkspace();
+    const s = useDesktopStore.getState();
+    expect(s.workspaces).toHaveLength(3);
     expect(s.activeWorkspaceId).toBe(id);
-    expect(s.workspaces[1].name).toBe("工作区 2");
+    expect(s.workspaces[2].name).toBe("工作区 3");
   });
 
   it("切到不存在的工作区 → 忽略（不崩、不改状态）", () => {
@@ -258,8 +262,11 @@ describe("★ 验收#5：v1 旧快照迁移", () => {
     const st = useDesktopStore.getState();
     expect(st.windows).toHaveLength(2); // ★ 一个窗口都没丢
     expect(st.windows.every((w) => w.workspaceId === DEFAULT_WORKSPACE_ID)).toBe(true);
-    expect(st.workspaces).toHaveLength(1);
-    expect(st.workspaces[0].name).toBe("工作区 1");
+    // ★ 两屏：旧单区快照 → 名字归位成主屏，并补一张空的 AI 副屏（窗口一个不动）
+    expect(st.workspaces).toHaveLength(2);
+    expect(st.workspaces[0].name).toBe("我的今天");
+    expect(st.workspaces[1].name).toBe("AI 工作面");
+    expect(st.windows.every((w) => w.workspaceId === DEFAULT_WORKSPACE_ID)).toBe(true);
     expect(st.workspaces[0].topZ).toBe(12); // 原样接续
     expect(st.workspaces[0].topPinZ).toBe(3);
     expect(st.workspaces[0].seq).toBe(2);
@@ -284,7 +291,7 @@ describe("★ 验收#5：v1 旧快照迁移", () => {
     useDesktopStore.getState().hydrate();
 
     const st = useDesktopStore.getState();
-    expect(st.workspaces).toHaveLength(2);
+    expect(st.workspaces).toHaveLength(3); // 默认两张 + 新建一张
     expect(st.activeWorkspaceId).toBe(snapshot.active);
     expect(st.activeWorkspaceId).toBe(wsB);
     expect(st.windows).toEqual(snapshot.windows);
@@ -320,7 +327,7 @@ describe("★ 验收#5：v1 旧快照迁移", () => {
     resetStore();
     useDesktopStore.getState().hydrate();
     const st = useDesktopStore.getState();
-    expect(st.workspaces).toHaveLength(1);
+    expect(st.workspaces).toHaveLength(2); // 迁进主屏 + 补副屏
     expect(st.windows).toHaveLength(1);
   });
 });

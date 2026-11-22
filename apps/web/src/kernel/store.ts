@@ -112,9 +112,45 @@ interface PersistedShape {
 /** ★ T23 默认工作区 id（旧数据也迁到这里）。 */
 export const DEFAULT_WORKSPACE_ID = "ws1";
 
-/** 新建一个工作区。`index` 从 1 起 —— 名字默认「工作区 N」（内核零业务）。 */
+/**
+ * ★ 2026-11-22（汐瑶 · 两屏）：默认两张桌子各有一个名字。
+ * 主人 13:48 裁决：「AI 的『它看见的/它想说的/它做过的』单独切一个工作区，但**始终是副屏**」
+ * ⇒ 1 = 人的主屏（我的今天），2 = AI 工作面（副屏）。
+ * 第 3 张起回到「工作区 N」——内核不替用户起业务名，只把**默认那两张**说清楚。
+ */
+const WORKSPACE_TITLES: Record<number, string> = { 1: "我的今天", 2: "AI 工作面" };
+
+/** 新建一个工作区。`index` 从 1 起。 */
 function newWorkspace(index: number): WorkspaceState {
-  return { id: `ws${index}`, name: `工作区 ${index}`, topZ: 10, topPinZ: 0, seq: 0 };
+  return {
+    id: `ws${index}`,
+    name: WORKSPACE_TITLES[index] ?? `工作区 ${index}`,
+    topZ: 10,
+    topPinZ: 0,
+    seq: 0,
+  };
+}
+
+/**
+ * ★ 2026-11-22（汐瑶 · 两屏）：hydrate 时的名字归位 + 补齐副屏。
+ *
+ * 两条都只碰**自动名**（`工作区 N`）与**默认那两张**：
+ *   ① 旧快照里的「工作区 1/2」→ 我的今天 / AI 工作面（用户自己改过的名字一律不动）；
+ *   ② 只有一张桌子且是主屏（ws1）→ 补上 AI 工作面。否则主人没有副屏可切，
+ *      「AI 单切一个工作区」这条裁决在界面上根本不可达。
+ * 窗口一个都不动：补的是空桌子，不影响任何 workspaceId。
+ */
+function normalizeWorkspaces(list: WorkspaceState[]): WorkspaceState[] {
+  const titled = list.map((w) => {
+    const m = /^工作区 (\d+)$/.exec(w.name);
+    if (!m) return w;
+    const n = Number.parseInt(m[1], 10);
+    const t = WORKSPACE_TITLES[n];
+    return t ? { ...w, name: t } : w;
+  });
+  const onlyHome =
+    titled.length === 1 && titled[0].id === DEFAULT_WORKSPACE_ID && titled[0].name === "我的今天";
+  return onlyHome ? [...titled, newWorkspace(2)] : titled;
 }
 
 /**
@@ -324,7 +360,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   modules: {},
   windows: [],
   // ★ T23：默认一个「工作区 1」；v1 旧数据 hydrate 时也整体迁到这里
-  workspaces: [newWorkspace(1)],
+  // ★ 两屏：默认就是「我的今天 + AI 工作面」，副屏不用人自己建
+  workspaces: [newWorkspace(1), newWorkspace(2)],
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
   topbarCollapsed: loadShell().topbarCollapsed,
   // ★ T17（2026-11-22）：**Dock 默认隐藏**（主人 22:27「Dock 先隐藏，留退路（不退役）」）。
@@ -628,7 +665,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
       Array.isArray(persisted.workspaces) && persisted.workspaces.length > 0
         ? persisted.workspaces
         : null;
-    const workspaces: WorkspaceState[] =
+    let workspaces: WorkspaceState[] =
       rawWs === null
         ? [
             {
@@ -645,6 +682,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
             topPinZ: typeof w.topPinZ === "number" ? w.topPinZ : 0,
             seq: typeof w.seq === "number" ? w.seq : 0,
           }));
+
+    // 名字归位 + 补齐副屏（只碰自动名与默认桌，窗口零影响）
+    workspaces = normalizeWorkspaces(workspaces);
 
     const fallbackWsId = workspaces[0].id;
     const knownIds = new Set(workspaces.map((w) => w.id));

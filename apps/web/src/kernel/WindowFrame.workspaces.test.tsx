@@ -93,8 +93,8 @@ describe("WindowFrame · T23 工作区", () => {
     const menu = document.querySelector(".win__menu");
     expect(menu).not.toBeNull();
     expect(menu?.textContent).toContain("移到工作区…");
-    // 窗口在 ws1 → 只应列出「工作区 2」
-    expect(menu?.textContent).toContain("工作区 2");
+    // 窗口在 ws1 → 只应列出副屏「AI 工作面」（默认第二张桌子的名字）
+    expect(menu?.textContent).toContain("AI 工作面");
     expect(menu?.textContent).not.toContain("工作区 1");
   });
 

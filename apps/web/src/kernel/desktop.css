@@ -680,6 +680,18 @@
   color: var(--txt);
   font-weight: 600;
 }
+.topbar__now-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--txt);
+}
+.topbar__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 @media (max-width: 1180px) {
   .topbar__now {
     display: none;

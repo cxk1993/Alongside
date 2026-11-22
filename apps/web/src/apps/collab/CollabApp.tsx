@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 
 import { api, ApiError } from "@/shared/api/client";
+import { useSightNow } from "@/shared/api/now";
 import { ProposalDetail } from "./ProposalDetail";
 import { actorLabel, hhmm, undoNote, type ProposalRow } from "./proposalFormat";
 import { BeforePreview } from "./proposalView";
@@ -23,31 +24,7 @@ import "./collab.css";
 
 type ZoneStatus = "loading" | "ready" | "missing" | "error";
 
-interface AttentionItem {
-  kind?: string;
-  title?: string;
-}
-
-interface TensionItem {
-  id?: string;
-  kind?: string;
-  summary?: string;
-  severity?: string;
-  /** ★ T28：服务端已经给出「建议怎么办」，界面此前把它丢了——只报冲突不给动作，人得自己再想一遍。 */
-  suggested_action?: string;
-}
-
-interface DegradedItem {
-  source?: string;
-  reason?: string;
-}
-
-interface SightNow {
-  head?: { now_local?: string; weekday?: string; part_of_day?: string };
-  attention?: AttentionItem[];
-  tensions?: TensionItem[];
-  degraded?: DegradedItem[];
-}
+// ★ P0（2026-11-22）：Sight 取数统一到 shared/api/now —— 与顶栏同一口径、同一采样时刻。
 
 interface TimelineEntry {
   key: string;
@@ -111,24 +88,6 @@ function buildTimeline(
   }
   rows.sort((x, y) => (y.at || "").localeCompare(x.at || ""));
   return rows.slice(0, limit);
-}
-
-function useSight(): { status: ZoneStatus; data: SightNow | null } {
-  const [status, setStatus] = useState<ZoneStatus>("loading");
-  const [data, setData] = useState<SightNow | null>(null);
-  const load = useCallback(async () => {
-    try {
-      const d = await api.get<SightNow>("/api/v1/sight/now");
-      setData(d);
-      setStatus("ready");
-    } catch (e) {
-      setStatus(e instanceof ApiError && e.status === 404 ? "missing" : "error");
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
-  return { status, data };
 }
 
 function useProposals(): {
@@ -215,7 +174,7 @@ const STATUS_TEXT: Record<ZoneStatus, string> = {
 };
 
 export default function CollabApp() {
-  const sight = useSight();
+  const sight = useSightNow();
   const proposals = useProposals();
   // ★ T25：详情抽屉当前的提案 id（null = 关闭）。抽屉自己发 GET，不复用列表快照。
   const [detailId, setDetailId] = useState<string | null>(null);

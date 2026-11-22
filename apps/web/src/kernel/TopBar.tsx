@@ -1,9 +1,7 @@
 import { useTheme } from "@/shared/styles/theme";
 import { useDesktopStore } from "./store";
 import { TimeWidget } from "./shell/TimeWidget";
-import { useQuery } from "@tanstack/react-query";
-
-import { api } from "@/shared/api/client";
+import { useSightNow } from "@/shared/api/now";
 import { useSummaryToday } from "./shell/summaryToday";
 
 /** ★ 版本号 / 构建时刻 —— 由 vite.config.ts 的 define 注入（见该文件注释）。 */
@@ -58,14 +56,9 @@ function ShellNow() {
 }
 
 function ShellSightLine() {
-  const { data } = useQuery({
-    queryKey: ["shell-sight-now"],
-    queryFn: () => api.get<SightBrief>("/api/v1/sight/now"),
-    retry: 0,
-    refetchOnWindowFocus: false,
-    staleTime: 60_000,
-  });
-  const p = data;
+  // ★ P0（2026-11-22）：与 collab 共享同一个 /sight/now 口径（shared/api/now）。
+  //   此前顶栏自己 useQuery、collab 自己 useEffect —— 两处采样时刻可以不同。
+  const { data: p } = useSightNow();
   if (!p) return null;
   const hhmm = p.head?.now_local ? String(p.head.now_local).slice(11, 16) : null;
   const tensions = p.tensions?.length ?? 0;
@@ -84,11 +77,6 @@ function ShellSightLine() {
       ) : null}
     </span>
   );
-}
-
-interface SightBrief {
-  head?: { now_local?: string };
-  tensions?: unknown[];
 }
 
 export function TopBar({ onOpenSearch, onOpenQuery, onTidy, onLogout, onMinimizeAll }: Props) {

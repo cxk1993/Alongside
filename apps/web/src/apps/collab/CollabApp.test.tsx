@@ -20,6 +20,7 @@ vi.mock("@/shared/api/client", () => {
 });
 
 import { api, ApiError } from "@/shared/api/client";
+import { __resetSightNowForTests } from "@/shared/api/now";
 const get = api.get as unknown as ReturnType<typeof vi.fn>;
 const post = api.post as unknown as ReturnType<typeof vi.fn>;
 
@@ -37,6 +38,9 @@ function err404(): Promise<never> {
 describe("共处工作台 v1.1（T10 接真端点）", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // ★ P0：/sight/now 是模块级共享缓存（顶栏与 collab 同一口径）——
+    //   用例之间必须清掉，否则上一条的 ready 会被下一条当成自己的数据。
+    __resetSightNowForTests();
     get.mockImplementation(() => err404());
   });
 

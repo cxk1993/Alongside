@@ -7,7 +7,7 @@
  * - 状态走 localStorage（`alongside.desktop.wallpaper`），图片 Blob 走 IndexedDB
  *（alongside-wallpaper.images/current）——不碰 workbuddy 的 store.ts/Deskop.tsx；
  * - 挂载入口 = App.tsx 一行 useEffect 调 initWallpaper()；
- * - 桌面空白右键弹「个性化」菜单（window 级监听，仅 .desktop 本体命中时接管）；
+ * - 桌面空白右键弹「个性化」菜单（window 级监听，落点在 .desktop 内且不在交互容器里时接管）；
  * - 图片文件只进 IndexedDB，**不进 git**（红线）。
  */
 import { resolveDbName } from "@/shared/legacyStorage";
@@ -123,6 +123,41 @@ export function openDesktopPersonalization(): void {
   });
 }
 
+/**
+ * 桌面「空白」右键的判据：正向全收 + 反向排除。
+ *
+ * 旧判据是白名单式的 `target.classList.contains("desktop")` —— 只有右键**正好落在**
+ * `.desktop` 本体上才接管。可 `.desktop` 中间的大块区域被 `.desktop__mid` / `.windows`
+ * 盖着，真空白处命中的是这些子容器，于是「桌面右键」本身就大面积失效；
+ * 共处工作台只要把浮层的 pointer-events 打开到 auto，入口立刻全灭（点不到）。
+ *
+ * 所以改成反向排除：落点必须在 `.desktop` 之内、且不在任何交互容器里，才算桌面空白。
+ * 新增交互层（抽屉 / 弹层 / 悬浮操作条）时把它追加进这份名单即可，
+ * 而不是反过来要求每个背景层都长得像 `.desktop` 本体。
+ */
+export const DESKTOP_INTERACTIVE_SELECTOR = [
+  ".win", // 窗口（WindowFrame）
+  ".dock", // 底部模块坞
+  ".topbar", // 顶栏
+  ".desktop-sidebar", // 桌面级左右侧栏
+  ".desktop__compass", // 罗盘导航
+  ".desktop__compass-btn", // 罗盘触发按钮（独立于弹出的 .desktop__compass）
+  ".desktop__clock-pill", // 顶栏收起后的时钟胶囊
+  ".collab-surface", // 共处工作台背景面（其内可交互层由 desktop.css 白名单打开）
+  ".search", // 全局搜索面板
+  ".search-backdrop", // 搜索遮罩
+  ".wp-settings-host", // 个性化面板自身
+].join(", ");
+
+/** 右键落点是不是「桌面空白」（反向排除法）。 */
+export function isDesktopBlankTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  // 必须在桌面之内：挂在 body 下的弹窗 / 门户不误触
+  if (!target.closest(".desktop")) return false;
+  // 落在任何交互容器里都不接管，交给那个容器自己处理
+  return target.closest(DESKTOP_INTERACTIVE_SELECTOR) === null;
+}
+
 /** 启动时调用一次：应用持久化壁纸 + 注册桌面空白右键菜单。返回清理函数。 */
 export function initWallpaper(): () => void {
   void (async () => {
@@ -142,9 +177,9 @@ export function initWallpaper(): () => void {
   })();
 
   const onContextMenu = (e: MouseEvent) => {
-    const target = e.target as HTMLElement | null;
-    // 仅桌面空白（.desktop 本体）接管；窗口/坞/顶栏内放行默认
-    if (!target || !target.classList.contains("desktop")) return;
+    // 反向排除：窗口 / 坞 / 顶栏 / 侧栏 / 协作台浮层之内一律放行默认，
+    // 其余落在 .desktop 内的位置才算桌面空白（判据见 isDesktopBlankTarget）。
+    if (!isDesktopBlankTarget(e.target)) return;
     e.preventDefault();
     openDesktopPersonalization();
   };

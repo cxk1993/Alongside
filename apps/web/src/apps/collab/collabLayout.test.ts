@@ -80,7 +80,7 @@ describe("T30 · 它做过的面板高度（CSS 自指陷阱回归钉子）", ()
 const desktopCss = readFileSync("src/kernel/desktop.css", "utf8");
 
 describe("T31 · 共处工作台浮层的 pointer-events 白名单", () => {
-  it("读到的是真样式表（空串会让下面两条假绿）", () => {
+  it("读到的是真样式表（空串会让下面的断言假绿）", () => {
     expect(desktopCss.length).toBeGreaterThan(1000);
   });
 
@@ -88,13 +88,32 @@ describe("T31 · 共处工作台浮层的 pointer-events 白名单", () => {
     expect(blockOf(desktopCss, ".windows__surface .collab-surface")).toMatch(/pointer-events\s*:\s*none/);
   });
 
-  it("提案详情抽屉在白名单里（漏掉 = 看得见、点不到）", () => {
-    expect(blockOf(desktopCss, ".windows__surface .collab-detail")).toMatch(/pointer-events\s*:\s*auto/);
+  it("三个已登记层落在同一份白名单块里、且都打开 auto（漏一个 = 那一层看得见、点不到）", () => {
+    const status = blockOf(desktopCss, ".windows__surface .collab-status,");
+    const card = blockOf(desktopCss, ".windows__surface .collab-card,");
+    const detail = blockOf(desktopCss, ".windows__surface .collab-detail");
+    expect(status).toMatch(/pointer-events\s*:\s*auto/);
+    // 同一块 = 正文完全一致：防止有人把某一层悄悄拆成独立规则，改块时漏掉它
+    expect(card).toBe(status);
+    expect(detail).toBe(status);
   });
 
-  it("已签/撤销等卡片与状态条仍在白名单（防止改这条时顺手删掉旧的）", () => {
-    const card = blockOf(desktopCss, ".windows__surface .collab-card,");
-    const status = blockOf(desktopCss, ".windows__surface .collab-status,");
-    expect(card + status).toMatch(/pointer-events\s*:\s*auto/);
+  it("★ 白名单是唯一出口：每处 pointer-events:auto 都必须写在 .windows__surface 白名单作用域下（新层必须登记，旁路自开必红）", () => {
+    // 这条才是「新层必须进名单」的机制钉。
+    // 旧写法只断言「这 3 个已在名单里」，于是新加的抽屉 / 弹层漏在名单外时测试照样绿；
+    // 等到有人被穿透坑了，图快的人就把白名单加回去 —— 病根（白名单永远是白名单、
+    // 新层没人负责）一点没动。
+    // 反过来钉「auto 只有一个合法出口」：任何层想可交互，只能写进 .windows__surface
+    // 作用域下的白名单块；谁绕开白名单在别处自己开 auto，这里立刻红。
+    const css = stripComments(desktopCss);
+    const hits = [...css.matchAll(/pointer-events\s*:\s*auto/g)];
+    // 先保证确实存在白名单出口（否则下面循环 0 次 → 假绿）
+    expect(hits.length).toBeGreaterThan(0);
+    for (const h of hits) {
+      const at = h.index ?? 0;
+      // 声明块的选择器头 = 上一个 } 之后到 { 之前
+      const header = css.slice(css.lastIndexOf("}", at) + 1, css.lastIndexOf("{", at));
+      expect(header).toContain(".windows__surface .collab-");
+    }
   });
 });

@@ -8,7 +8,7 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import { act } from "@testing-library/react";
 
 import { applyWallpaper, openWallpaperSettings, type WallpaperConfig } from "./wallpaperApply";
-import { readWallpaperConfig, DEFAULT_CFG } from "./wallpaper";
+import { readWallpaperConfig, DEFAULT_CFG, isDesktopBlankTarget } from "./wallpaper";
 
 function desktopEl(): HTMLElement {
   let el = document.querySelector<HTMLElement>(".desktop");
@@ -122,5 +122,83 @@ describe("openWallpaperSettings · dismiss 竞态", () => {
     // 再点一次外面：不应有第二个残留 dismiss 报错/重复关闭
     document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     vi.useRealTimers();
+  });
+});
+
+/**
+ * 右键判据 · 反向排除（T32）
+ *
+ * 旧判据是 `target.classList.contains("desktop")`：只有正好点在 .desktop 本体上才算空白。
+ * 实际桌面中间被 .desktop__mid / .windows 盖着，空白处命中的是这些子容器 →
+ * 「桌面右键」大面积失效；共处工作台浮层一旦打开 pointer-events:auto，入口直接全灭。
+ *
+ * 新判据反过来：落点在 .desktop 之内、且不在任何交互容器里，才算空白。
+ * jsdom 没有命中测试，但 closest() 的语义完全可测 —— 这里钉住「谁算交互容器」。
+ */
+describe("桌面右键判据 · 反向排除", () => {
+  const mount = (inner: string): void => {
+    document.body.innerHTML = `<div class="desktop">${inner}</div>`;
+  };
+  const hit = (sel: string) => isDesktopBlankTarget(document.querySelector(sel));
+
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("桌面本身的空白 / .windows 空白 → 接管", () => {
+    mount('<div class="windows"><div class="windows__surface"></div></div>');
+    expect(hit(".desktop")).toBe(true);
+    expect(hit(".windows")).toBe(true);
+    expect(hit(".windows__surface")).toBe(true);
+  });
+
+  it("窗口内任何位置都不接管（整块交给窗口自己）", () => {
+    mount('<div class="windows"><div class="win"><button class="win__btn">x</button></div></div>');
+    expect(hit(".win")).toBe(false);
+    expect(hit(".win__btn")).toBe(false);
+  });
+
+  it("坞 / 顶栏 / 侧栏 / 罗盘 / 时钟胶囊 都不接管", () => {
+    mount(
+      '<div class="topbar"><span class="topbar__brand">A</span></div>' +
+        '<div class="dock"></div>' +
+        '<div class="desktop-sidebar desktop-sidebar--left"></div>' +
+        '<button class="desktop__compass-btn">◉</button>' +
+        '<div class="desktop__compass"></div>' +
+        '<div class="desktop__clock-pill"></div>',
+    );
+    for (const sel of [
+      ".topbar",
+      ".topbar__brand",
+      ".dock",
+      ".desktop-sidebar",
+      ".desktop__compass-btn",
+      ".desktop__compass",
+      ".desktop__clock-pill",
+    ]) {
+      expect(hit(sel)).toBe(false);
+    }
+  });
+
+  it("共处工作台的可交互层不接管（那是协作台的地盘，不是桌面空白）", () => {
+    mount(
+      '<div class="windows"><div class="windows__surface">' +
+        '<div class="collab-surface"><div class="collab-card"></div></div>' +
+        "</div></div>",
+    );
+    expect(hit(".collab-surface")).toBe(false);
+    expect(hit(".collab-card")).toBe(false);
+  });
+
+  it("不在 .desktop 之内的节点一律不接管（弹窗 / 门户不误触）", () => {
+    document.body.innerHTML = '<div class="dialog"><button>ok</button></div>';
+    expect(hit(".dialog")).toBe(false);
+    expect(hit("button")).toBe(false);
+  });
+
+  it("非元素目标（null / window / document）不接管", () => {
+    expect(isDesktopBlankTarget(null)).toBe(false);
+    expect(isDesktopBlankTarget(window)).toBe(false);
+    expect(isDesktopBlankTarget(document)).toBe(false);
   });
 });

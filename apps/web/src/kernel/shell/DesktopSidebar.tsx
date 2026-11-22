@@ -23,19 +23,30 @@ import { Icon } from "../icons/Icon";
  *   K8 折叠后不占布局位（窗口区域最大化）
  */
 
-const COLLAPSE_KEY: Record<"left" | "right", string> = {
-  left: "alongside.dock-left.collapsed",
-  right: "alongside.dock-right.collapsed",
+/**
+ * ★ 2026-11-22（汐瑶 · 收壳 P0-b）：键换 v2、默认**收起**。
+ *
+ * 为什么换键而不改默认：旧键里存的是「展开」——主人的浏览器里一定有它。
+ * 只改默认值不改键 = 旧值继续生效 = 改了看不见（这正是本轮返工的根因）。
+ * 换键后旧值自然失效，壳的新默认态第一次真正生效；侧栏本体与位置记忆都没丢。
+ */
+export const SIDE_COLLAPSE_KEY: Record<"left" | "right", string> = {
+  left: "alongside.side.v2.left",
+  right: "alongside.side.v2.right",
 };
 
+/** 读侧栏折叠态：**没有存过 = 收起**（主墙是主区，侧栏按需唤出）。 */
+export function readSideCollapsed(side: "left" | "right"): boolean {
+  try {
+    const raw = localStorage.getItem(SIDE_COLLAPSE_KEY[side]);
+    return raw === null ? true : raw === "1";
+  } catch {
+    return true;
+  }
+}
+
 function usePersistedCollapse(side: "left" | "right"): [boolean, () => void] {
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(COLLAPSE_KEY[side]) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [collapsed, setCollapsed] = useState<boolean>(() => readSideCollapsed(side));
   // ★ 罗盘（Desktop）经 CustomEvent 统一操控侧栏 —— 本组件同步响应。
   useEffect(() => {
     const onCompass = (e: Event) => {
@@ -49,7 +60,7 @@ function usePersistedCollapse(side: "left" | "right"): [boolean, () => void] {
     setCollapsed((v) => {
       const next = !v;
       try {
-        localStorage.setItem(COLLAPSE_KEY[side], next ? "1" : "0");
+        localStorage.setItem(SIDE_COLLAPSE_KEY[side], next ? "1" : "0");
       } catch {
         /* localStorage 不可用时仅本次会话生效 */
       }
@@ -158,15 +169,11 @@ export function DesktopSidebar({ side }: { side: "left" | "right" }) {
   const items = useSlotContributions(slot);
   const [collapsed, toggle] = usePersistedCollapse(side);
 
-  // K4：折叠态下 Escape 展开
-  useEffect(() => {
-    if (!collapsed) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") toggle();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [collapsed, toggle]);
+  /* ★ 2026-11-22（汐瑶 · 收壳）：**撤掉「折叠态 Escape 展开」**。
+     这条在侧栏默认展开的时代无害（本来就没折叠态），默认一改成收起就变成事故：
+     Esc 是全局「关闭当前浮层」的通用键 —— 关搜索 / 关提案抽屉都会顺手把两侧栏撑开，
+     主区被挤窄，而且用户完全不知道为什么。
+     侧栏的唤出入口改为罗盘 + 命令面板（两者都在，可达性不降）。 */
 
   const label = side === "left" ? "左侧栏" : "右侧栏";
   const cls = `desktop-sidebar desktop-sidebar--${side}${collapsed ? " is-collapsed" : ""}`;

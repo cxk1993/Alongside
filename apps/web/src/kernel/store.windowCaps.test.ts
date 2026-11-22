@@ -222,26 +222,52 @@ describe("hydrate —— 持久化恢复与旧数据兼容", () => {
 // 真 bug 回放：toggle 调了 savePersisted，但快照白名单没带折叠字段 →
 // localStorage 永远没写进去，reload 弹回展开态（生产 Playwright 实测）。
 // 本组测试走「toggle → localStorage 序列化 → 清态 → hydrate」全链，防再发。
-describe("U1-2 顶栏/底栏收放跨会话持久化", () => {
-  it("★ toggleTopbar → 快照 JSON 里真的有 topbarCollapsed（序列化白名单回归钉）", () => {
+const SHELL_KEY = "alongside.shell.v1";
+
+describe("U1-2 壳偏好跨会话持久化（2026-11-22 分家后）", () => {
+  // ★ 历史：toggle 曾写窗口快照，hydrate 再读回来。代价是**新默认值永远输给旧快照**
+  //   （T17 把 Dock 默认改隐藏，主人浏览器里的旧 false 照样把它拉回展开）。
+  //   现在壳偏好走独立 SHELL_KEY，这三条钉住分家契约。
+  it("★ toggleTopbar → 窗口快照**不含**折叠位，壳偏好写 SHELL_KEY", () => {
     useDesktopStore.setState({ topbarCollapsed: false, bottombarCollapsed: false });
     useDesktopStore.getState().toggleTopbar();
-    const raw = localStorage.getItem(STORE_KEY);
-    expect(raw).toBeTruthy();
-    const snap = JSON.parse(raw!);
-    expect(snap.topbarCollapsed).toBe(true); // ★ 断裂点：曾经这里永远是 undefined
+    // 分家的两条硬事实：①切壳偏好**完全不碰**窗口快照 ②偏好落在 SHELL_KEY
+    expect(localStorage.getItem(STORE_KEY)).toBeNull();
+    expect(JSON.parse(localStorage.getItem(SHELL_KEY)!).topbarCollapsed).toBe(true);
   });
 
-  it("toggle → hydrate（重建态）→ 折叠保持（reload 语义）", () => {
+  it("toggle → 清态 → hydrate：壳偏好不被窗口快照污染（reload 语义）", () => {
     useDesktopStore.setState({ topbarCollapsed: false, bottombarCollapsed: false });
     useDesktopStore.getState().toggleTopbar();
     useDesktopStore.getState().toggleBottombar();
-    // 模拟 reload：状态清空再从 localStorage 恢复
+    const shell = JSON.parse(localStorage.getItem(SHELL_KEY)!);
+    expect(shell).toEqual({ topbarCollapsed: true, bottombarCollapsed: true });
+    // 模拟 reload：状态清空后只 hydrate 窗口快照 —— 壳偏好不归它管，hydrate 不许动它
     useDesktopStore.setState({ topbarCollapsed: false, bottombarCollapsed: false });
     useDesktopStore.getState().hydrate();
     const st = useDesktopStore.getState();
-    expect(st.topbarCollapsed).toBe(true);
-    expect(st.bottombarCollapsed).toBe(true);
+    expect(st.topbarCollapsed).toBe(false);
+    expect(st.bottombarCollapsed).toBe(false);
+  });
+
+  it("★ 旧快照里残留 bottombarCollapsed:false → hydrate 不许把它读回来（本轮返工根因）", () => {
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({
+        windows: [],
+        workspaces: [makeWorkspace(1)],
+        activeWorkspaceId: DEFAULT_WORKSPACE_ID,
+        enabled: {},
+        // 主人浏览器里真会存在的旧值：Dock 展开
+        topbarCollapsed: true,
+        bottombarCollapsed: false,
+      }),
+    );
+    useDesktopStore.setState({ topbarCollapsed: false, bottombarCollapsed: true });
+    useDesktopStore.getState().hydrate();
+    const st = useDesktopStore.getState();
+    expect(st.topbarCollapsed).toBe(false); // 旧 true 被丢弃
+    expect(st.bottombarCollapsed).toBe(true); // 旧 false 被丢弃，新默认生效
   });
 
   it("旧快照（无折叠字段）→ hydrate 不误折叠（向后兼容）", () => {

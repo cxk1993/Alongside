@@ -102,9 +102,10 @@ interface PersistedShape {
   /** @deprecated v1 遗留 */
   seq?: number;
   enabled: Record<string, boolean>;
-  /** ★ U1-2 修复（hermes）：顶栏/底栏收放跨会话持久化。
-   *  旧快照缺字段 → hydrate 的 typeof 守卫不误折叠（向后兼容）。 */
+  /** @deprecated 2026-11-22（汐瑶）：壳偏好已迁出窗口快照（见 SHELL_KEY）。
+   *  这两个字段只为**读旧快照后丢弃**而保留，永不再写、永不再应用。 */
   topbarCollapsed?: boolean;
+  /** @deprecated 同上 */
   bottombarCollapsed?: boolean;
 }
 
@@ -198,14 +199,56 @@ function savePersisted(s: DesktopState): void {
       workspaces: s.workspaces,
       activeWorkspaceId: s.activeWorkspaceId,
       enabled,
-      // ★ U1-2 修复（hermes）：折叠字段此前被白名单丢弃 → toggle 写了快照但
-      //   序列化没带上，hydrate 永远读 undefined（实测 reload 弹回 48px）。
-      topbarCollapsed: s.topbarCollapsed,
-      bottombarCollapsed: s.bottombarCollapsed,
+      // ★ 2026-11-22（汐瑶）：壳偏好不再进窗口快照 —— 见 SHELL_KEY / saveShell()。
+      //   混在一份 key 里的直接后果：新版本的默认值永远输给旧快照（T17 把 Dock 默认改隐藏，
+      //   主人浏览器里的旧 false 仍在 hydrate 时把它拉回展开 →「改了 JSX，刷新还是老样子」）。
     };
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
   } catch {
     /* 存储不可用时忽略 */
+  }
+}
+
+/**
+ * ★ 2026-11-22（汐瑶）：壳偏好独立 key（P0-b）。
+ *
+ * 分家的理由：`STORE_KEY` 装的是**用户资产**（开了哪些窗、工作区、模块启停），一个都不能丢；
+ * 而顶栏/底栏折叠是**壳的默认态**，它必须允许新版本改掉。二者共用一份快照时，
+ * 「改默认值」永远输给「旧快照里的旧值」——表现出来的就是「改了但看不见」。
+ */
+const SHELL_KEY = "alongside.shell.v1";
+
+interface ShellPrefs {
+  topbarCollapsed: boolean;
+  bottombarCollapsed: boolean;
+}
+
+/** 壳偏好默认态：顶栏展开、Dock 隐藏（主人 2026-11-21 22:27 拍「先隐藏不退役」）。 */
+const SHELL_DEFAULTS: ShellPrefs = { topbarCollapsed: false, bottombarCollapsed: true };
+
+function loadShell(): ShellPrefs {
+  try {
+    const raw = localStorage.getItem(SHELL_KEY);
+    if (!raw) return { ...SHELL_DEFAULTS };
+    const p = JSON.parse(raw) as Partial<ShellPrefs>;
+    return {
+      topbarCollapsed:
+        typeof p.topbarCollapsed === "boolean" ? p.topbarCollapsed : SHELL_DEFAULTS.topbarCollapsed,
+      bottombarCollapsed:
+        typeof p.bottombarCollapsed === "boolean"
+          ? p.bottombarCollapsed
+          : SHELL_DEFAULTS.bottombarCollapsed,
+    };
+  } catch {
+    return { ...SHELL_DEFAULTS };
+  }
+}
+
+function saveShell(patch: Partial<ShellPrefs>): void {
+  try {
+    localStorage.setItem(SHELL_KEY, JSON.stringify({ ...loadShell(), ...patch }));
+  } catch {
+    /* 存储不可用时仅本次会话生效 */
   }
 }
 
@@ -283,7 +326,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   // ★ T23：默认一个「工作区 1」；v1 旧数据 hydrate 时也整体迁到这里
   workspaces: [newWorkspace(1)],
   activeWorkspaceId: DEFAULT_WORKSPACE_ID,
-  topbarCollapsed: false,
+  topbarCollapsed: loadShell().topbarCollapsed,
   // ★ T17（2026-11-22）：**Dock 默认隐藏**（主人 22:27「Dock 先隐藏，留退路（不退役）」）。
   //   为什么改默认值而不是删组件：`bottombarCollapsed` 从罗盘扇区 → toggleBottombar →
   //   savePersisted 白名单 → hydrate 恢复，整条可逆链已经通；改 1 行就拿到「隐藏 + 一键找回 +
@@ -291,7 +334,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   //   ⚠️ Dock 隐藏期罗盘「底栏」扇区 = Dock 开关（语义借用）；若将来真删 Dock，
   //   必须在同一个提交里撤掉罗盘底栏扇区，别留一个点了没反应的按钮。
   //   另一条找回路径：命令面板「显示 Dock（模块坞）」（`kernel/commands.ts`）。
-  bottombarCollapsed: true,
+  bottombarCollapsed: loadShell().bottombarCollapsed,
 
   registerModule: (m) => {
     const persisted = loadPersisted();
@@ -452,14 +495,14 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   toggleTopbar: () => {
     set((s) => {
       const topbarCollapsed = !s.topbarCollapsed;
-      savePersisted({ ...s, topbarCollapsed });
+      saveShell({ topbarCollapsed });
       return { topbarCollapsed };
     });
   },
   toggleBottombar: () => {
     set((s) => {
       const bottombarCollapsed = !s.bottombarCollapsed;
-      savePersisted({ ...s, bottombarCollapsed });
+      saveShell({ bottombarCollapsed });
       return { bottombarCollapsed };
     });
   },
@@ -570,17 +613,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => ({
   hydrate: () => {
     const persisted = loadPersisted();
     if (!persisted) return;
-    // ★ U1（2026-09-24）：恢复顶栏/底栏收放状态（判据 U1-2 跨会话保持）。
-    //   字段缺失（旧快照）→ 保持当前值不动，不误折叠。
-    const ui = persisted as PersistedShape & Partial<DesktopState>;
-    if (typeof ui.topbarCollapsed === "boolean" || typeof ui.bottombarCollapsed === "boolean") {
-      set({
-        ...(typeof ui.topbarCollapsed === "boolean" ? { topbarCollapsed: ui.topbarCollapsed } : {}),
-        ...(typeof ui.bottombarCollapsed === "boolean"
-          ? { bottombarCollapsed: ui.bottombarCollapsed }
-          : {}),
-      });
-    }
+    // ★ 2026-11-22（汐瑶）：壳偏好**不再从窗口快照恢复**（旧值一律丢弃）。
+    //   这正是「T17 改了默认值、主人刷新却还是旧样子」的根因。
+    //   壳偏好只认 SHELL_KEY（loadShell/saveShell）；窗口/工作区资产照旧迁移，零丢失。
     // 快照损坏（windows 不是数组）→ 当作没有，不要崩
     if (!Array.isArray(persisted.windows)) return;
     const s = get();

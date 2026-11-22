@@ -20,7 +20,7 @@ import { TimeWidget } from "./shell/TimeWidget";
 import { useShortcuts, type ShortcutHandlers } from "./Shortcuts";
 import { TopBar } from "./TopBar";
 import { WindowManager } from "./WindowManager";
-import { DesktopSidebar } from "./shell/DesktopSidebar";
+import { DesktopSidebar, readSideCollapsed } from "./shell/DesktopSidebar";
 import { SlotHost } from "./slots/SlotHost";
 
 const MODULES_URL = "/modules.json";
@@ -69,13 +69,20 @@ function cycleWindow(): void {
  * 桌面容器：顶栏 + 窗口层 + 坞 + 全局搜索 + Toast。
  * 启动时拉取 modules.json 注册模块，并 hydrate 已持久化的窗口几何。
  */
-/** ★ 罗盘用：读侧栏折叠初值（键与 DesktopSidebar 的 COLLAPSE_KEY 同族）。 */
-function readSideCollapsed(side: "left" | "right"): boolean {
-  try {
-    return localStorage.getItem(`alongside.dock-${side}.collapsed`) === "1";
-  } catch {
-    return false;
-  }
+/**
+ * ★ 2026-11-22（汐瑶 · 收壳）：主墙空态。
+ * 没有任何插件贡献 desktop.widget 时，主区**不能**留成一片空桌面 ——
+ * 那正是「换了壳但看起来还是旧桌面」的观感来源。这里给一句「去哪儿」的话。
+ */
+function WallEmpty() {
+  return (
+    <div className="wall__empty">
+      <div className="wall__empty-title">共处工作台</div>
+      <p className="wall__empty-hint">
+        工作台上还没有面板。按 Ctrl/⌘ + K 打开能力面板；AI 的提案、它看见的处境和做过的动作都会出现在这里。
+      </p>
+    </div>
+  );
 }
 
 export function Desktop() {
@@ -414,15 +421,22 @@ export function Desktop() {
           </div>
         )}
         <div className="desktop__mid">
-            {/* U3：桌面级双侧栏（左=导航/结构，右=摘要/情境；折叠持久化） */}
-            <DesktopSidebar side="left" />
-            <div className="windows">
-              {/* 共处工作台（desktop.widget）：桌面级背景面。无插件贡献时零渲染（空 fragment 兜底） */}
-              <SlotHost slot="desktop.widget" className="windows__surface" fallback={<></>} />
-              <WindowManager />
-            </div>
-            <DesktopSidebar side="right" />
+          {/* ★ 2026-11-22（汐瑶 · 收壳 P0-a）：**主墙是主区**。
+              旧结构把主墙（desktop.widget）挂在 `.windows` 里当壁纸
+              （position:absolute + pointer-events:none + 白名单），窗口才是主区 ——
+              这就是主人看到的「半改没改」：新墙与旧桌面并置，且新墙还点不到。
+              现在：主墙吃满主区并自己滚；窗口降级为绝对定位的细节层（默认零窗口）。 */}
+          <main className="wall" data-testid="desktop-wall" aria-label="共处工作台">
+            <SlotHost slot="desktop.widget" className="wall__surface" fallback={<WallEmpty />} />
+          </main>
+          {/* 细节层：容器不吃鼠标，窗口自身 auto —— 否则透明覆盖层会挡住主墙点击 */}
+          <div className="windows">
+            <WindowManager />
           </div>
+          {/* 浮层侧栏：默认收起、展开时浮在主墙之上，不再挤占主区宽度 */}
+          <DesktopSidebar side="left" />
+          <DesktopSidebar side="right" />
+        </div>
         {!bottombarCollapsed && <Dock />}
           <ToastHost />
 

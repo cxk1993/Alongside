@@ -10,6 +10,8 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+import { SIDE_COLLAPSE_KEY } from "./DesktopSidebar";
+
 import { DesktopSidebar } from "./DesktopSidebar";
 import { registerContributions, unregisterContributions } from "../slots/contributions";
 import { useDesktopStore } from "../store";
@@ -28,6 +30,19 @@ function Providers({ children }: { children: ReactNode }) {
 }
 function renderSide(ui: ReactElement) {
   return render(ui, { wrapper: Providers });
+}
+
+/**
+ * ★ 2026-11-22（汐瑶 · 收壳 P0-b）：侧栏默认**收起**。
+ * 本文件多数用例测的是「栏里有什么」，不是「默认是什么」——
+ * 所以显式把该侧置为展开态，别让默认值变化把内容用例连坐。
+ */
+function expand(side: "left" | "right"): void {
+  localStorage.setItem(SIDE_COLLAPSE_KEY[side], "0");
+}
+
+function collapse(side: "left" | "right"): void {
+  localStorage.setItem(SIDE_COLLAPSE_KEY[side], "1");
 }
 
 function resetStore(): void {
@@ -52,24 +67,30 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
     unregisterContributions("demo-side");
   });
 
-  it("K1 · 折叠状态 localStorage 持久化（刷新保持）", () => {
+  it("K1 · 默认收起 + 折叠态持久化（刷新保持）", () => {
     const { container, rerender } = renderSide(<DesktopSidebar side="left" />);
-    // 初始展开
-    expect(
+    const expanded = () =>
       container
         .querySelector("[data-testid='desktop-sidebar-left']")
-        ?.getAttribute("aria-expanded"),
-    ).toBe("true");
-    // 点把手折叠
+        ?.getAttribute("aria-expanded");
+    // ★ 收壳后的新默认：不存过 = 收起（主墙是主区）
+    expect(expanded()).toBe("false");
+    // 展开 → 键写 0
+    fireEvent.click(screen.getByLabelText("展开左侧栏"));
+    expect(expanded()).toBe("true");
+    expect(localStorage.getItem(SIDE_COLLAPSE_KEY.left)).toBe("0");
+    // 再收起 → 键写 1；重渲染（模拟刷新）保持收起
     fireEvent.click(screen.getByLabelText("收起左侧栏"));
-    expect(
-      container
-        .querySelector("[data-testid='desktop-sidebar-left']")
-        ?.getAttribute("aria-expanded"),
-    ).toBe("false");
-    expect(localStorage.getItem("alongside.dock-left.collapsed")).toBe("1");
-    // 重渲染（模拟刷新）→ 保持折叠
+    expect(expanded()).toBe("false");
+    expect(localStorage.getItem(SIDE_COLLAPSE_KEY.left)).toBe("1");
     rerender(<DesktopSidebar side="left" />);
+    expect(expanded()).toBe("false");
+  });
+
+  it("K1b · 旧键（alongside.dock-left.collapsed=0 展开）不再生效", () => {
+    // 反证「改了看不见」的根因已被切断：旧快照里的展开值不许把新默认拉回去。
+    localStorage.setItem("alongside.dock-left.collapsed", "0");
+    const { container } = renderSide(<DesktopSidebar side="left" />);
     expect(
       container
         .querySelector("[data-testid='desktop-sidebar-left']")
@@ -77,22 +98,26 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
     ).toBe("false");
   });
 
-  it("K2 · 折叠态仍保留可见把手（toggle obvious and persistent）", () => {
+  it("K2 · 收起态可由把手展开（把手与 aria 一致）", () => {
+    // ★ 实况更正：`.desktop-sidebar.is-collapsed` 是 display:none，收起后整栏连同把手
+    //   一起不可见，找回入口是罗盘（Desktop 的收放罗盘）/ 命令面板。
+    //   所以这里钉住的是「展开态下把手存在且能收起」，不谎称折叠态仍有可见把手。
+    expand("left");
     const { container } = renderSide(<DesktopSidebar side="left" />);
-    fireEvent.click(screen.getByLabelText("收起左侧栏"));
     expect(container.querySelector(".desktop-sidebar__toggle")).toBeTruthy();
-    expect(screen.getByLabelText("展开左侧栏")).toBeTruthy();
+    expect(screen.getByLabelText("收起左侧栏")).toBeTruthy();
   });
 
-  it("K4 · 折叠态 Escape 展开", () => {
+  it("K4 · 折叠态 Escape **不**展开（Esc 是关浮层的通用键，不许顺带撑开侧栏）", () => {
+    collapse("left");
     const { container } = renderSide(<DesktopSidebar side="left" />);
-    fireEvent.click(screen.getByLabelText("收起左侧栏"));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(
       container
         .querySelector("[data-testid='desktop-sidebar-left']")
         ?.getAttribute("aria-expanded"),
-    ).toBe("true");
+    ).toBe("false");
+    expect(localStorage.getItem(SIDE_COLLAPSE_KEY.left)).toBe("1");
   });
 
   it("K5 · 右栏内置今日摘要（行清单 = BFF providers 动态派生 + 计数）", async () => {
@@ -109,6 +134,7 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
       }
       return { providers: [] };
     });
+    expand("right");
     const { container } = renderSide(<DesktopSidebar side="right" />);
     expect(container.querySelector("[data-testid='desktop-today-summary']")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("待办")).toBeTruthy());
@@ -119,6 +145,7 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
   });
 
   it("K6 · 无贡献零渲染不占位（左栏无贡献时只有框架无卡）", () => {
+    expand("left");
     const { container } = renderSide(<DesktopSidebar side="left" />);
     expect(container.querySelector(".desktop-sidebar__slots")?.children.length ?? 0).toBe(0);
     expect(container.querySelector("[data-testid='desktop-today-summary']")).toBeNull();
@@ -138,6 +165,7 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
     const openWindow = vi
       .spyOn(useDesktopStore.getState(), "openWindow")
       .mockImplementation(() => {});
+    expand("left");
     const { container } = renderSide(<DesktopSidebar side="left" />);
     expect(container.querySelector("[data-testid='desktop-side-nav']")).toBeTruthy();
     expect(screen.getByText("演示应用")).toBeTruthy();
@@ -166,6 +194,7 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
         component: () => <div data-testid="demo-right-card">右栏卡</div>,
       },
     ]);
+    expand("right");
     const { container } = renderSide(<DesktopSidebar side="right" />);
     expect(container.querySelector("[data-testid='demo-right-card']")).toBeTruthy();
     expect(screen.getByText("右栏卡")).toBeTruthy();

@@ -660,6 +660,32 @@
 }
 
 /* —— 窗口层（U3：左右留侧栏位）—— */
+/* ★ 2026-11-22（汐瑶 · 收壳 P1-a）：顶栏「此刻」—— 平台第一眼读到的应是状态，不是版本。 */
+.topbar__now {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: var(--sp-3);
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--txt-dim);
+  white-space: nowrap;
+}
+.topbar__now-lead {
+  color: var(--txt-faint, var(--txt-dim));
+  letter-spacing: 0.08em;
+}
+.topbar__now-item b {
+  color: var(--txt);
+  font-weight: 600;
+}
+@media (max-width: 1180px) {
+  .topbar__now {
+    display: none;
+  }
+}
+
 .desktop__mid {
   position: absolute;
   top: var(--topbar-h);
@@ -669,10 +695,50 @@
   display: flex;
   align-items: stretch;
 }
+/* ★ 2026-11-22（汐瑶 · 收壳 P0-a）：`.windows` 从「主区」降级为**细节层**。
+   它是覆盖在主墙之上的透明层：容器必须 pointer-events:none，否则整屏空白处
+   会把主墙的点击全部吃掉（表现为「主墙看得见、点不到」）；窗口自身恢复 auto（见下）。 */
 .windows {
-  flex: 1;
-  position: relative;
-  min-width: 0;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.windows .win {
+  pointer-events: auto;
+}
+
+/* 主墙：主区本体。先前是 `.windows__surface`（absolute + pointer-events:none），
+   现在它是**正常主区**：吃鼠标、自己滚、窗口浮在它上面。 */
+.wall {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  pointer-events: auto;
+}
+.wall__surface {
+  min-height: 100%;
+}
+.wall__empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-2);
+  max-width: 560px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 var(--sp-6);
+  color: var(--txt-dim);
+}
+.wall__empty-title {
+  font-size: 18px;
+  color: var(--txt);
+  letter-spacing: 0.02em;
+}
+.wall__empty-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 /* —— 共处工作台背景面（desktop.widget · v1 灰盒）——
@@ -702,10 +768,14 @@
    ⇒ 以后在共处工作台里**新增任何浮层（抽屉/弹层/悬浮操作条），必须同时加进这份白名单**，
      并且用真浏览器 elementFromPoint 验一次 —— jsdom 没有布局，永远测不出来。 */
 /* —— U3 桌面级双侧栏 —— */
+/* ★ 2026-11-22（汐瑶 · 收壳）：侧栏改浮层 —— 展开时盖在主墙上（临时操作），
+   收起时不参与布局；不再像旧结构那样把主区从两侧挤窄。 */
 .desktop-sidebar {
-  position: relative;
-  flex: 0 0 auto;
+  position: absolute;
+  top: 0;
+  bottom: 0;
   width: 224px;
+  box-shadow: var(--shadow-2);
   background: var(--surface);
   border-right: 1px solid var(--line);
   display: flex;
@@ -713,7 +783,11 @@
   overflow-y: auto;
   z-index: 80000;
 }
+.desktop-sidebar--left {
+  left: 0;
+}
 .desktop-sidebar--right {
+  right: 0;
   border-right: none;
   border-left: 1px solid var(--line);
 }

@@ -1,6 +1,10 @@
 import { useTheme } from "@/shared/styles/theme";
 import { useDesktopStore } from "./store";
 import { TimeWidget } from "./shell/TimeWidget";
+import { useQuery } from "@tanstack/react-query";
+
+import { api } from "@/shared/api/client";
+import { useSummaryToday } from "./shell/summaryToday";
 
 /** ★ 版本号 / 构建时刻 —— 由 vite.config.ts 的 define 注入（见该文件注释）。 */
 declare const __APP_VERSION__: string;
@@ -21,6 +25,72 @@ interface Props {
  * 顶栏：品牌 / 全局搜索入口 / 走秒时钟（U2 今日摘要面板）/ 整理桌面 / 主题切换。
  * 锁定的「登录相关」不在内核职责内（鉴权由 T03 提供），这里只留一个无副作用的占位按钮位。
  */
+/**
+ * ★ 2026-11-22（汐瑶 · 收壳 P1-a）：顶栏从「应用菜单」换成「此刻状态条」。
+ *
+ * 只上屏**真数据**：今日摘要 BFF（`/api/v1/summary/today`）里 status=ok 的 provider，
+ * 每项给「名字 + 条目数」。拿不到就整块不渲染 —— 宁缺不编（判据 16/25）。
+ * 这是主人打开平台第一眼该读到的句子：现在是什么，而不是版本号。
+ */
+function ShellNow() {
+  const { data } = useSummaryToday();
+  const rows = (data?.providers ?? [])
+    .filter((p) => p.status === "ok")
+    .map((p) => ({
+      label: p.label ?? p.id,
+      n: Array.isArray(p.data?.items) ? p.data!.items!.length : 0,
+    }));
+  if (rows.length > 0) {
+    return (
+      <span className="topbar__now" data-testid="topbar-now" aria-label="此刻">
+        <span className="topbar__now-lead">此刻</span>
+        {rows.map((r) => (
+          <span key={r.label} className="topbar__now-item">
+            {r.label} <b>{r.n}</b>
+          </span>
+        ))}
+      </span>
+    );
+  }
+  // 摘要不可用时退到「它看见的」实测：在场 / 采样时刻 / 张力数。
+  // 为什么不是编一句：sight 有值才说，拿不到就整块不渲染（宁缺不编）。
+  return <ShellSightLine />;
+}
+
+function ShellSightLine() {
+  const { data } = useQuery({
+    queryKey: ["shell-sight-now"],
+    queryFn: () => api.get<SightBrief>("/api/v1/sight/now"),
+    retry: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+  const p = data;
+  if (!p) return null;
+  const hhmm = p.head?.now_local ? String(p.head.now_local).slice(11, 16) : null;
+  const tensions = p.tensions?.length ?? 0;
+  if (!hhmm && tensions === 0) return null;
+  return (
+    <span className="topbar__now" data-testid="topbar-now" aria-label="此刻">
+      <span className="topbar__now-lead">此刻</span>
+      <span className="topbar__now-item">
+        <b>在场</b>
+      </span>
+      {hhmm ? <span className="topbar__now-item">采样 {hhmm}</span> : null}
+      {tensions > 0 ? (
+        <span className="topbar__now-item">
+          张力 <b>{tensions}</b>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+interface SightBrief {
+  head?: { now_local?: string };
+  tensions?: unknown[];
+}
+
 export function TopBar({ onOpenSearch, onOpenQuery, onTidy, onLogout, onMinimizeAll }: Props) {
   const theme = useTheme((s) => s.theme);
   const toggle = useTheme((s) => s.toggle);
@@ -35,6 +105,7 @@ export function TopBar({ onOpenSearch, onOpenQuery, onTidy, onLogout, onMinimize
   return (
     <div className="topbar">
       <span className="topbar__brand">Alongside</span>
+      <ShellNow />
       {/* ★ 2026-09-27（主人「正式版 1.0.0」）：版本号 + 构建时刻。
           悬停可看构建时间 —— 一眼分清「跑的是新版还是 PWA 缓存的旧版」。 */}
       <span

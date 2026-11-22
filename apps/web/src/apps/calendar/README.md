@@ -6,7 +6,7 @@ Alongside 的日程/日历模块前端，作为内核插件加载（manifestId=`
 
 - 仅负责 `apps/web/src/apps/calendar/**` 的前端实现。
 - 后端（FastAPI + SQLite，commit `9573626`，11 测试通过）已完成，本模块只对接真实 API，**不使用任何 mock 冒充真实数据**。
-- 插件入口契约（`index.tsx` 默认导出 `PluginModule { manifestId, Component, slots }`）由 T14 的加载器按 `manifest.entry = "@apps/calendar"` 加载；日历是否出现在侧边栏由 T14 在 `public/modules.json` 注册决定（不在本卡边界内）。
+- 插件入口契约（`index.tsx` 默认导出 `PluginModule { manifestId, Component, slots }`）由 T14 的加载器按 `manifest.entry = "@apps/calendar"` 加载；日历是否出现在侧边栏由**后端插件清单**（manifest）与运行时注册决定（不在本卡边界内）。
 
 ## 目录结构
 

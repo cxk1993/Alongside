@@ -161,9 +161,10 @@ export function manifestToModule(p: PluginInfo): ModuleManifest {
 /**
  * ★ r5：上一轮由**后端清单**提供过的模块 id。
  * 用途：`卸载` 之后后端清单里不再出现该插件 ⇒ 从 store 注销（Dock 图标随之消失）。
- * ★ 为什么不拿「store 里全部模块」做差集：store 里还装着 `modules.json`（构建期静态）
+ * ★ 为什么不拿「store 里全部模块」做差集：历史上 store 里还装着 `modules.json`（构建期静态）
  *   登记的内置模块，那批不归后端清单管 —— 按全量差集会把内置模块一起误删。
- *   只注销「上一轮由后端带来、本轮消失」的 id，是唯一的正确边界。
+ *   现在注册源已收敛为后端清单（+ 运行时 loader），但「只注销上一轮由后端带来、
+ *   本轮消失的 id」仍是唯一正确边界：它不依赖「store 里还有什么」，逻辑保持不动。
  */
 let lastBackendModuleIds: ReadonlySet<string> = new Set<string>();
 

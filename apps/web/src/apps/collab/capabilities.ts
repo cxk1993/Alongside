@@ -36,7 +36,7 @@ const SELF_ID = "collab";
 
 /**
  * 从注册表推导能力条目。
- * 顺序 = 注册顺序（`modules.json` 的编排顺序，dashboard 打头），**不重排**：
+ * 顺序 = 注册顺序（后端清单的编排顺序，dashboard 打头），**不重排**：
  * 按 id 字母序会把「日历 / 待办」这类天天用的排到后面，且顺序随新增插件漂移。
  */
 export function buildCapabilities(modules: Record<string, ModuleReg>): CapabilityEntry[] {

@@ -6,7 +6,8 @@ import { isRemoteEntry, loadRemoteModule } from "./plugins/runtimeLoader";
  * 模块注册表（T02 实现 · T14 洁癖约束）。
  *
  * 职责：
- *   - 把 modules.json / 后端插件清单注册进桌面 store。
+ *   - 把**后端插件清单**（+ 运行时 loader）注册进桌面 store。
+ *     （构建期静态 `modules.json` 已于 2026-11-22 退役：双源漂移 257 处，后端清单是唯一注册源。）
  *   - 把 entry 解析成 React.lazy 可用的 loader。
  *
  * ★ 内核洁癖：本文件**不认识任何业务插件名**。

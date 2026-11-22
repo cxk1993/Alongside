@@ -6,7 +6,7 @@ import type { ModuleManifest } from "./types";
  * 桌面状态中枢（Zustand）。
  *
  * 管两件事：
- *   1. 模块注册表（来自 modules.json，由 ModuleRegistry 写入）。
+ *   1. 模块注册表（来自后端插件清单，由 ModuleRegistry / PluginRegistry 写入）。
  *   2. 窗口生命周期（open/close/focus/min/max/z-index）与几何持久化。
  *
  * 几何存 localStorage，刷新后由 Desktop 调 hydrate() 恢复。

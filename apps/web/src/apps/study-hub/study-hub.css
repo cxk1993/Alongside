@@ -149,6 +149,39 @@
   white-space: normal;
 }
 
+.study-hub__config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.study-hub__config-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--txt-dim);
+}
+
+.study-hub__config-input {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--txt);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.study-hub__config-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .study-hub__note {
   margin: 0;
   font-size: 11px;

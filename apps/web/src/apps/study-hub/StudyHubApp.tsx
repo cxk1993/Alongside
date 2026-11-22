@@ -28,14 +28,59 @@ interface LearningApp {
   syncLabel?: string;
   /** 首次同步前要先补齐的内置配置（幂等）：目前只有 sdu-feeds 需要 seed 源。 */
   preSync?: string;
+  /** 内嵌站点：默认「新标签打开」（站点常拒绝 iframe），窗口内打开作为次要选项。 */
+  externalUrl?: string;
+  /** 需要账号会话的插件：配置表单的字段。 */
+  session?: { field: "cookie" | "sessionid"; label: string; placeholder: string; defaultBase?: string };
 }
 
 const LEARNING_APPS: LearningApp[] = [
-  { id: "mooc", label: "中国大学MOOC", mode: "window", hint: "内嵌原站 · 登录状态由浏览器决定" },
-  { id: "ucampus", label: "U校园", mode: "window", hint: "内嵌原站 · 登录状态由浏览器决定" },
-  { id: "zhidao", label: "知到", mode: "window", hint: "内嵌原站 · 登录状态由浏览器决定" },
-  { id: "welearn", label: "WE Learn", mode: "sync", hint: "只读同步 · 需配置 Cookie", syncLabel: "同步进度" },
-  { id: "yuketang", label: "雨课堂", mode: "sync", hint: "只读同步 · 需配置 session", syncLabel: "同步公告" },
+  {
+    id: "mooc",
+    label: "中国大学MOOC",
+    mode: "window",
+    hint: "官网默认新标签打开（站点拒绝内嵌）",
+    externalUrl: "https://www.icourse163.org/",
+  },
+  {
+    id: "ucampus",
+    label: "U校园",
+    mode: "window",
+    hint: "官网默认新标签打开（站点可能拒绝内嵌）",
+    externalUrl: "https://u.unipus.cn/",
+  },
+  {
+    id: "zhidao",
+    label: "知到",
+    mode: "window",
+    hint: "官网默认新标签打开（站点可能拒绝内嵌）",
+    externalUrl: "https://onlinestuh5.zhihuishu.com/",
+  },
+  {
+    id: "welearn",
+    label: "WE Learn",
+    mode: "sync",
+    hint: "只读同步 · 先配置 Cookie",
+    syncLabel: "同步进度",
+    session: {
+      field: "cookie",
+      label: "Cookie（含 .AspNet.Cookies 与 ASP.NET_SessionId）",
+      placeholder: "从浏览器 DevTools → Cookies 复制整串",
+    },
+  },
+  {
+    id: "yuketang",
+    label: "雨课堂",
+    mode: "sync",
+    hint: "只读同步 · 先配置 sessionid",
+    syncLabel: "同步公告",
+    session: {
+      field: "sessionid",
+      label: "sessionid",
+      placeholder: "DevTools → Cookies 里的 sessionid",
+      defaultBase: "https://changjiang.yuketang.cn",
+    },
+  },
   {
     id: "sdu-feeds",
     label: "山大通知",
@@ -62,7 +107,10 @@ interface CardState {
 export function StudyHubApp() {
   const { plugins, enable, refresh, loading } = usePlugins();
   const [cards, setCards] = useState<Record<string, CardState>>({});
+  /** 会话配置表单（凭据只进 input 与 POST body，不写日志、不进卡片消息）。 */
+  const [configs, setConfigs] = useState<Record<string, { open: boolean; cred: string; base: string }>>({});
   const byId = useMemo(() => new Map(plugins.map((p) => [p.id, p])), [plugins]);
+  const cfgOf = (id: string) => configs[id] ?? { open: false, cred: "", base: "" };
 
   const setCard = useCallback((id: string, patch: Partial<CardState>) => {
     const empty: CardState = { busy: false, message: null, tone: "ok" };
@@ -70,10 +118,16 @@ export function StudyHubApp() {
   }, []);
 
   const openApp = useCallback(
-    async (app: LearningApp) => {
+    async (app: LearningApp, inWindow = false) => {
       const plugin = byId.get(app.id);
       if (!plugin) {
         setCard(app.id, { message: "未注册：插件清单里没有它", tone: "warn" });
+        return;
+      }
+      // 内嵌站点默认新标签打开：icourse163 等会以「非法跨域请求」拒绝 iframe。
+      if (app.externalUrl && !inWindow) {
+        window.open(app.externalUrl, "_blank", "noopener,noreferrer");
+        setCard(app.id, { message: "已在新标签打开", tone: "ok" });
         return;
       }
       setCard(app.id, { busy: true, message: null });
@@ -93,6 +147,38 @@ export function StudyHubApp() {
       }
     },
     [byId, enable, refresh, setCard],
+  );
+
+  const saveSession = useCallback(
+    async (app: LearningApp) => {
+      if (!app.session) return;
+      const cfg = cfgOf(app.id);
+      const value = cfg.cred.trim();
+      if (!value) {
+        setCard(app.id, { message: "先粘贴凭据再保存", tone: "warn" });
+        return;
+      }
+      setCard(app.id, { busy: true, message: null });
+      try {
+        const body: Record<string, string> =
+          app.session.field === "cookie"
+            ? { cookie: value, ...(cfg.base.trim() ? { base_url: cfg.base.trim() } : {}) }
+            : { sessionid: value, ...(cfg.base.trim() ? { base_url: cfg.base.trim() } : {}) };
+        const res = await api.post<Record<string, unknown>>(`/api/v1/${app.id}/session`, body);
+        const name = typeof res?.first_course === "string" ? res.first_course : "";
+        setCard(app.id, {
+          message: `会话已保存${typeof res?.courses === "number" ? ` · 课程 ${res.courses}` : ""}${name ? ` · ${name}` : ""}`,
+          tone: "ok",
+        });
+        // 保存成功即刻把凭据从内存表单里清掉（只留在服务端库）
+        setConfigs((prev) => ({ ...prev, [app.id]: { open: false, cred: "", base: cfg.base } }));
+      } catch (e) {
+        setCard(app.id, { message: errorText(e), tone: "warn" });
+      } finally {
+        setCard(app.id, { busy: false });
+      }
+    },
+    [cfgOf, setCard],
   );
 
   const syncApp = useCallback(
@@ -176,13 +262,75 @@ export function StudyHubApp() {
                       : !enabled
                         ? "启用"
                         : app.mode === "window"
-                          ? "打开"
+                          ? app.externalUrl
+                            ? "打开官网"
+                            : "打开"
                           : (app.syncLabel ?? "同步")}
                 </button>
+                {app.externalUrl ? (
+                  <button
+                    type="button"
+                    className="study-hub__btn"
+                    disabled={state?.busy}
+                    onClick={() => openApp(app, true)}
+                  >
+                    窗口内
+                  </button>
+                ) : null}
+                {app.session ? (
+                  <button
+                    type="button"
+                    className="study-hub__btn"
+                    onClick={() =>
+                      setConfigs((prev) => ({ ...prev, [app.id]: { ...cfgOf(app.id), open: !cfgOf(app.id).open } }))
+                    }
+                  >
+                    配置
+                  </button>
+                ) : null}
                 <span className={`study-hub__msg${state?.tone === "warn" ? " is-warn" : ""}`} role="status">
                   {state?.message ?? (enabled ? "已启用" : "未启用")}
                 </span>
               </div>
+
+              {app.session && cfgOf(app.id).open ? (
+                <form
+                  className="study-hub__config"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void saveSession(app);
+                  }}
+                >
+                  <label className="study-hub__config-label">
+                    {app.session.label}
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      className="study-hub__config-input"
+                      placeholder={app.session.placeholder}
+                      value={cfgOf(app.id).cred}
+                      onChange={(e) =>
+                        setConfigs((prev) => ({ ...prev, [app.id]: { ...cfgOf(app.id), cred: e.target.value } }))
+                      }
+                    />
+                  </label>
+                  <label className="study-hub__config-label">
+                    站点（可留空）
+                    <input
+                      type="text"
+                      className="study-hub__config-input"
+                      placeholder={app.session.defaultBase ?? "默认官网"}
+                      value={cfgOf(app.id).base}
+                      onChange={(e) =>
+                        setConfigs((prev) => ({ ...prev, [app.id]: { ...cfgOf(app.id), base: e.target.value } }))
+                      }
+                    />
+                  </label>
+                  <button type="submit" className="study-hub__btn study-hub__btn--primary" disabled={state?.busy}>
+                    保存并校验
+                  </button>
+                </form>
+              ) : null}
             </article>
           );
         })}

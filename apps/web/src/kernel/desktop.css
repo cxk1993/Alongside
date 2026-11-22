@@ -718,6 +718,11 @@
 }
 .wall__surface {
   min-height: 100%;
+  /* 2026-11-22 12:2x 修：只有 min-height 时，内部 .collab-surface{height:100%}
+     在「父级高度 auto」下会退化成内容高 → 主墙底部留 175px 空白。
+     这里补确定高度，让子层的 height:100% 真正生效；超出仍由 .wall{overflow:auto} 滚动。 */
+  height: 100%;
+  box-sizing: border-box;
 }
 .wall__empty {
   display: flex;

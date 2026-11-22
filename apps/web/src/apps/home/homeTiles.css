@@ -227,6 +227,95 @@
   z-index: 60;
 }
 
+/* 编辑态的把手不能是「要凑近才看得见」的暗灰：它们是这一屏唯一说明「可拖可缩」的东西，
+   所以给 accent 底与描边（浏览态仍完全不渲染，不打扰日常）。 */
+.home-tiles.is-editing .home-tile__grip,
+.home-tiles.is-editing .home-tile__resize {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.home-tiles.is-editing .home-tile__grip:hover,
+.home-tiles.is-editing .home-tile__resize:hover {
+  color: var(--surface);
+  background: var(--accent);
+}
+
+/* 状态芯片：拖动报坐标 / 缩放报尺寸；重叠时给「松手让位」的实话。 */
+.home-tile__chip {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  z-index: 2;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-xs);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 18px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.home-tile__card.is-colliding {
+  border-color: var(--warn, var(--accent));
+  border-style: dashed;
+}
+
+.home-tile.is-resizing {
+  z-index: 60;
+}
+
+/* ── 缩放手柄（编辑态） ──────────────────────────────────────────
+   与拖把手同规矩：24×24、独立入口、touch-action:none、编辑态才在 DOM 里。
+   为什么不用 CSS `resize:`——它只改像素尺寸：不落格、松手不解冲突、还会和绝对定位的
+   百分比宽度打架（下一帧就被 left/width 覆盖）。 */
+.home-tile__resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--txt-faint);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: nwse-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.home-tile__resize:hover {
+  color: var(--txt);
+  border-color: var(--accent);
+}
+
+.home-tile__resize:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.home-tile.is-resizing .home-tile__card {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-2);
+  opacity: 0.92;
+}
+
+/* 编辑态两个把手都压在卡角上：给内容让出 26px，说明行/子入口不被盖住。 */
+.home-tiles.is-editing .home-tile__card {
+  padding-bottom: 26px;
+}
+
 .home-tile.is-dragging .home-tile__card {
   border-color: var(--accent);
   box-shadow: var(--shadow-2);

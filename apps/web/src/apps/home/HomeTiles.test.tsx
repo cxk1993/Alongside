@@ -9,7 +9,18 @@ import { useDesktopStore } from "../../kernel/store";
 import { useCalendarUI } from "../calendar/state";
 import { useTodoUI } from "../todo/state";
 import type { ModuleManifest } from "../../kernel/types";
-import { HomeTiles, TILE_DESC, TILE_MAX, TILE_W, initialLayout, overlaps, resolveSlot } from "./HomeTiles";
+import {
+  HomeTiles,
+  TILE_DESC,
+  TILE_MAX,
+  TILE_MIN_H,
+  TILE_MIN_W,
+  TILE_W,
+  initialLayout,
+  overlaps,
+  resolveSize,
+  resolveSlot,
+} from "./HomeTiles";
 import type { TileLayout } from "./HomeTiles";
 
 /**
@@ -157,7 +168,7 @@ describe("区块区 · 渲染", () => {
     useDesktopStore.setState({ modules: { ...SIX, "widget-x": unknown } });
     // 默认 5 块里没有它，但它可能作为补位出现：用初始排布直接钉住渲染层的行为
     render(<HomeTiles />);
-    const tiles = screen.getAllByTestId(/^tile-(?!open-|grip-)/);
+    const tiles = screen.getAllByTestId(/^tile-(?!open-|grip-|resize-|entries-)/);
     for (const el of tiles) {
       const id = el.getAttribute("data-testid")!.replace(/^tile-/, "");
       const desc = el.querySelector(".home-tile__desc");
@@ -259,6 +270,162 @@ describe("区块区 · 拖动", () => {
     fireEvent.click(screen.getByTestId("home-tiles-edit"));
     fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), { key: "ArrowRight", altKey: true });
     expect(Number(screen.getByTestId("tile-calendar").getAttribute("data-x"))).toBe(1);
+  });
+});
+
+// ── 缩放：与拖动同三条底线，只是把 w/h 交给它 ─────────────────────
+describe("区块区 · 缩放", () => {
+  it("resolveSize：不冲突时给请求尺寸", () => {
+    expect(resolveSize({ x: 0, y: 0 }, { w: 6, h: 3 }, [tile("b", 8, 0)])).toEqual({ w: 6, h: 3 });
+  });
+
+  it("resolveSize：长到别人身上 -> 退到最近合法尺寸（位置不动）", () => {
+    // (0,0) 想长成 8x3，右边被 (4,0,4x2) 占住；w<=4 才不压人。
+    // 最近的是 4x3（|8-4|+|3-3| = 4），不是 4x2（5）也不是 3x3（5）。
+    expect(resolveSize({ x: 0, y: 0 }, { w: 8, h: 3 }, [tile("b", 4, 0, 4, 2)])).toEqual({
+      w: 4,
+      h: 3,
+    });
+  });
+
+  it("resolveSize：缩到 0 也是最小尺寸（不会变成看不见的小块）", () => {
+    expect(resolveSize({ x: 0, y: 0 }, { w: 0, h: 0 }, [])).toEqual({
+      w: TILE_MIN_W,
+      h: TILE_MIN_H,
+    });
+  });
+
+  it("浏览态没有缩放手柄；编辑态每块一个（与拖把手同一套纪律）", () => {
+    render(<HomeTiles />);
+    expect(screen.queryByTestId("tile-resize-calendar")).toBeNull();
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    expect(screen.getByTestId("tile-resize-calendar")).toBeTruthy();
+    expect(screen.getByTestId("tile-resize-notes")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    expect(screen.queryByTestId("tile-resize-calendar")).toBeNull();
+  });
+
+  it("缩放手柄 24x24 + touch-action:none + cursor:nwse-resize（规格钉在 CSS 上）", () => {
+    // 同一 class 有多条规则（基础尺寸 / 编辑态配色）：取含尺寸的那条，别取第一条。
+    const blocks = [...css.matchAll(/\.home-tile__resize[^{}]*\{([^}]*)\}/g)].map((m) => m[1]);
+    const body = blocks.find((b) => /width:\s*24px/.test(b)) ?? "";
+    expect(body).toMatch(/width:\s*24px/);
+    expect(body).toMatch(/height:\s*24px/);
+    expect(body).toMatch(/touch-action:\s*none/);
+    expect(body).toMatch(/cursor:\s*nwse-resize/);
+    // 编辑态必须给 accent 底/描边：暗灰把手在深色卡上「凑近才看得见」，等于没有可供性。
+    expect(css).toMatch(/\.home-tiles\.is-editing[^{]*\.home-tile__resize[^{]*\{[^}]*border-color:\s*var\(--accent\)/);
+  });
+
+  it("缩放中有尺寸芯片（报网格尺寸，不是像素）", () => {
+    useDesktopStore.setState({ modules: { calendar: mod("calendar", "日程表") } });
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    expect(screen.queryByTestId("tile-chip-calendar")).toBeNull();
+    act(() =>
+      firePointer(screen.getByTestId("tile-resize-calendar"), "pointerdown", {
+        clientX: 10,
+        clientY: 10,
+        button: 0,
+      }),
+    );
+    act(() => fireWindow("pointermove", { clientX: 210, clientY: 10 }));
+    expect(screen.getByTestId("tile-chip-calendar").textContent).toBe("6×2 格");
+    act(() => fireWindow("pointerup", { clientX: 210, clientY: 10 }));
+    expect(screen.queryByTestId("tile-chip-calendar")).toBeNull();
+  });
+
+  it("按住缩放手柄 -> 出遮罩；拖动尺寸跟手；松手保持", () => {
+    useDesktopStore.setState({ modules: { calendar: mod("calendar", "日程表") } });
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    const rz = screen.getByTestId("tile-resize-calendar");
+    act(() => firePointer(rz, "pointerdown", { clientX: 10, clientY: 10, button: 0 }));
+    expect(screen.getByTestId("home-tiles-veil")).toBeTruthy();
+    expect(screen.getByTestId("home-tiles").className).toContain("is-resizing");
+
+    // jsdom clientWidth=0 -> 100px/格、76px/行：dx=200 -> +2 列，dy=76 -> +1 行
+    act(() => fireWindow("pointermove", { clientX: 210, clientY: 86 }));
+    const el = screen.getByTestId("tile-calendar");
+    expect(Number(el.getAttribute("data-w"))).toBe(6);
+    expect(Number(el.getAttribute("data-h"))).toBe(3);
+
+    act(() => fireWindow("pointerup", { clientX: 210, clientY: 86 }));
+    const after = screen.getByTestId("tile-calendar");
+    expect(Number(after.getAttribute("data-w"))).toBe(6);
+    expect(Number(after.getAttribute("data-h"))).toBe(3);
+    expect(screen.queryByTestId("home-tiles-veil")).toBeNull();
+  });
+
+  it("长到邻居身上 -> 松手退回合法尺寸，邻居一动不动", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    const rz = screen.getByTestId("tile-resize-calendar");
+    act(() => firePointer(rz, "pointerdown", { clientX: 10, clientY: 10, button: 0 }));
+    // +4 格 -> w=8，正压住 todo(4,0)
+    act(() => fireWindow("pointermove", { clientX: 410, clientY: 10 }));
+    expect(Number(screen.getByTestId("tile-calendar").getAttribute("data-w"))).toBe(8);
+    act(() => fireWindow("pointerup", { clientX: 410, clientY: 10 }));
+
+    // 退回最近合法尺寸 = 原尺寸 4x2（位置不动，不是弹到空位）
+    const cal = screen.getByTestId("tile-calendar");
+    expect(Number(cal.getAttribute("data-w"))).toBe(4);
+    expect(Number(cal.getAttribute("data-h"))).toBe(2);
+    expect(Number(cal.getAttribute("data-x"))).toBe(0);
+    expect(Number(cal.getAttribute("data-y"))).toBe(0);
+    expect(Number(screen.getByTestId("tile-todo").getAttribute("data-w"))).toBe(4);
+  });
+
+  it("键盘等价物：编辑态 Alt+Shift+↓ 长一行；浏览态不动", () => {
+    // 单块：下方没有邻居，才能验「键盘缩放本身生效」（五块时 (0,2) 被占，长下去本该被拦）。
+    useDesktopStore.setState({ modules: { calendar: mod("calendar", "日程表") } });
+    render(<HomeTiles />);
+    const h0 = () => Number(screen.getByTestId("tile-calendar").getAttribute("data-h"));
+    expect(h0()).toBe(2);
+
+    fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), {
+      key: "ArrowDown",
+      altKey: true,
+      shiftKey: true,
+    });
+    expect(h0()).toBe(2);
+
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    // 往右长会被 todo(4,0) 挡住 —— 那正是 resolveSize 该拦的；往下长（第 3 行是空的）才该成。
+    fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), {
+      key: "ArrowDown",
+      altKey: true,
+      shiftKey: true,
+    });
+    expect(h0()).toBe(3);
+  });
+
+  it("键盘缩放也受「不压别人」约束：往右长被邻居挡住 -> 尺寸不变", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    const w0 = () => Number(screen.getByTestId("tile-calendar").getAttribute("data-w"));
+    expect(w0()).toBe(4);
+    fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), {
+      key: "ArrowRight",
+      altKey: true,
+      shiftKey: true,
+    });
+    expect(w0()).toBe(4);
+  });
+
+  it("读屏播报：缩放时说「正在调整 … 的大小」（与拖动区分开）", () => {
+    useDesktopStore.setState({ modules: { calendar: mod("calendar", "日程表") } });
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    act(() =>
+      firePointer(screen.getByTestId("tile-resize-calendar"), "pointerdown", {
+        clientX: 10,
+        clientY: 10,
+        button: 0,
+      }),
+    );
+    expect(screen.getByTestId("home-tiles-live").textContent).toContain("正在调整");
+    act(() => fireWindow("pointerup", { clientX: 10, clientY: 10 }));
   });
 });
 

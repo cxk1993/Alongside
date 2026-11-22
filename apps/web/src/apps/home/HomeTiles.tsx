@@ -37,6 +37,9 @@ export const TILE_H = 2;
 /** 最多几块。刻意留空位（4 行 × 3 列能放 6 块，这里只放 5）——没有空位的网格「怎么拖都弹回」，
  *  用户会读成「拖拽坏了」。 */
 export const TILE_MAX = 5;
+/** 缩放的最小尺寸：1 行 × 3 列（再小就装不下「名字 + 一句能力」）。 */
+export const TILE_MIN_W = 3;
+export const TILE_MIN_H = 1;
 
 /**
  * 能力说明（一句话「这块能干什么」）。
@@ -186,6 +189,50 @@ export function resolveSlot(
   return best;
 }
 
+/**
+ * 缩放落位：请求的尺寸与别人冲突时，退到**曼哈顿距离最近**的合法尺寸（同距离取面积大的）；
+ * 一个都放不下 -> null，调用方回原尺寸。纯函数，jsdom 可测。
+ *
+ * 与 resolveSlot 的分工：拖动改 x/y、缩放改 w/h，两件事不互相代劳。
+ * 自己不在 others 里 => 原尺寸永远是候选，所以「长到别人身上」的可预期结果是「长不进去」，
+ * 而不是整块弹到别的位置（那是拖动该做的事，缩放时位置不该动）。
+ */
+export function resolveSize(
+  at: Slot,
+  req: { w: number; h: number },
+  others: TileLayout[],
+  rows = TILE_ROWS,
+): { w: number; h: number } | null {
+  const wMax = TILE_COLS - at.x;
+  const hMax = rows - at.y;
+  const wantW = clamp(req.w, TILE_MIN_W, wMax);
+  const wantH = clamp(req.h, TILE_MIN_H, hMax);
+  const probe = (w: number, h: number): TileLayout => ({
+    i: "__probe__",
+    moduleId: "",
+    name: "",
+    x: at.x,
+    y: at.y,
+    w,
+    h,
+  });
+  let best: { w: number; h: number } | null = null;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (let w = TILE_MIN_W; w <= wMax; w++) {
+    for (let h = TILE_MIN_H; h <= hMax; h++) {
+      const cand = probe(w, h);
+      if (others.some((o) => overlaps(cand, o))) continue;
+      const d = Math.abs(w - wantW) + Math.abs(h - wantH);
+      const area = w * h;
+      if (d < bestD || (d === bestD && area > (best ? best.w * best.h : 0))) {
+        bestD = d;
+        best = { w, h };
+      }
+    }
+  }
+  return best;
+}
+
 /** 初始排布：一排 3 块，满了换行。 */
 export function initialLayout(mods: { id: string; name: string }[]): TileLayout[] {
   return mods.slice(0, TILE_MAX).map((m, idx) => ({
@@ -208,6 +255,18 @@ interface DragState {
   origY: number;
   w: number;
   h: number;
+  cellW: number;
+}
+
+interface ResizeState {
+  i: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  origX: number;
+  origY: number;
+  origW: number;
+  origH: number;
   cellW: number;
 }
 
@@ -249,9 +308,11 @@ export function HomeTiles() {
   const [tiles, setTiles] = useState<TileLayout[]>([]);
   const [editing, setEditing] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [resizeId, setResizeId] = useState<string | null>(null);
   const seeded = useRef(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const resizeRef = useRef<ResizeState | null>(null);
 
   // 模块是异步来的：第一次非空时铺一次，之后不再重置（同一份教训：挂载即跑会被空列表洗掉）。
   useEffect(() => {
@@ -279,6 +340,32 @@ export function HomeTiles() {
       cellW,
     };
     setDragId(t.i);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* jsdom 未实现 —— 鼠标路径由 window 监听兜底 */
+    }
+  };
+
+  /** 缩放入口：与拖把手同一条规矩（独立 24x24 按钮、编辑态才存在、touch-action:none）。 */
+  const onResizeDown = (e: ReactPointerEvent<HTMLButtonElement>, t: TileLayout) => {
+    if (!editing || e.button > 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const canvas = canvasRef.current;
+    const cellW = canvas && canvas.clientWidth > 0 ? canvas.clientWidth / TILE_COLS : 100;
+    resizeRef.current = {
+      i: t.i,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: t.x,
+      origY: t.y,
+      origW: t.w,
+      origH: t.h,
+      cellW,
+    };
+    setResizeId(t.i);
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
@@ -327,6 +414,50 @@ export function HomeTiles() {
     };
   }, [dragId]);
 
+  // 缩放：同一套 window 监听与同一块遮罩；拖动中允许视觉上压别人，只在松手时解冲突。
+  useEffect(() => {
+    if (!resizeId) return;
+    const onMove = (e: PointerEvent) => {
+      const d = resizeRef.current;
+      if (!d || e.pointerId !== d.pointerId) return;
+      const nw = clamp(
+        d.origW + Math.round((e.clientX - d.startX) / d.cellW),
+        TILE_MIN_W,
+        TILE_COLS - d.origX,
+      );
+      const nh = clamp(
+        d.origH + Math.round((e.clientY - d.startY) / TILE_ROW_H),
+        TILE_MIN_H,
+        TILE_ROWS - d.origY,
+      );
+      setTiles((list) => list.map((t) => (t.i === d.i ? { ...t, w: nw, h: nh } : t)));
+    };
+    const onUp = (e: PointerEvent) => {
+      const d = resizeRef.current;
+      if (!d || e.pointerId !== d.pointerId) return;
+      resizeRef.current = null;
+      setResizeId(null);
+      setTiles((list) => {
+        const me = list.find((t) => t.i === d.i);
+        if (!me) return list;
+        const others = list.filter((t) => t.i !== d.i);
+        // 长到别人身上 -> 退到最近合法尺寸；一个都放不下 -> 回原尺寸。
+        // 位置（x/y）不归缩放管，所以这里绝不调用 resolveSlot。
+        const size = resolveSize({ x: me.x, y: me.y }, { w: me.w, h: me.h }, others);
+        const target = size ?? { w: d.origW, h: d.origH };
+        return list.map((t) => (t.i === d.i ? { ...t, w: target.w, h: target.h } : t));
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [resizeId]);
+
   /** 键盘等价物：编辑态下 Alt+←/→/↑/↓ 挪一格（不能只有鼠标能排）。 */
   const nudge = (t: TileLayout, dx: number, dy: number) => {
     setTiles((list) =>
@@ -342,16 +473,36 @@ export function HomeTiles() {
     );
   };
 
+  /** 键盘等价物 · 缩放：Alt+Shift+方向键改一格尺寸（同样走 resolveSize，不会压别人）。 */
+  const resizeNudge = (t: TileLayout, dw: number, dh: number) => {
+    setTiles((list) => {
+      const others = list.filter((o) => o.i !== t.i);
+      return list.map((o) => {
+        if (o.i !== t.i) return o;
+        const want = {
+          w: clamp(o.w + dw, TILE_MIN_W, TILE_COLS - o.x),
+          h: clamp(o.h + dh, TILE_MIN_H, TILE_ROWS - o.y),
+        };
+        const size = resolveSize({ x: o.x, y: o.y }, want, others);
+        return size ? { ...o, w: size.w, h: size.h } : o;
+      });
+    });
+  };
+
   const dragName = dragId ? tiles.find((t) => t.i === dragId)?.name : undefined;
+  const resizeName = resizeId ? tiles.find((t) => t.i === resizeId)?.name : undefined;
+  const busy = Boolean(dragId || resizeId);
   const hint = editing
-    ? "拖右上角把手移动；Alt+方向键也能挪一格"
+    ? "拖右上角移动、拖右下角缩放；Alt / Alt+Shift + 方向键也能挪 / 缩"
     : tiles.length
       ? `${tiles.length} 块 · 点开即用`
       : "";
 
   return (
     <section
-      className={`home-tiles${editing ? " is-editing" : ""}${dragId ? " is-dragging" : ""}`}
+      className={`home-tiles${editing ? " is-editing" : ""}${dragId ? " is-dragging" : ""}${
+        resizeId ? " is-resizing" : ""
+      }`}
       aria-label="区块区"
       data-testid="home-tiles"
     >
@@ -384,11 +535,15 @@ export function HomeTiles() {
       >
         {tiles.map((t) => {
           const isDrag = t.i === dragId;
+          const isResize = t.i === resizeId;
+          // 拖动中是否压到别人（松手会被挪到最近空位）——诚实提示，不是装饰。
+          const colliding =
+            isDrag && tiles.some((o) => o.i !== t.i && overlaps(t, o));
           const entries = TILE_ENTRIES[t.moduleId] ?? [];
           return (
             <article
               key={t.i}
-              className={`home-tile${isDrag ? " is-dragging" : ""}`}
+              className={`home-tile${isDrag ? " is-dragging" : ""}${isResize ? " is-resizing" : ""}`}
               style={{
                 left: `${(t.x / TILE_COLS) * 100}%`,
                 width: `${(t.w / TILE_COLS) * 100}%`,
@@ -398,8 +553,24 @@ export function HomeTiles() {
               data-testid={`tile-${t.moduleId}`}
               data-x={t.x}
               data-y={t.y}
+              data-w={t.w}
+              data-h={t.h}
             >
-              <div className={`home-tile__card${entries.length ? " has-entries" : ""}`}>
+              <div
+                className={`home-tile__card${entries.length ? " has-entries" : ""}${
+                  colliding ? " is-colliding" : ""
+                }`}
+              >
+                {/* 状态芯片：拖动报坐标、缩放报网格尺寸。演示与读屏都要能说清「现在在做什么」。 */}
+                {isDrag || isResize ? (
+                  <span
+                    className="home-tile__chip"
+                    data-testid={`tile-chip-${t.moduleId}`}
+                    aria-hidden
+                  >
+                    {isResize ? `${t.w}×${t.h} 格` : colliding ? "重叠 · 松手让位" : `${t.x},${t.y}`}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className="home-tile__open"
@@ -410,7 +581,8 @@ export function HomeTiles() {
                     const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
                     if (!dx && !dy) return;
                     e.preventDefault();
-                    nudge(t, dx, dy);
+                    if (e.shiftKey) resizeNudge(t, dx, dy);
+                    else nudge(t, dx, dy);
                   }}
                   title={`打开${t.name}`}
                   data-testid={`tile-open-${t.moduleId}`}
@@ -450,6 +622,28 @@ export function HomeTiles() {
                     ⠿
                   </button>
                 ) : null}
+                {/* 缩放手柄：与拖把手同规矩 —— 24x24、编辑态才在 DOM 里、独立入口。
+                    为什么必须独立：press 一旦落在卡片内容上，父文档收不到 pointerdown。 */}
+                {editing ? (
+                  <button
+                    type="button"
+                    className="home-tile__resize"
+                    aria-label={`调整${t.name}大小`}
+                    title="拖动缩放（Alt+Shift+方向键也可以）"
+                    onPointerDown={(e) => onResizeDown(e, t)}
+                    onKeyDown={(e) => {
+                      if (!e.altKey) return;
+                      const dw = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+                      const dh = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+                      if (!dw && !dh) return;
+                      e.preventDefault();
+                      resizeNudge(t, dw, dh);
+                    }}
+                    data-testid={`tile-resize-${t.moduleId}`}
+                  >
+                    ◢
+                  </button>
+                ) : null}
               </div>
             </article>
           );
@@ -457,7 +651,7 @@ export function HomeTiles() {
 
         {/* 底线①：拖动时盖住整个 canvas。pointer capture 在把手上，遮罩不会抢事件，
             但它挡住了下面所有内容（含将来会有的 iframe）——mousemove 才不会丢。 */}
-        {dragId ? <div className="home-tiles__veil" aria-hidden data-testid="home-tiles-veil" /> : null}
+        {busy ? <div className="home-tiles__veil" aria-hidden data-testid="home-tiles-veil" /> : null}
 
         {tiles.length === 0 ? (
           <p className="home-tiles__empty" data-testid="home-tiles-empty">
@@ -467,7 +661,7 @@ export function HomeTiles() {
       </div>
 
       <span className="home-tiles__sr" aria-live="polite" data-testid="home-tiles-live">
-        {dragName ? `正在拖动 ${dragName}` : ""}
+        {dragName ? `正在拖动 ${dragName}` : resizeName ? `正在调整 ${resizeName} 的大小` : ""}
       </span>
     </section>
   );

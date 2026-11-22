@@ -696,19 +696,25 @@ export function HomeTiles() {
     };
   }, [resizeId]);
 
-  /** 键盘等价物：编辑态下 Alt+←/→/↑/↓ 挪一格（不能只有鼠标能排）。 */
+  /**
+   * 键盘等价物：编辑态下 Alt+←/→/↑/↓ 挪一格（不能只有鼠标能排）。
+   *
+   * 目标格压着别人 → **原地不动**，不像拖动那样弹到最近空位：
+   *   ① 键盘是逐格微调，没有虚线预览，一步跳远比「按了没反应」更让人意外；
+   *   ② 允许重叠会把两块叠着渲染，而布局现在会持久化 —— 重叠一旦写进快照，
+   *      下次加载靠 hydrate 消解，用户看到的是「位置自己变了」。
+   */
   const nudge = (t: TileLayout, dx: number, dy: number) => {
-    setTiles((list) =>
-      list.map((o) =>
-        o.i === t.i
-          ? {
-              ...o,
-              x: clamp(o.x + dx, 0, TILE_COLS - o.w),
-              y: clamp(o.y + dy, 0, TILE_ROWS - o.h),
-            }
-          : o,
-      ),
-    );
+    setTiles((list) => {
+      const others = list.filter((o) => o.i !== t.i);
+      const want: TileLayout = {
+        ...t,
+        x: clamp(t.x + dx, 0, TILE_COLS - t.w),
+        y: clamp(t.y + dy, 0, TILE_ROWS - t.h),
+      };
+      if (others.some((o) => overlaps(want, o))) return list;
+      return list.map((o) => (o.i === t.i ? want : o));
+    });
   };
 
   /** 键盘等价物 · 缩放：Alt+Shift+方向键改一格尺寸（同样走 resolveSize，不会压别人）。 */

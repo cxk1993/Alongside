@@ -272,8 +272,35 @@ describe("区块区 · 拖动", () => {
     expect(Number(screen.getByTestId("tile-calendar").getAttribute("data-x"))).toBe(0);
 
     fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    // 初始 5 块时 calendar(0,0) 右边紧挨 todo(4,0)：Alt+→ 想落 (1,0) 会压住 todo
+    // → 遇阻原地不动（不叠、也不把重叠写进快照）。空位方向（↓ 到 (0,2) 被 finance 占，
+    // 所以这里用「先移除 finance 再 ↓」验证真有位移能力，见下一条）。
     fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), { key: "ArrowRight", altKey: true });
-    expect(Number(screen.getByTestId("tile-calendar").getAttribute("data-x"))).toBe(1);
+    expect(Number(screen.getByTestId("tile-calendar").getAttribute("data-x"))).toBe(0);
+  });
+
+  it("键盘挪动有位置可去时真的会动，且不会压住邻居", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    // 先移除 finance（0,2），calendar 就能 ↓ 一格到 (0,2)
+    fireEvent.click(screen.getByTestId("tile-remove-finance"));
+    fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), { key: "ArrowDown", altKey: true });
+    const cal = screen.getByTestId("tile-calendar").dataset;
+    // 步进是 1 格（块可以停在半格，与拖动同一语义）：0 → 1，且 (0,1) 不与任何人重叠
+    expect(cal.y).toBe("1");
+    // 与其余块逐对验证不重叠
+    const rects = ["tile-calendar", "tile-todo", "tile-habits", "tile-notes"].map((id) => {
+      const d = screen.getByTestId(id).dataset;
+      return { x: Number(d.x), y: Number(d.y), w: Number(d.w), h: Number(d.h) };
+    });
+    const [a, ...rest] = rects;
+    for (const b of rest) {
+      const clash = !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+      expect(clash).toBe(false);
+    }
+    // 重叠不进快照：写回的第一条 x/y 就是真实位置
+    const saved = JSON.parse(localStorage.getItem("alongside.hometiles.v1")!).tiles;
+    expect(saved.find((t: { moduleId: string }) => t.moduleId === "calendar")).toMatchObject({ x: 0, y: 1 });
   });
 });
 
@@ -785,6 +812,8 @@ describe("区块区 · 布局持久化", () => {
   it("挪过位置的块，刷回来位置不丢（存的是 x/y，不是只有顺序）", () => {
     render(<HomeTiles />);
     fireEvent.click(screen.getByTestId("home-tiles-edit"));
+    // 先移除 todo 腾出右边（键盘遇阻原地不动，这是本轮补的语义）
+    fireEvent.click(screen.getByTestId("tile-remove-todo"));
     // 键盘等价物挪一格：不依赖 pointer capture（jsdom 没有）
     fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), { key: "ArrowRight", altKey: true });
     expect(screen.getByTestId("tile-calendar").dataset.x).toBe("1");

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { notesApi, type NoteBrief, type TreeNode } from "./api";
 import MdView from "@/shared/components/MdView";
+import { ApiError } from "@/shared/api/client";
+import { AppErrorState } from "@/shared/ui/app-shell/AppShell";
 
 /**
  * 笔记窗口：搜索索引 + 点开看全文（全文经本机桥按需拉取）。
@@ -193,8 +195,23 @@ export default function NotesApp() {
       )}
       <div className="notes-body">
         <ul className="notes-list" aria-label="笔记列表">
-          {search.isLoading && <li className="empty">加载中…</li>}
-          {search.data?.items.length === 0 && (
+          {search.isLoading && <li className="empty">读取中…</li>}
+          {/* ★ 2026-11-22（汐瑶 · 三态收口）：原来 error 与「真的没有索引」长得一样；
+              data 为 undefined 时既不 loading 也不 empty → 整块白板，一句话都没有。
+              404 单独说「未接线」（notes 模块 phase=PENDING 时就是这样），不当成「坏」。 */}
+          {search.isError &&
+            (search.error instanceof ApiError && search.error.status === 404 ? (
+              <li className="empty">笔记层未接线（/api/v1/notes/search → 404）—— 不是「没有笔记」</li>
+            ) : (
+              <li>
+                <AppErrorState
+                  error={search.error}
+                  onRetry={() => void search.refetch()}
+                  title="笔记列表读取失败"
+                />
+              </li>
+            ))}
+          {search.isSuccess && search.data?.items.length === 0 && (
             <li className="empty">还没有索引，点右上角「同步」从本机桥拉取</li>
           )}
           {search.data?.items.map((n) => (
@@ -212,7 +229,14 @@ export default function NotesApp() {
         </ul>
         <div className="notes-detail" aria-label="笔记详情">
           {!selected && <div className="empty">选一篇看看</div>}
-          {selected && detail.isLoading && <div className="empty">加载中…</div>}
+          {selected && detail.isLoading && <div className="empty">读取中…</div>}
+          {selected && detail.isError && (
+            <div className="empty">
+              {detail.error instanceof ApiError && detail.error.status === 404
+                ? "这篇在索引里找不到（404）—— 可能已被移走，点「同步」再试"
+                : "正文没读到 —— 不是一篇空笔记"}
+            </div>
+          )}
           {selected && detail.data && (
             <>
               <h3 className="notes-detail__title">{detail.data.title}</h3>

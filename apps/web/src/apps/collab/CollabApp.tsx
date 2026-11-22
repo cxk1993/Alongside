@@ -512,8 +512,19 @@ export default function CollabApp() {
               ))}
             </ul>
           ) : (
-            <p className="collab-empty">
-              {proposals.status === "ready" ? "还没有签过、撤过或否过的东西" : "读取中…"}
+            /* ★ 2026-11-22（汐瑶 · 三态收口）：此前 error/missing 一律显示「读取中…」，
+               与「真的没有记录」分不开、且永远不结束。四态各说各的，空态只在 ready 才说。 */
+            <p
+              className={`collab-empty${proposals.status === "error" ? " collab-empty--warn" : ""}`}
+              data-testid="collab-timeline-empty"
+            >
+              {proposals.status === "ready"
+                ? "还没有签过、撤过或否过的东西"
+                : proposals.status === "missing"
+                  ? "数据源未接上 —— 不是「没有记录」"
+                  : proposals.status === "error"
+                    ? "没读到 —— 接口异常，不是「没有记录」"
+                    : "读取中…"}
             </p>
           )}
         </section>

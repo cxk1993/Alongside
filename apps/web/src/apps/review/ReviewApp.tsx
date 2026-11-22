@@ -290,8 +290,16 @@ export default function ReviewApp() {
         <main className="review-main">
           {!activeDate ? (
             <div className="review-empty">选择左侧日期查看复盘</div>
-          ) : dayQ.isLoading || !day ? (
-            <div className="review-empty">加载中…</div>
+          ) : dayQ.isLoading ? (
+            <div className="review-empty">读取中…</div>
+          ) : dayQ.isError ? (
+            /* ★ 2026-11-22（汐瑶 · 三态收口）：原 `isLoading || !day` 把 error 也说成「加载中…」
+               —— 永远转不完。 */
+            <div className="review-empty review-source--offline">
+              没读到 —— 接口异常，不是「这天没有记录」
+            </div>
+          ) : !day ? (
+            <div className="review-empty">这一天没有记录</div>
           ) : (
             <>
               <section className="review-panel">
@@ -452,8 +460,13 @@ export default function ReviewApp() {
                       {week.week_start} ~ {week.week_end} · 合计 {formatSeconds(week.total_seconds)}
                     </div>
                   </>
+                ) : weekQ.isError ? (
+                  /* ★ 2026-11-22（汐瑶 · 三态收口）：原来 error 也落到「加载中…」。 */
+                  <div className="review-empty review-source--offline">
+                    没读到 —— 接口异常，不是「本周没有记录」
+                  </div>
                 ) : (
-                  <div className="review-empty">加载中…</div>
+                  <div className="review-empty">读取中…</div>
                 )}
               </section>
             </>

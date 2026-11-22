@@ -134,8 +134,14 @@ export function DesktopTodaySummary() {
   return (
     <div className="desktop-side__today" data-testid="desktop-today-summary">
       <div className="desktop-side__title">今日</div>
-      {isLoading || isError ? (
-        <div className="desktop-side__empty">{isLoading ? "…" : "?"}</div>
+      {isLoading ? (
+        <div className="desktop-side__empty">…</div>
+      ) : isError ? (
+        /* ★ 2026-11-22（汐瑶 · 三态收口）：error 原来显示一个「?」—— 全场最像「坏了」的符号。
+           侧栏窄，沿用 TimeWidget 已用的「暂时不可用」，原因放 title。 */
+        <div className="desktop-side__empty" title="今日摘要读取失败 —— 不是「今天没有内容」">
+          暂时不可用
+        </div>
       ) : (
         <ul className="desktop-side__today-list">
           {providers.map((p, i) => {

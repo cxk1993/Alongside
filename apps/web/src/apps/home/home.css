@@ -45,7 +45,7 @@
 .home__favs-label {
   flex: 0 0 auto;
   font-size: 11px;
-  color: var(--txt-faint);
+  color: var(--txt-dim);
   letter-spacing: 0.06em;
 }
 
@@ -309,12 +309,26 @@
 }
 
 .home__sources {
-  color: var(--txt-faint);
-  font-size: 11px;
+  color: var(--txt-dim);
+  font-size: 12px;
 }
 
 .home__sources summary {
   cursor: pointer;
+  margin-left: -6px;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.home__sources summary:hover {
+  background: var(--surface);
+  color: var(--txt);
+}
+
+.home__sources summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .home__sources p {

@@ -324,7 +324,9 @@ export function HomeMyToday() {
         {/* 降级源如实收进一行折叠：不假装这些源已经接上 */}
         {degraded.length ? (
           <details className="home__sources">
-            <summary>{degraded.length} 个数据源未接入</summary>
+            <summary>
+              {degraded.length} 处还没接上 · 点开看是哪几处
+            </summary>
             <p>
               {degraded
                 .map((d) => `${d.source ?? "?"}（${d.reason ?? "?"}）`)

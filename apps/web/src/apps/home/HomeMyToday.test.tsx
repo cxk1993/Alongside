@@ -99,7 +99,7 @@ describe("我的今天 · 首屏", () => {
     render(<HomeMyToday />);
     expect(screen.getByTestId("home-conflicts").textContent).toContain("重叠约 30 分钟");
     expect(screen.getByTestId("home-conflicts").textContent).toContain("挪开");
-    expect(screen.getByText(/1 个数据源未接入/)).toBeTruthy();
+    expect(screen.getByText(/处还没接上/)).toBeTruthy();
   });
 
   it("404 时说「未接线」，不冒充「今天没事」", () => {

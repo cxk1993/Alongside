@@ -308,12 +308,12 @@ export function Desktop() {
             <TimeWidget />
           </div>
         ) : (
+          /* ★ P0 去桌面化（2026-11-22 凝析）：不再向 TopBar 传 onTidy / onMinimizeAll
+             —— 两个 icon-btn 已撤（Windows 桌面隐喻余党）。store 动作仍在下方喂给命令面板。 */
           <TopBar
             onOpenSearch={openSearch}
             onOpenQuery={() => pluginHost.open("query")}
-            onTidy={tidy}
             onLogout={() => void logout()}
-            onMinimizeAll={minimizeAllUnpinned}
           />
         )}
         {/* ★ 收放罗盘（主人三板）：右上角常驻「罗盘」按钮；

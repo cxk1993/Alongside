@@ -10,20 +10,24 @@ declare const __BUILD_AT__: string;
 
 interface Props {
   onOpenSearch: () => void;
-  onTidy: () => void;
   /** ★ T30：登录后由 Desktop 传入；未传则不渲染登出按钮（内核不强制鉴权）。 */
   onLogout?: () => void;
-  /** ★ 主人④（2026-09-24）：一键最小化所有未固定窗口（固定窗除外）。 */
-  onMinimizeAll?: () => void;
   /** ★ 主人（2026-09-25）：顶栏「跨插件查询」快捷入口；未传则不渲染（向后兼容）。 */
   onOpenQuery?: () => void;
 }
 
 /**
- * 顶栏：品牌 / 全局搜索 / 此刻状态 / 时钟 / 工作区页签 / 整理桌面 / 主题。
+ * 顶栏：品牌 / 全局搜索 / 此刻状态 / 时钟 / 工作区页签 / 主题。
  *
  * ★ 顶栏语义化（2026-11-22 汐瑶 · 云昔 13:5x 派活）：第一行该读到「现在是什么」，不是版本号 ——
  *   ● AI 在场 · 下一件 19:00 · 今天 2 · 欠 0 · 张力 1
+ *
+ * ★ P0 去桌面化（2026-11-22 17:xx 凝析 · 25-前端路线重构 P0）：
+ *   撤除「▁ 最小化全部窗口」「⊞ 整理桌面」两个 icon-btn —— 它们是 Windows 桌面隐喻的余党。
+ *   顶栏右上角只留 主题 / 登出（时钟 `TimeWidget` 保留，它是今日摘要面板的唯一入口）。
+ *   store 动作（`minimizeAllUnpinned` / `tidyDesktop`）与命令面板条目**本轮不动**，
+ *   待区块模型（RGL）落地后随浮窗模型一并退役。
+ *   回归钉子见 `TopBar.test.tsx`（此前两个按钮零测试覆盖，删了会长回来）。
  *
  * 取数口径唯一：`useSightNow()`（shared/api/now.ts 单例，与 collab 同一份采样时刻）。
  * 为什么不再自己拉一次：两处采样时刻可以不同，界面会自己跟自己打架。
@@ -75,7 +79,7 @@ function ShellNow() {
   );
 }
 
-export function TopBar({ onOpenSearch, onOpenQuery, onTidy, onLogout, onMinimizeAll }: Props) {
+export function TopBar({ onOpenSearch, onOpenQuery, onLogout }: Props) {
   const theme = useTheme((s) => s.theme);
   const toggle = useTheme((s) => s.toggle);
   // ★ T23 工作区切换器
@@ -153,27 +157,10 @@ export function TopBar({ onOpenSearch, onOpenQuery, onTidy, onLogout, onMinimize
       <div className="topbar__actions">
         {/* ★ + 主人反馈（2026-09-25 16:0x）：原「收起顶栏 ⌃ / 收起底栏 ⌄」
             两按钮**已由罗盘取代**（罗盘按钮=统一收放入口），此处撤除，避免双入口并存。 */}
-        {/* ★ 主人④：一键最小化所有未固定窗口（固定窗/已最小化/最大化窗不动） */}
-        {onMinimizeAll ? (
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="最小化全部窗口"
-            title="最小化全部窗口（固定窗除外）"
-            onClick={onMinimizeAll}
-          >
-            ▁
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="整理桌面"
-          title="整理桌面"
-          onClick={onTidy}
-        >
-          ⊞
-        </button>
+        {/* ★ P0 去桌面化（2026-11-22 凝析）：原「▁ 最小化全部」「⊞ 整理桌面」已撤除 ——
+            这两个是 Windows 桌面隐喻的余党（浮窗层叠/平铺管理），区块模型里不存在。
+            store 动作与命令面板条目本轮保留（比丢 lane），RGL 落地后一并退役。
+            回归钉子：TopBar.test.tsx。 */}
         <button
           type="button"
           className="icon-btn"

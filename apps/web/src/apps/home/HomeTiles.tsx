@@ -34,6 +34,33 @@ export const TILE_H = 2;
  *  用户会读成「拖拽坏了」。 */
 export const TILE_MAX = 5;
 
+/**
+ * 能力说明（一句话「这块能干什么」）。
+ *
+ * 为什么需要：只有 `名字 + moduleId` 两块字时，整片区块会被读成「占位符」（视觉复核判定
+ * 40-50% 完成度）。内容层最便宜的补法是**说清能力**——不是放假数据：这里不出现条数、
+ * 金额、日期，那些必须等真数据接进来。
+ *
+ * 口径：只写该模块**当眼能做的事**（按各自的 App 实现核对过），不写规划中的功能。
+ * 未登记 id（第三方插件、注册顺序补位的内核模块）→ 不渲染说明行，不编。
+ */
+export const TILE_DESC: Record<string, string> = {
+  calendar: "按天排日程与安排",
+  todo: "收拢散落的待办",
+  habits: "打卡与连续天数",
+  finance: "BeeCount 账本 + 本地流水",
+  notes: "随手记与按词检索",
+  schedule: "日程 + 待办，一窗两页",
+  course: "一周课表",
+  knowledge: "复盘 / 笔记 / 文档 合一",
+  diary: "月历 + 当天记录",
+  growth: "习惯 / 人格 / 健康 多页",
+  health: "症状、用药与体检记录",
+  review: "按日复盘与时长",
+  docs: "文档树与正文",
+  dashboard: "各模块卡片汇总",
+};
+
 /** 区块 = `TileState`（网格坐标，单一真源）+ 展示用的名字。
  *  不另造一套坐标形状：P2 接 store 时 `windowToTile()` 的输出能直接喂进来。 */
 export interface TileLayout extends TileState {
@@ -319,6 +346,9 @@ export function HomeTiles() {
                 >
                   <span className="home-tile__name">{t.name}</span>
                   <span className="home-tile__kind">{t.moduleId}</span>
+                  {TILE_DESC[t.moduleId] ? (
+                    <span className="home-tile__desc">{TILE_DESC[t.moduleId]}</span>
+                  ) : null}
                 </button>
                 {/* 底线②：只有这个 24×24 的把手能起拖；底线③：编辑态才渲染 */}
                 {editing ? (

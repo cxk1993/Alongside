@@ -220,3 +220,19 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* ── 能力说明（一句「这块能干什么」） ──────────────────────────
+   内容层补一刀：名字 + id 两块字会被读成占位符。这一行只写能力，
+   不出现条数/金额/日期（真数据未接入前，写数字就是假数据）。
+   margin-top:auto 把它压到卡底：上沿留给名字与 id，右下「点开 →」是 hover 才现的提示，同一行不撞。 */
+.home-tile__desc {
+  margin-top: auto;
+  color: var(--txt-dim);
+  font-size: 11.5px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}

@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import type { ModuleReg } from "../../kernel/store";
 import { useDesktopStore } from "../../kernel/store";
 import type { ModuleManifest } from "../../kernel/types";
-import { HomeTiles, TILE_MAX, TILE_W, initialLayout, overlaps, resolveSlot } from "./HomeTiles";
+import { HomeTiles, TILE_DESC, TILE_MAX, TILE_W, initialLayout, overlaps, resolveSlot } from "./HomeTiles";
 import type { TileLayout } from "./HomeTiles";
 
 /**
@@ -131,6 +131,32 @@ describe("区块区 · 渲染", () => {
     useDesktopStore.setState({ modules: {} });
     render(<HomeTiles />);
     expect(screen.getByTestId("home-tiles-empty").textContent).toContain("还没有可放的模块");
+  });
+
+  // 内容层：只有「名字 + id」会被读成占位符；说明行是能力，不是数据。
+  it("每块有一句能力说明（默认 5 块全有，且是「能做什么」不是数字）", () => {
+    render(<HomeTiles />);
+    for (const id of ["calendar", "todo", "habits", "finance", "notes"]) {
+      const desc = screen.getByTestId(`tile-${id}`).querySelector(".home-tile__desc");
+      expect(desc, `${id} 缺能力说明`).toBeTruthy();
+      expect(desc!.textContent!.trim().length).toBeGreaterThan(1);
+      // 真实数据未接入前，说明行里出现数字 = 假数据
+      expect(desc!.textContent).not.toMatch(/\d/);
+    }
+  });
+
+  it("未登记的模块 id → 不渲染说明行（宁缺不编）", () => {
+    const unknown = mod("widget-x", "某插件");
+    useDesktopStore.setState({ modules: { ...SIX, "widget-x": unknown } });
+    // 默认 5 块里没有它，但它可能作为补位出现：用初始排布直接钉住渲染层的行为
+    render(<HomeTiles />);
+    const tiles = screen.getAllByTestId(/^tile-(?!open-|grip-)/);
+    for (const el of tiles) {
+      const id = el.getAttribute("data-testid")!.replace(/^tile-/, "");
+      const desc = el.querySelector(".home-tile__desc");
+      if (TILE_DESC[id]) expect(desc).toBeTruthy();
+      else expect(desc, `${id} 不该有说明（未登记）`).toBeNull();
+    }
   });
 });
 

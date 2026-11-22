@@ -60,6 +60,14 @@ ALLOWED_TOOLS: set[str] = {
     "todo_item_read",
     "health_record_read",
     "dashboard_today_read",
+    # ★ 2026-11-22 比丢：三个「起草提案」型写工具。
+    #   注意它们**不是直接写**：ai-chat 的能力清单里只有 proposals.proposal.write，
+    #   没有 todo.item.write/patch/delete —— 能力层就决定了它们只能建提案等人签字。
+    #   故 V1「白名单里不许出现写工具」的旧立场，精确表述应为
+    #   「不许出现**直接写业务**的工具」；本组是提案起草器，执行权在签字人手里。
+    "todo_item_create",
+    "todo_item_update",
+    "todo_item_delete",
 }
 
 

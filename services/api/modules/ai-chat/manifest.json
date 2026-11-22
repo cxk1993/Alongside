@@ -25,7 +25,8 @@
     "calendar.event.read",
     "todo.item.read",
     "health.record.read",
-    "dashboard.today.read"
+    "dashboard.today.read",
+    "proposals.proposal.write"
   ],
   "optionalDependencies": [],
   "slots": [],

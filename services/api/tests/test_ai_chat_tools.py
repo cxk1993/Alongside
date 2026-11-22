@@ -85,9 +85,69 @@ def test_allowlist_and_defs_consistent():
     assert names <= ALLOWED_TOOLS, f"defs 里有白名单外的工具: {names - ALLOWED_TOOLS}"
 
 
-def test_no_write_tools_in_allowlist_v1():
-    """V1 只读立场钉死：白名单里不许出现 write 工具。"""
-    assert not any("write" in t for t in ALLOWED_TOOLS)
+def test_no_direct_write_tools_in_allowlist():
+    """V1 只读立场（★ 2026-11-22 比丢改精确版）。
+
+    旧断言是 `not any("write" in t for t in ALLOWED_TOOLS)` —— 只挡得住名字带
+    `write` 的，挡不住 `todo_item_delete` 这种。真正的立场是：
+    **白名单里不许出现「直接写业务」的工具**，写操作必须经提案起草器。
+
+    所以这条测试改成双向：
+      ① 直写类工具名一个都不许有；
+      ② 三个起草器必须在（它们只 POST /api/v1/proposals）。
+    更硬的约束在 `test_ai_chat_has_no_todo_write_capability`（能力层）。
+    """
+    direct_write = {
+        "todo_item_write",
+        "todo_item_patch",
+        "todo_write",
+        "calendar_event_write",
+        "calendar_event_delete",
+        "health_record_write",
+    }
+    leaked = ALLOWED_TOOLS & direct_write
+    assert not leaked, f"白名单里出现直写工具: {leaked}"
+
+    drafters = {"todo_item_create", "todo_item_update", "todo_item_delete"}
+    assert drafters <= ALLOWED_TOOLS, "提案起草器缺失——AI 就无法替人起草变更"
+
+
+def test_ai_chat_has_no_todo_write_capability():
+    """★ 最小权限硬约束（2026-11-22 比丢）。
+
+    ai-chat 的能力清单里只允许有 `proposals.proposal.write`，
+    **不许**有 todo 的任何写能力 —— 这样即使有人往 tools.py 里塞一句
+    `client.post("/api/v1/todo/items", ...)`，`get_plugin_client` 的
+    ⊆ requires 校验也会 403。安全靠能力表，不靠代码自觉。
+    """
+    caps = set(tools._CAPS)
+    assert "proposals.proposal.write" in caps, "起草提案需要 proposals.proposal.write"
+
+    forbidden = {"todo.item.write", "todo.item.patch", "todo.item.delete"}
+    leaked = caps & forbidden
+    assert not leaked, f"ai-chat 不应持有 todo 直写能力: {leaked}"
+
+
+def test_manifest_requires_covers_new_caps():
+    """声明即授权：manifest.requires 必须覆盖 _CAPS（否则运行期 403）。"""
+    manifest = json.loads((_MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
+    missing = set(tools._CAPS) - set(manifest["requires"])
+    assert not missing, f"manifest.requires 缺能力: {missing}"
+
+
+def test_write_tools_are_proposal_drafters():
+    """★ 措辞是功能的一部分（2026-11-22 比丢）。
+
+    写工具的 description 会原样进模型的 prompt；模型会照抄它回答用户。
+    若描述不说「不会立即执行」，模型就会说「已创建」——那就是认知污染
+    （判据 5：声明与实现必须说同一句话；判据 16：不装深度）。
+    """
+    defs = {d["function"]["name"]: d["function"] for d in build_tool_defs()}
+    for name in ("todo_item_create", "todo_item_update", "todo_item_delete"):
+        assert name in defs, f"{name} 不在 tool defs 里"
+        desc = defs[name]["description"]
+        assert "不会立即" in desc, f"{name} 的 description 必须写明「不会立即执行」"
+        assert "提案" in desc, f"{name} 的 description 必须说明这是「提案」"
 
 
 def test_max_hops_guard():

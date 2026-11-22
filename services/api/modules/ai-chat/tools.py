@@ -9,6 +9,7 @@
   capability 白名单与 manifest.requires 一一对应，get_plugin_client
   机器校验 ⊆ requires（越权 403）——零新鉴权流程，作用域受限。
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -20,11 +21,16 @@ from fastapi import Request
 from core.deps import get_plugin_client
 
 # 工具 → 能力（与 manifest.requires 严格一致）
+# ★ 2026-11-22 比丢：加**一个**写能力，而且是 proposals 的、不是 todo 的。
+#   理由（最小权限）：ai-chat 的写工具设计目标是「生成提案等人签字」，不是直接改数据。
+#   只要 requires 里没有 todo.item.write/patch/delete，它**在能力层面就无法直写业务**，
+#   代码里想绕也绕不过 get_plugin_client 的 ⊆ requires 校验 —— 比"约定不这么写"硬。
 _CAPS = [
     "calendar.event.read",
     "todo.item.read",
     "health.record.read",
     "dashboard.today.read",
+    "proposals.proposal.write",
 ]
 
 
@@ -97,6 +103,100 @@ def build_tool_defs() -> list[dict[str, Any]]:
                 "parameters": {"type": "object", "properties": {}, "required": []},
             },
         },
+        # ───────── ★ 2026-11-22 比丢：写工具（生成提案，不直接执行） ─────────
+        # 设计前提（判据 5「声明与实现同一句话」）：
+        #   ai-chat 的 requires 里**没有** todo.item.write/patch/delete，只有
+        #   proposals.proposal.write ⇒ 模型即使想直写也拿不到客户端能力。
+        #   所以这三个工具的语义只能是「替人起草一张待签字的提案」。
+        #   描述里必须把这一点说透，否则模型会把「已提交」说成「已完成」（认知污染）。
+        {
+            "type": "function",
+            "function": {
+                "name": "todo_item_create",
+                "description": (
+                    "为用户起草一张「新建待办」的提案。"
+                    "★ 不会立即创建——提案进入待签字区，用户点签字后才真正写入。"
+                    "告诉用户「已起草，请在待签区确认」而不是「已创建」。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "待办正文（必填，一句话说清要做什么）",
+                        },
+                        "due_at": {
+                            "type": "string",
+                            "description": "截止时间 ISO8601（可选，如 2026-11-25T23:59:00+08:00）",
+                        },
+                        "priority": {
+                            "type": "string",
+                            "enum": ["high", "medium", "low"],
+                            "description": "优先级（可选）",
+                        },
+                        "recur_rule": {
+                            "type": "string",
+                            "description": "周期规则（可选，如 daily / weekly）",
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "标签（可选）",
+                        },
+                    },
+                    "required": ["text"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "todo_item_update",
+                "description": (
+                    "为用户起草一张「修改待办」的提案（改正文/完成状态/截止/优先级/标签）。"
+                    "★ 不会立即修改——提案待签字。系统会自动读取当前值作为可撤销快照。"
+                    "告诉用户「已起草，请确认」而不是「已修改」。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "item_id": {"type": "string", "description": "要修改的待办 id（必填）"},
+                        "text": {"type": "string", "description": "新正文（可选）"},
+                        "done": {"type": "boolean", "description": "完成状态（可选）"},
+                        "due_at": {"type": "string", "description": "新截止时间 ISO8601（可选）"},
+                        "priority": {
+                            "type": "string",
+                            "enum": ["high", "medium", "low"],
+                            "description": "新优先级（可选）",
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "整组替换的标签（可选）",
+                        },
+                    },
+                    "required": ["item_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "todo_item_delete",
+                "description": (
+                    "为用户起草一张「删除待办」的提案。"
+                    "★ 不会立即删除——提案待签字，且系统会自动取当前值做快照（撤销时据此重建）。"
+                    "告诉用户「已起草，请确认」而不是「已删除」。"
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "item_id": {"type": "string", "description": "要删除的待办 id（必填）"},
+                    },
+                    "required": ["item_id"],
+                },
+            },
+        },
     ]
 
 
@@ -151,7 +251,6 @@ def make_tools(request: Request) -> dict[str, Callable[[dict[str, Any]], dict[st
 
         return wrapped
 
-
     def calendar_event_read(args: dict[str, Any]) -> dict[str, Any]:
         frm = str(args.get("from") or "")
         to = str(args.get("to") or "")
@@ -159,12 +258,7 @@ def make_tools(request: Request) -> dict[str, Callable[[dict[str, Any]], dict[st
         today_iso = _cst_today_iso()
         # 只在窗明显离谱时强正为今日（缺参 / 起点在过去 / 窗宽 >31 天）；
         # 「查明天/下周五」等合理未来窗放行，不错杀。
-        bad = (
-            not frm
-            or not to
-            or frm[:10] < today_iso
-            or _window_days(frm, to) > 31
-        )
+        bad = not frm or not to or frm[:10] < today_iso or _window_days(frm, to) > 31
         if bad:
             frm, to = want["from"], want["to"]
         data = client.get(
@@ -218,9 +312,116 @@ def make_tools(request: Request) -> dict[str, Callable[[dict[str, Any]], dict[st
         data = client.get("/api/v1/dashboard/today")
         return {"ok": True, "today": data}
 
+    # ───────── ★ 2026-11-22 比丢：写工具 = 起草提案（不直接执行） ─────────
+    # 为什么必须这样：ai-chat 的能力清单里没有 todo.item.write/patch/delete，
+    # 只有 proposals.proposal.write ⇒ 物理上只能建提案。这正是"AI 提议、人执行"。
+    def _draft(
+        title: str,
+        tool_name: str,
+        action: str,
+        method: str,
+        path: str,
+        payload: dict[str, Any],
+        before: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        body = {
+            "title": title[:300],
+            "tool_name": tool_name,
+            "action": action,
+            "method": method,
+            "path": path,
+            "payload": payload,
+            "before": before,
+            "actor": "ai-chat",
+        }
+        data = client.post("/api/v1/proposals", json=body) or {}
+        pid = data.get("id")
+        return {
+            "ok": True,
+            "proposal_id": pid,
+            "status": data.get("status"),
+            # ★ 措辞是功能的一部分：模型会照抄这句话回答用户。
+            #   说成"已创建"就是认知污染（判据 5/16）。
+            "message": (
+                f"已起草提案 {pid}，**尚未执行**；"
+                "请在「它想说的」待签区点「签字」后才会真正生效。"
+            ),
+        }
+
+    def _read_item(item_id: str) -> dict[str, Any]:
+        """取当前行做 before 快照。delete/update 没它会被 proposals 的
+        `_before_required_for_destructive` 直接 422（夜班 79fc86f 钉的规矩）。"""
+        data = client.get(f"/api/v1/todo/items/{item_id}")
+        if not isinstance(data, dict) or not data:
+            raise ValueError(f"待办 {item_id} 读不到（可能已删除或 id 不对）")
+        return data
+
+    def todo_item_create(args: dict[str, Any]) -> dict[str, Any]:
+        text = str(args.get("text") or "").strip()
+        if not text:
+            raise ValueError("text 不能为空")
+        payload: dict[str, Any] = {"text": text}
+        for k in ("due_at", "priority", "recur_rule"):
+            if args.get(k):
+                payload[k] = args[k]
+        if args.get("tags"):
+            payload["tags"] = args["tags"]
+        return _draft(
+            f"AI 想新建待办：{text[:40]}",
+            "todo_item_create",
+            "create",
+            "POST",
+            "/api/v1/todo/items",
+            payload,
+            None,
+        )
+
+    def todo_item_update(args: dict[str, Any]) -> dict[str, Any]:
+        item_id = str(args.get("item_id") or "").strip()
+        if not item_id:
+            raise ValueError("item_id 不能为空")
+        payload: dict[str, Any] = {}
+        for k in ("text", "done", "due_at", "priority"):
+            if args.get(k) is not None:
+                payload[k] = args[k]
+        if args.get("tags"):
+            payload["tags"] = args["tags"]
+        if not payload:
+            raise ValueError("没有要改的字段（text/done/due_at/priority/tags 至少传一个）")
+        before = _read_item(item_id)
+        label = payload.get("text") or before.get("text") or item_id[:8]
+        return _draft(
+            f"AI 想修改待办：{str(label)[:40]}",
+            "todo_item_update",
+            "update",
+            "PATCH",
+            f"/api/v1/todo/items/{item_id}",
+            payload,
+            before,
+        )
+
+    def todo_item_delete(args: dict[str, Any]) -> dict[str, Any]:
+        item_id = str(args.get("item_id") or "").strip()
+        if not item_id:
+            raise ValueError("item_id 不能为空")
+        before = _read_item(item_id)  # 先取快照，撤销时据此重建
+        label = before.get("text") or item_id[:8]
+        return _draft(
+            f"AI 想删除待办：{str(label)[:40]}",
+            "todo_item_delete",
+            "delete",
+            "DELETE",
+            f"/api/v1/todo/items/{item_id}",
+            {},
+            before,
+        )
+
     return {
         "calendar_event_read": _jump(calendar_event_read, "calendar_event_read"),
         "todo_item_read": _jump(todo_item_read, "todo_item_read"),
         "health_record_read": _jump(health_record_read, "health_record_read"),
         "dashboard_today_read": _jump(dashboard_today_read, "dashboard_today_read"),
+        "todo_item_create": _jump(todo_item_create, "todo_item_create"),
+        "todo_item_update": _jump(todo_item_update, "todo_item_update"),
+        "todo_item_delete": _jump(todo_item_delete, "todo_item_delete"),
     }

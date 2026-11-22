@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs } from "@/shared/components/Tabs";
 import { usePluginEvent } from "@/shared/api/events";
+import { AppShell, AppToolbar } from "@/shared/ui/app-shell/AppShell";
 import { useTodoUI, type TodoView } from "./state";
 import QuickAdd from "./QuickAdd";
 import TodayView from "./views/TodayView";
@@ -55,20 +56,23 @@ export default function TodoApp() {
   usePluginEvent("todo.item.completed", () => qc.invalidateQueries({ queryKey: [TODO_KEY_ROOT] }));
 
   return (
-    <div className="todo-root">
+    <AppShell className="todo-root" testId="todo-root">
       <QuickAdd />
-      <div className="todo-toolbar">
-        <Tabs tabs={TABS} active={view} onChange={(id) => setView(id as TodoView)} />
-        <button
-          type="button"
-          className={studyOnly ? "todo-study-filter todo-study-filter--on" : "todo-study-filter"}
-          aria-pressed={studyOnly}
-          data-testid="todo-study-filter"
-          onClick={() => setFilterTag(studyOnly ? null : STUDY_TAG)}
-        >
-          只看学业
-        </button>
-      </div>
+      <AppToolbar
+        className="todo-toolbar"
+        left={<Tabs tabs={TABS} active={view} onChange={(id) => setView(id as TodoView)} />}
+        right={
+          <button
+            type="button"
+            className={studyOnly ? "todo-study-filter todo-study-filter--on" : "todo-study-filter"}
+            aria-pressed={studyOnly}
+            data-testid="todo-study-filter"
+            onClick={() => setFilterTag(studyOnly ? null : STUDY_TAG)}
+          >
+            只看学业
+          </button>
+        }
+      />
       {tagChips.length > 0 && (
         <div className="todo-tagbar" data-testid="todo-tagbar">
           {tagChips.map((c) => {
@@ -101,6 +105,6 @@ export default function TodoApp() {
       {view === "all" && <AllView />}
       {view === "recurring" && <RecurringView />}
       {view === "archived" && <ArchivedView />}
-    </div>
+    </AppShell>
   );
 }

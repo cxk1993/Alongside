@@ -29,10 +29,31 @@ export interface CapabilityEntry {
   provides: string[];
   /** 检索词：id / name / 能力名 / 中文「打开」。 */
   keywords: string[];
+  /** 占一个常驻位：当前只有「收编了多个子入口」的分组父项会置 true。 */
+  quick?: boolean;
 }
 
 /** collab 自己：在主墙上点「collab」会在自己身上再开一扇窗，纯噪声。 */
 const SELF_ID = "collab";
+
+/**
+ * ★ 2026-11-22（主人 16:56「散在底部栏很难看」）：学习类插件收进「学习软件」一个入口。
+ *
+ * 能力条不是模块清单的镜像——它是「人想干什么」的入口。7 个学习插件各占一格，
+ * 用户看到的是七个陌生名字；收进 study-hub 后，点一次「学习软件」再选，才是正常的信息层级。
+ *
+ * 降级规则：父模块（study-hub）不存在或停用时，子模块照常单独出现——
+ * 不能因为分组把入口弄丢（宁散勿丢）。
+ */
+const GROUPED_INTO: Record<string, string> = {
+  mooc: "study-hub",
+  ucampus: "study-hub",
+  welearn: "study-hub",
+  yuketang: "study-hub",
+  zhidao: "study-hub",
+  "sdu-feeds": "study-hub",
+  "pi-agent": "study-hub",
+};
 
 /**
  * 从注册表推导能力条目。
@@ -41,11 +62,18 @@ const SELF_ID = "collab";
  */
 export function buildCapabilities(modules: Record<string, ModuleReg>): CapabilityEntry[] {
   const out: CapabilityEntry[] = [];
+  const parentAvailable = (id: string) => {
+    const parent = modules[id];
+    return Boolean(parent && parent.enabled);
+  };
   for (const reg of Object.values(modules)) {
     if (!reg || !reg.enabled) continue;
     const m = reg.manifest;
     if (!m || !m.id) continue;
     if (m.id === SELF_ID) continue;
+    // 学习插件收进 study-hub（父不存在/停用时照常单列，入口不丢）。
+    const parent = GROUPED_INTO[m.id];
+    if (parent && parentAvailable(parent)) continue;
     const provides = Array.isArray(m.provides)
       ? m.provides.filter((p): p is string => typeof p === "string" && p.length > 0)
       : [];
@@ -57,6 +85,16 @@ export function buildCapabilities(modules: Record<string, ModuleReg>): Capabilit
       keywords: [m.id, name, ...provides, "打开", "模块"],
     });
   }
+  // 分组后，把子插件的名字并进父条目的检索词：搜「雨课堂」也能找到「学习软件」。
+  const byId = new Map(out.map((e) => [e.id, e]));
+  for (const [childId, parentId] of Object.entries(GROUPED_INTO)) {
+    const parentEntry = byId.get(parentId);
+    const childReg = modules[childId];
+    if (!parentEntry || !childReg || !childReg.enabled) continue;
+    const childName = typeof childReg.manifest?.name === "string" ? childReg.manifest.name : childId;
+    parentEntry.keywords.push(childId, childName);
+    parentEntry.quick = true;
+  }
   return out;
 }
 
@@ -67,9 +105,16 @@ export function filterCapabilities(entries: CapabilityEntry[], query: string): C
   return entries.filter((e) => e.keywords.some((k) => k.toLowerCase().includes(q)));
 }
 
-/** 常驻只放前 N 个（横向一行），其余走「全部」。 */
+/**
+ * 常驻只放前 N 个（横向一行），其余走「全部」。
+ *
+ * ★ 2026-11-22：`quick` 的条目优先占位 —— 分组父项（如「学习软件」）收编了多个入口，
+ * 它不在前 8 就等于「分了组但人看不见」。其余仍保持注册顺序。
+ */
 export function quickCapabilities(entries: CapabilityEntry[], n = 8): CapabilityEntry[] {
-  return entries.slice(0, Math.max(0, n));
+  const pinned = entries.filter((e) => e.quick);
+  const rest = entries.filter((e) => !e.quick);
+  return [...pinned, ...rest].slice(0, Math.max(0, n));
 }
 
 /**

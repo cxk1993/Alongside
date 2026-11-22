@@ -58,6 +58,31 @@ describe("P0-c · buildCapabilities", () => {
     expect(out[0].provides).toEqual(["calendar.event.read"]);
   });
 
+  it("学习插件收进 study-hub，父项占常驻位；搜子插件名也能命中父项", () => {
+    const out = buildCapabilities(
+      regs([
+        mod("todo", "待办"),
+        mod("study-hub", "学习软件"),
+        mod("mooc", "中国大学MOOC"),
+        mod("yuketang", "雨课堂"),
+      ]),
+    );
+    expect(out.map((e) => e.id)).toEqual(["todo", "study-hub"]);
+    const hub = out.find((e) => e.id === "study-hub")!;
+    expect(hub.quick).toBe(true);
+    expect(hub.keywords).toContain("雨课堂");
+    expect(quickCapabilities(out, 2).map((e) => e.id)).toEqual(["study-hub", "todo"]);
+  });
+
+  it("父项缺失/停用时，子插件照常单列（入口不丢）", () => {
+    const out = buildCapabilities(regs([mod("mooc", "中国大学MOOC"), mod("todo", "待办")]));
+    expect(out.map((e) => e.id)).toEqual(["mooc", "todo"]);
+    const out2 = buildCapabilities(
+      regs([{ ...mod("study-hub", "学习软件"), enabled: false }, mod("mooc", "中国大学MOOC")]),
+    );
+    expect(out2.map((e) => e.id)).toEqual(["mooc"]);
+  });
+
   it("清单为空时返回空数组（上层零渲染）", () => {
     expect(buildCapabilities({})).toEqual([]);
   });

@@ -59,6 +59,17 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     expect(await screen.findByText(/提案层未接线/)).toBeTruthy();
   });
 
+  it("提案接口 500 时，时间线说「没读到」而不是「读取中…」（三态收口 9c73b4f）", async () => {
+    get.mockImplementation((path: string) => {
+      if (path.includes("/proposals")) return Promise.reject(new ErrCtor(500));
+      return err404();
+    });
+    render(<CollabApp />);
+    const line = await screen.findByTestId("collab-timeline-empty");
+    expect(line.textContent).toContain("没读到");
+    expect(line.textContent).not.toContain("读取中");
+  });
+
   it("拿到真提案时渲染三按钮（签字/驳回/撤销）", async () => {
     get.mockImplementation((path: string) => {
       if (path.includes("status=undone")) return Promise.resolve([]);

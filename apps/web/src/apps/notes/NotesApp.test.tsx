@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import NotesApp from "./NotesApp";
 import { notesApi, type NoteBrief } from "./api";
+import { ApiError } from "@/shared/api/client";
 
 const { brief, brief2, lib, disabledLib } = vi.hoisted(() => {
   const brief = {
@@ -85,6 +86,28 @@ beforeEach(() => {
 });
 
 describe("NotesApp", () => {
+  /* ★ 2026-11-22（汐瑶 · 三态收口 9c73b4f）：error 与「真的没有索引」必须分开。
+     此前 search.data?.items.length === 0 在 data 为 undefined 时既不 loading 也不 empty
+     → 整块白板，一句话都没有。 */
+  it("搜索接口 500 → 说「读取失败」并给重试，不再显示「还没有索引」", async () => {
+    vi.mocked(notesApi.search).mockRejectedValue(
+      new ApiError({ type: "about:blank", title: "boom", status: 500 }),
+    );
+    render(<NotesApp />, { wrapper: makeWrapper() });
+    expect(await screen.findByText("笔记列表读取失败")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
+    expect(screen.queryByText(/还没有索引/)).toBeNull();
+  });
+
+  it("搜索接口 404 → 说「未接线」而不是「坏」（notes phase=PENDING）", async () => {
+    vi.mocked(notesApi.search).mockRejectedValue(
+      new ApiError({ type: "about:blank", title: "not found", status: 404 }),
+    );
+    render(<NotesApp />, { wrapper: makeWrapper() });
+    expect(await screen.findByText(/笔记层未接线/)).toBeTruthy();
+    expect(screen.queryByText("笔记列表读取失败")).toBeNull();
+  });
+
   it("挂载并渲染搜索结果（列表）", async () => {
     render(<NotesApp />, { wrapper: makeWrapper() });
     expect(screen.getByLabelText("搜索笔记")).toBeTruthy();

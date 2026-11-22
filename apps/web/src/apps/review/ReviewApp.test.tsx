@@ -202,6 +202,22 @@ describe("ReviewApp", () => {
     expect(screen.getByText(/本周合计/)).toBeTruthy();
   });
 
+  /* ★ 2026-11-22（汐瑶 · 三态收口 9c73b4f）：`isLoading || !day` 把 error 也说成「加载中…」；
+     weekly 的 `week ? … : 加载中…` 同理 —— 接口挂了永远转不完。 */
+  it("单日/周报接口失败 → 说「没读到」，不再永远「加载中…」", async () => {
+    const { reviewApi } = await import("./api");
+    vi.mocked(reviewApi.source).mockResolvedValue(source);
+    vi.mocked(reviewApi.days).mockResolvedValue(daysOut);
+    vi.mocked(reviewApi.day).mockRejectedValue(new Error("boom"));
+    vi.mocked(reviewApi.weekly).mockRejectedValue(new Error("boom"));
+    vi.mocked(reviewApi.trend).mockResolvedValue(trend);
+
+    render(<ReviewApp />, { wrapper: makeWrapper() });
+    const hits = await screen.findAllByText(/没读到 —— 接口异常/);
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("加载中…")).toBeNull();
+  });
+
   it("手动同步按钮调用 ingest", async () => {
     const { reviewApi } = await import("./api");
     vi.mocked(reviewApi.days).mockResolvedValue(daysOut);

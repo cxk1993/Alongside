@@ -144,6 +144,18 @@ describe("U3 · DesktopSidebar（桌面级双侧栏）", () => {
     expect(screen.getAllByTestId(/^today-count-/)).toHaveLength(4);
   });
 
+  /* ★ 2026-11-22（汐瑶 · 三态收口 9c73b4f）：error 原来显示一个「?」—— 全场最像「坏了」的符号。 */
+  it("K5b · 今日摘要接口失败 → 说「暂时不可用」，不再是一个「?」", async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error("boom"));
+    expand("right");
+    const { container } = renderSide(<DesktopSidebar side="right" />);
+    expect(container.querySelector("[data-testid='desktop-today-summary']")).toBeTruthy();
+    /* useSummaryToday 自带 retry:1（hook 内显式覆盖 defaultOptions）→ 第二次失败后才进 isError，
+       期间 React Query 会先吐上一用例的缓存（stale-while-error），所以这里要给足重试时间。 */
+    await waitFor(() => expect(screen.getByText("暂时不可用")).toBeTruthy(), { timeout: 5000 });
+    expect(container.querySelector(".desktop-side__empty")?.textContent).not.toBe("?");
+  });
+
   it("K6 · 无贡献零渲染不占位（左栏无贡献时只有框架无卡）", () => {
     expand("left");
     const { container } = renderSide(<DesktopSidebar side="left" />);

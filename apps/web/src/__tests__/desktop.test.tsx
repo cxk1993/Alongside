@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import App from "../App";
@@ -94,5 +94,43 @@ describe("桌面集成（mock 模块）", () => {
     fireEvent.click(screen.getByLabelText("演示模块 · 丁"));
     const opened = useDesktopStore.getState().windows.filter((w) => w.moduleId === "mod-delta");
     expect(opened).toHaveLength(1);
+  });
+
+  /**
+   * ★ ISSUE-017 回归（2026-11-22）：`modules.json` 退役后的 hydrate 两条硬前提。
+   *   ① modules 为空时 hydrate 不许跑（否则 `reg && reg.enabled` 会把窗口全过滤掉 = 刷新丢布局）；
+   *   ② 模块首次非空后只 hydrate 一次（插件启停会让 modules 换引用，无守卫会把桌面重置回快照）。
+   */
+  it("ISSUE-017：等模块非空才 hydrate，且只跑一次（插件 refresh 不弹回窗口）", async () => {
+    // 造一份持久化快照：注册 → 开窗 → 设几何（写入 localStorage）
+    const st = useDesktopStore.getState();
+    st.registerModule(mods[0]);
+    st.openWindow("mod-alpha");
+    const id = useDesktopStore.getState().windows[0].instanceId;
+    st.setGeo(id, { x: 120, y: 160 });
+
+    // 模拟刷新：内存清空（保留 localStorage）
+    useDesktopStore.setState({
+      modules: {},
+      windows: [],
+      workspaces: [makeWorkspace(1)],
+      activeWorkspaceId: "ws1",
+    });
+
+    renderApp();
+    // modules 空 → 不许恢复任何窗口
+    expect(useDesktopStore.getState().windows).toHaveLength(0);
+
+    // 后端清单回来（modules 非空）→ 恢复一次
+    act(() => registerModules(mods));
+    await waitFor(() => expect(useDesktopStore.getState().windows).toHaveLength(1));
+    expect(useDesktopStore.getState().windows[0].geo.x).toBe(120);
+
+    // 用户拖窗（新的几何）；随后插件启停触发 modules 引用变化 → 不许重置回快照
+    act(() => {
+      useDesktopStore.getState().setGeo(id, { x: 300, y: 220 });
+    });
+    act(() => registerModules(mods));
+    expect(useDesktopStore.getState().windows[0].geo.x).toBe(300);
   });
 });

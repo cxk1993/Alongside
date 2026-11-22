@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ToastHost } from "@/shared/components/Toast";
 import { initTheme, useTheme } from "@/shared/styles/theme";
-import { pluginHost, registerModules } from "./ModuleRegistry";
+import { pluginHost } from "./ModuleRegistry";
 import { useDesktopStore, normalStack, topmostNormalId, type WindowState } from "./store";
-import type { ModuleManifest } from "./types";
 import { AuthGate } from "./AuthGate";
 import { PluginProvider } from "./plugins/PluginContext";
 import { logout } from "@/shared/api/auth";
@@ -24,8 +23,6 @@ import { HomeMyToday } from "@/apps/home/HomeMyToday";
 import { WindowManager } from "./WindowManager";
 import { DesktopSidebar, readSideCollapsed } from "./shell/DesktopSidebar";
 import { SlotHost } from "./slots/SlotHost";
-
-const MODULES_URL = "/modules.json";
 
 /**
  * ★ T23：只取**当前工作区**的窗口 —— 快捷键作用于"你正在看的那个桌面"。
@@ -69,7 +66,9 @@ function cycleWindow(): void {
 
 /**
  * 桌面容器：顶栏 + 窗口层 + 坞 + 全局搜索 + Toast。
- * 启动时拉取 modules.json 注册模块，并 hydrate 已持久化的窗口几何。
+ *
+ * ★ 2026-11-22（ISSUE-017）：不再拉构建期 `modules.json` —— 注册源只剩后端插件清单。
+ *   窗口几何仍从 localStorage 恢复，但 hydrate 必须等「模块首次非空」后跑一次（见下）。
  */
 /**
  * ★ 2026-11-22（汐瑶 · 收壳）：主墙空态。
@@ -96,21 +95,22 @@ export function Desktop() {
 
   useEffect(() => {
     initTheme();
-    let cancelled = false;
-    fetch(MODULES_URL)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((list: ModuleManifest[]) => {
-        if (cancelled) return;
-        registerModules(list);
-        useDesktopStore.getState().hydrate();
-      })
-      .catch(() => {
-        /* 没有 modules.json：桌面为空，但不白屏（内核不依赖任何具体模块） */
-      });
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  /**
+   * ★ ISSUE-017（2026-11-22）：hydrate 的两个硬前提。
+   *   ① **必须等 modules 非空**：`store.hydrate` 的 filter 是 `reg && reg.enabled`，
+   *      挂载瞬间 modules 还是空的（后端清单登录后才回来）⇒ 所有窗口被过滤掉 = 刷新丢布局。
+   *   ② **必须只跑一次**：插件启用/停用/安装都会让 `modules` 换引用；无守卫的话
+   *      每次 refresh 都把桌面重置回 localStorage 快照 —— 用户刚拖的窗会被弹回去。
+   *   （比丢 2026-11-22 复核 ISSUE-017 抓到的正是这两条。）
+   */
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (hydrated.current || Object.keys(modules).length === 0) return;
+    hydrated.current = true;
+    useDesktopStore.getState().hydrate();
+  }, [modules]);
 
   const openSearch = () => {
     setQuery("");

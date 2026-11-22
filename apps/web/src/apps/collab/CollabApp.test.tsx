@@ -206,7 +206,11 @@ describe("共处工作台 v1.1（T10 接真端点）", () => {
     render(<CollabApp />);
     expect(await screen.findByText(/这笔账挂了 11 天/)).toBeTruthy();
     expect(await screen.findByText(/交材料/)).toBeTruthy();
-    expect(await screen.findByText(/calendar\(timeout\)/)).toBeTruthy();
+    // ★ 2026-11-22 比丢：降级说明不再裸印 `calendar(timeout)`，
+    //   改成一句人话 + title 里放明细（判据 5：声明与实现说同一句话）。
+    const deg = await screen.findByTestId("collab-degraded");
+    expect(deg.textContent).toBe("1 个数据源未就绪");
+    expect(deg.getAttribute("title")).toContain("日程超时未响应");
   });
 
   it("★ T22：它做过的 = 已执行 + 已撤销，按时间倒序（撤销在 UI 上留痕）", async () => {

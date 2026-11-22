@@ -21,6 +21,65 @@ import { ActivityStrip } from "./ActivityStrip";
 import { CapabilityBar } from "./CapabilityBar";
 import { ProposalDetail } from "./ProposalDetail";
 import { actorLabel, hhmm, undoNote, type ProposalRow } from "./proposalFormat";
+
+// ─────────── ★ 2026-11-22 比丢：后端枚举不进用户界面 ───────────
+// 背景（24-前端灰屏·联合调研 §九）：AI 工作面里直接印着
+//   `降级：finance(not_implemented) · health(not_implemented) · …`
+//   `late_night · 04:26 采样`
+// 用户读不出「not_implemented」是什么，也读不出 late_night 是几点。
+// 这里只做**展示层映射**：改的是文案，不动数据、不动逻辑。
+// 判据 5：声明与实现说同一句话 —— 后端说「没做」，界面就该说「尚未接入」，而不是把枚举裸印出来。
+
+const PART_OF_DAY_LABEL: Record<string, string> = {
+  morning: "上午",
+  forenoon: "上午",
+  noon: "中午",
+  afternoon: "下午",
+  evening: "傍晚",
+  night: "夜间",
+  late_night: "深夜",
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  calendar: "日程",
+  todo: "待办",
+  habits: "习惯",
+  finance: "理财",
+  health: "健康",
+  notes: "笔记",
+  diary: "日记",
+  course: "课程",
+  review: "复盘",
+  dashboard: "总览",
+  assets: "资产",
+};
+
+const REASON_LABEL: Record<string, string> = {
+  not_implemented: "尚未接入",
+  timeout: "超时未响应",
+  error: "读取失败",
+  unavailable: "暂时不可用",
+  unauthorized: "无权限",
+};
+
+/** 把 degraded[] 翻成两句话：一句给眼睛（summary），一句给悬停/展开（detail）。 */
+function degradedText(items: { source?: string; reason?: string }[]): {
+  summary: string;
+  detail: string;
+} {
+  const byReason = new Map<string, string[]>();
+  for (const d of items) {
+    const r = d.reason ?? "unknown";
+    const name = SOURCE_LABEL[d.source ?? ""] ?? d.source ?? "未知";
+    const bucket = byReason.get(r);
+    if (bucket) bucket.push(name);
+    else byReason.set(r, [name]);
+  }
+  const detail = [...byReason.entries()]
+    .map(([reason, names]) => `${names.join("、")}${REASON_LABEL[reason] ?? reason}`)
+    .join("；");
+  return { summary: `${items.length} 个数据源未就绪`, detail };
+}
 import { BeforePreview } from "./proposalView";
 import { useProposalStream } from "./useProposalStream";
 import "./collab.css";
@@ -215,14 +274,19 @@ export default function CollabApp() {
         <span className="collab-status__dot" aria-hidden="true" />
         <strong>AI 在场</strong>
         <span className="collab-status__meta">
-          {sight.data?.head?.part_of_day ? `${sight.data.head.part_of_day} · ` : ""}
+          {sight.data?.head?.part_of_day
+            ? `${PART_OF_DAY_LABEL[sight.data.head.part_of_day] ?? sight.data.head.part_of_day} · `
+            : ""}
           {/* ★ T28：显示这一份视野的采样时刻——它是每次现算的，不是常量（否则「在场」只是装饰） */}
           {hhmm(sight.data?.head?.now_local) ? (
             <span data-testid="sight-sampled-at">{hhmm(sight.data?.head?.now_local)} 采样 · </span>
           ) : null}
           处境：{STATUS_TEXT[sight.status]} · 提案：{STATUS_TEXT[proposals.status]}
         </span>
-        <span className="collab-status__hint">v1 灰盒 · 数据未接入时如实空态，不造假</span>
+        {/* ★ 2026-11-22 比丢：删「v1 灰盒 · 数据未接入时如实空态，不造假」。
+            那句话是写给评审看的（解释我们为什么不编数据），不是给用户看的；
+            留在界面上只会让主人以为「这是个半成品」。
+            诚实空态仍然由各区的「暂无 / 未就绪」表达，不需要自证。 */}
       </header>
 
       {/* ★ P0-c：入口与活动都在状态条正下方 —— 一眼看得见，不用先学 Ctrl+K */}
@@ -267,9 +331,15 @@ export default function CollabApp() {
                 </ul>
               ) : null}
               {sight.data.degraded?.length ? (
-                <p className="collab-empty collab-empty--warn">
-                  降级：
-                  {sight.data.degraded.map((d) => `${d.source ?? "?"}(${d.reason ?? "?"})`).join(" · ")}
+                /* ★ 2026-11-22 比丢：不再裸印 `finance(not_implemented)`。
+                   人看到的是一句人话（N 个数据源未就绪），把明细放进 title，
+                   悬停才看得到「理财、健康…尚未接入」。 */
+                <p
+                  className="collab-empty collab-empty--warn"
+                  title={degradedText(sight.data.degraded).detail}
+                  data-testid="collab-degraded"
+                >
+                  {degradedText(sight.data.degraded).summary}
                 </p>
               ) : null}
             </div>

@@ -322,6 +322,16 @@ describe("区块区 · 落位预览", () => {
   });
 });
 
+// ── 对齐：画布左右补回 --sp-1（区块卡外缘与上方摘要卡同一条线） ──────
+describe("区块区 · 对齐", () => {
+  it("画布左右各补回 --sp-1：卡片外缘与上方摘要卡对齐（实测 16 / 1350）", () => {
+    const canvas = /\.home-tiles__canvas\s*\{([^}]*)\}/.exec(css);
+    const body = canvas?.[1] ?? "";
+    expect(body).toMatch(/width:\s*calc\(100% \+ var\(--sp-1\) \* 2\)/);
+    expect(body).toMatch(/margin-inline:\s*calc\(-1 \* var\(--sp-1\)\)/);
+  });
+});
+
 // ── 缩放：与拖动同三条底线，只是把 w/h 交给它 ─────────────────────
 describe("区块区 · 缩放", () => {
   it("resolveSize：不冲突时给请求尺寸", () => {

@@ -58,10 +58,13 @@
   box-shadow: var(--focus-ring);
 }
 
-/* ── 画布：格线只在编辑态出现（浏览态必须干净） ──────────────── */
+/* ── 画布：格线只在编辑态出现（浏览态必须干净） ────────────────
+   左右各补回 `--sp-1`：块自身有 4px 内让位（做块间距），画布把这一圈在两侧补回来，
+   卡片外缘才与上方三块摘要卡对齐。像素实测差 4px：摘要 x=16/1349，tile x=20/1345。 */
 .home-tiles__canvas {
   position: relative;
-  width: 100%;
+  width: calc(100% + var(--sp-1) * 2);
+  margin-inline: calc(-1 * var(--sp-1));
   box-sizing: border-box;
 }
 

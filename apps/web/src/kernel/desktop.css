@@ -219,8 +219,10 @@
   line-height: 14px;
   padding: 1px 5px;
   border-radius: var(--r-pill);
-  background: var(--surface-3);
-  color: var(--txt-dim);
+  /* ★ 2026-11-22（汐瑶）：去掉 surface-3 底色 + 降到 faint。
+     版本号是给「排查缓存旧版」用的，不该在顶栏里抢注意力（vision 反馈：绿色 pill 太跳）。 */
+  background: transparent;
+  color: var(--txt-faint);
   white-space: nowrap;
   cursor: help;
   flex: 0 0 auto;

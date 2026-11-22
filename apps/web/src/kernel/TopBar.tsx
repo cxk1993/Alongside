@@ -73,7 +73,7 @@ function ShellNow() {
         欠 <b>{owed}</b>
       </span>
       <span className="topbar__now-item">
-        张力 <b>{tensions}</b>
+        冲突 <b>{tensions}</b>
       </span>
     </span>
   );

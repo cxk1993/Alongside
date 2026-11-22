@@ -40,7 +40,13 @@ function useClock(): string {
 
 function formatNow(): string {
   try {
-    return new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    // ★ 2026-11-22（汐瑶）：去掉秒。顶栏时钟精确到秒只是噪音，
+    // 而且每秒重渲染一次整个顶栏；到分已经够「知道现在几点」。
+    return new Date().toLocaleTimeString("zh-CN", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return "";
   }

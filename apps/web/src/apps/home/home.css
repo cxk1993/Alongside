@@ -189,7 +189,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: var(--sp-3);
-  align-items: start;
+  /* ★ 2026-11-22（汐瑶）：start → stretch。
+     原来三张摘要卡各按内容高，实测 96/70/93px 差 26px，看着像三张不同规格的卡；
+     拉伸后同排等高，才是「一张卡片组」该有的样子。 */
+  align-items: stretch;
 }
 
 .home-card {

@@ -26,9 +26,16 @@ def test_presets_registry_has_five_expected():
 
 
 def test_pack_shape_contract():
-    """每条预置查询返回 `_pack` 形状：query/rows/row_count/empty/partial/errors。"""
+    """每条预置查询返回 `_pack` 形状：query/rows/row_count/empty/partial/errors。
+
+    ★ 2026-11-22（汐瑶）：原来这里断言 `partial is False` + `errors == []`，
+      但输入是 `object()`（假 session）——内部必然抛异常。
+      那条断言等于钉死「崩溃一律装成『查完了，就是空的』」，正是
+      `_调研/free-slots-口径矛盾-调查.md` 里那个「今天排满了」的真因。
+      现在改成：**不许抛，但必须如实报 partial=True + errors 非空**。
+    """
     for qid in sorted(PRESETS):
-        result = run_preset(object(), qid)  # 空库/无表环境：内部 catch → 空 rows
+        result = run_preset(object(), qid)  # 假 session：内部必抛，但必须被如实记录
         assert set(result) == {
             "query",
             "rows",
@@ -40,8 +47,8 @@ def test_pack_shape_contract():
         assert result["query"]["id"] == qid
         assert result["row_count"] == len(result["rows"])
         assert result["empty"] == (not result["rows"])
-        assert result["partial"] is False
-        assert result["errors"] == []
+        assert result["partial"] is True, f"{qid} 内部异常未标记 partial"
+        assert result["errors"], f"{qid} 内部异常未记录，不许静默吞掉"
 
 
 def test_pack_empty_text_present():

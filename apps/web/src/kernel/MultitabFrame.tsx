@@ -37,12 +37,39 @@ interface Props {
   ariaLabel?: string;
 }
 
-const PERSIST_PREFIX = "alongside.plugin.mtab.";
+export const MTAB_PERSIST_PREFIX = "alongside.plugin.mtab.";
+
+/**
+ * 外部深链接通道（纯加法，既有 8 处调用零影响）。
+ *
+ * 为什么需要：入口层（主墙区块）要能「点一条子入口 → 窗里直接落在那一页」。
+ * 但 `persistKey` 只在**挂载时**读一次，同文档 `localStorage.setItem` 又不会触发
+ * storage 事件 —— 窗已经开着时改持久化值没有任何反应。所以补一条自定义事件：
+ *   ① 窗还没开 → 先写持久化，新实例挂载即落在目标页；
+ *   ② 窗已经开着 → 广播事件，已挂载实例当场切页（不销毁页面状态，keep-alive 不受影响）。
+ */
+export const MTAB_SELECT_EVENT = "alongside:mtab-select";
+
+/** 记住某窗最后访问的页（覆盖「窗还没开」这一半）。 */
+export function rememberMtabPage(persistKey: string, page: string): void {
+  try {
+    localStorage.setItem(MTAB_PERSIST_PREFIX + persistKey, page);
+  } catch {
+    /* 隐私模式等 localStorage 不可用 → 静默 */
+  }
+}
+
+/** 深链接请求：写持久化 + 广播。两半缺一，就有一种「点了没反应」。 */
+export function requestMtabPage(persistKey: string, page: string): void {
+  rememberMtabPage(persistKey, page);
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(MTAB_SELECT_EVENT, { detail: { persistKey, page } }));
+}
 
 function readPersisted(persistKey?: string, pages?: MultitabPage[]): string | null {
   if (!persistKey) return null;
   try {
-    const saved = localStorage.getItem(PERSIST_PREFIX + persistKey);
+    const saved = localStorage.getItem(MTAB_PERSIST_PREFIX + persistKey);
     if (saved && pages?.some((p) => p.key === saved)) return saved;
   } catch {
     /* localStorage 不可用（隐私模式等）→ 静默退回默认页 */
@@ -71,7 +98,7 @@ export default function MultitabFrame({ pages, initialKey, persistKey, ariaLabel
       });
       if (persistKey) {
         try {
-          localStorage.setItem(PERSIST_PREFIX + persistKey, key);
+          localStorage.setItem(MTAB_PERSIST_PREFIX + persistKey, key);
         } catch {
           /* 同上：隐私模式静默 */
         }
@@ -99,6 +126,19 @@ export default function MultitabFrame({ pages, initialKey, persistKey, ariaLabel
     },
     [pages, activeKey, select],
   );
+
+  // 深链接：入口层广播「把 persistKey 这扇窗切到 page」。
+  // 只在 persistKey 匹配时响应 —— 同一时刻可能有多扇 MultitabFrame 挂载。
+  useEffect(() => {
+    if (!persistKey) return;
+    const onSelect = (e: Event) => {
+      const d = (e as CustomEvent<{ persistKey?: string; page?: string }>).detail;
+      if (!d || d.persistKey !== persistKey || !d.page) return;
+      if (pages.some((p) => p.key === d.page)) select(d.page);
+    };
+    window.addEventListener(MTAB_SELECT_EVENT, onSelect);
+    return () => window.removeEventListener(MTAB_SELECT_EVENT, onSelect);
+  }, [persistKey, pages, select]);
 
   // persistKey 变化（组件复用/热更）时同步一次持久化值。
   useEffect(() => {

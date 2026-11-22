@@ -3,6 +3,10 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
 import { GRID_COLS, type TileState } from "../../kernel/tile";
 import { useDesktopStore } from "../../kernel/store";
+import { requestMtabPage } from "../../kernel/MultitabFrame";
+import { useCalendarUI } from "../calendar/state";
+import type { ViewMode } from "../calendar/state";
+import { useTodoUI } from "../todo/state";
 import { loadFavs } from "./homeFavs";
 import "./homeTiles.css";
 
@@ -60,6 +64,72 @@ export const TILE_DESC: Record<string, string> = {
   docs: "文档树与正文",
   dashboard: "各模块卡片汇总",
 };
+
+/**
+ * 子入口（深链接）—— 区块上直接给出「这块里最常用的那一页」。
+ *
+ * 三条口径（对应团队 2026-11-22 的四条约束）：
+ *   ① 只登记代码里**确实存在**的页签 / 筛选器，不登记规划中的功能，不造数据；
+ *   ② 点了必须真切模块状态（开窗 + 切页 / 切筛选），不做「开同一个窗了事」；
+ *   ③ 没有真入口的模块不登记 —— 说明行（TILE_DESC）已经说了它能干什么，宁缺不编。
+ *
+ * 现状核对（2026-11-22）：
+ *   · finance：`FinanceTabbedApp` 的 MultitabFrame 两页（beecount / local），persistKey=`finance`；
+ *   · todo：`useTodoUI.setFilterTag`（`学业` 是 `TodoApp.tsx` 里的层级标签，那边未导出）；
+ *   · calendar：`useCalendarUI.setView` 的 day / week / month 三视图，按钮就在顶上；
+ *   · habits：prefs 只在挂载时读一次（外面改 localStorage 不重读）→ 没有真入口，不登记；
+ *   · notes：书库 / 搜索是组件内 `useState`，外部设不到 → 不登记。
+ */
+export interface TileEntry {
+  /** 稳定 id：既是 data-testid 后缀，也是分发器的入参。 */
+  key: string;
+  label: string;
+}
+
+export const TILE_ENTRIES: Record<string, TileEntry[]> = {
+  finance: [
+    { key: "beecount", label: "BeeCount 账本" },
+    { key: "local", label: "本地流水" },
+  ],
+  todo: [
+    { key: "study", label: "只看学业" },
+    { key: "all", label: "全部" },
+  ],
+  calendar: [
+    { key: "day", label: "日" },
+    { key: "week", label: "周" },
+    { key: "month", label: "月" },
+  ],
+};
+
+/** 待办的学业层级标签。与 `apps/todo/TodoApp.tsx` 的 STUDY_TAG 同值（那边未导出）。
+ *  将来抽 intent 总线时，这里换成模块自己注册的语义 action 即可，调用面不变。 */
+const TODO_STUDY_TAG = "学业";
+
+/**
+ * 点一条子入口 = 把模块内部状态切到目标页 / 筛选，再开窗。
+ *
+ * 顺序有意义：todo / calendar 的 store 是模块级的，先切状态 → 窗还没开也照样生效，
+ * 开窗后第一帧就是目标视图（不会闪一下默认页）。
+ * finance 走「写持久化 + 广播」两条腿：窗没开 → 新实例读持久化落页；已开 → 事件让现有实例切页。
+ */
+export function applyTileEntry(moduleId: string, key: string): void {
+  switch (moduleId) {
+    case "todo":
+      useTodoUI.getState().setFilterTag(key === "study" ? TODO_STUDY_TAG : null);
+      break;
+    case "calendar":
+      useCalendarUI.getState().setView(key as ViewMode);
+      break;
+    case "finance":
+      requestMtabPage("finance", key);
+      break;
+    default:
+      /* 未登记子入口的模块：不猜语义 */
+      break;
+  }
+  useDesktopStore.getState().openWindow(moduleId);
+}
 
 /** 区块 = `TileState`（网格坐标，单一真源）+ 展示用的名字。
  *  不另造一套坐标形状：P2 接 store 时 `windowToTile()` 的输出能直接喂进来。 */
@@ -314,6 +384,7 @@ export function HomeTiles() {
       >
         {tiles.map((t) => {
           const isDrag = t.i === dragId;
+          const entries = TILE_ENTRIES[t.moduleId] ?? [];
           return (
             <article
               key={t.i}
@@ -328,7 +399,7 @@ export function HomeTiles() {
               data-x={t.x}
               data-y={t.y}
             >
-              <div className="home-tile__card">
+              <div className={`home-tile__card${entries.length ? " has-entries" : ""}`}>
                 <button
                   type="button"
                   className="home-tile__open"
@@ -350,6 +421,22 @@ export function HomeTiles() {
                     <span className="home-tile__desc">{TILE_DESC[t.moduleId]}</span>
                   ) : null}
                 </button>
+                {/* 子入口：每条都真切状态 + 开窗；不嵌在 open 按钮里（button 不能套 button） */}
+                {entries.length ? (
+                  <div className="home-tile__entries" data-testid={`tile-entries-${t.moduleId}`}>
+                    {entries.map((e) => (
+                      <button
+                        key={e.key}
+                        type="button"
+                        className="home-tile__entry"
+                        onClick={() => applyTileEntry(t.moduleId, e.key)}
+                        data-testid={`tile-entry-${t.moduleId}-${e.key}`}
+                      >
+                        {e.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 {/* 底线②：只有这个 24×24 的把手能起拖；底线③：编辑态才渲染 */}
                 {editing ? (
                   <button

@@ -3,11 +3,15 @@
  * 渲染 N 页签 / 切页内容切换 / 切回状态保持（keep-alive）/ 懒挂载只挂当前页。
  * 另加键盘可达（role=tab + aria-selected）与空 pages 兜底两条。
  */
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { useState } from "react";
 
-import MultitabFrame, { type MultitabPage } from "./MultitabFrame";
+import MultitabFrame, {
+  MTAB_PERSIST_PREFIX,
+  requestMtabPage,
+  type MultitabPage,
+} from "./MultitabFrame";
 
 function pages(): MultitabPage[] {
   return [
@@ -100,5 +104,34 @@ describe("MultitabFrame 升级件（回验增补）", () => {
     render(<MultitabFrame pages={pages()} />);
     expect(screen.getByTestId("mtab-tab-catalog").getAttribute("tabindex")).toBe("0");
     expect(screen.getByTestId("mtab-tab-mcp").getAttribute("tabindex")).toBe("-1");
+  });
+});
+
+// ── 深链接：入口层要把**已经开着**的窗切到指定页 ────────────────
+describe("MultitabFrame · 深链接（入口层 → 窗内页）", () => {
+  it("已挂载的实例收到 requestMtabPage 当场切页；持久化同时写好（下次挂载仍落该页）", () => {
+    render(<MultitabFrame pages={pages()} persistKey="probe" />);
+    expect(screen.getByTestId("mtab-tab-catalog").getAttribute("aria-selected")).toBe("true");
+
+    act(() => requestMtabPage("probe", "mcp"));
+
+    expect(screen.getByTestId("mtab-tab-mcp").getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByTestId("mtab-panel-mcp").hidden).toBe(false);
+    expect(localStorage.getItem(MTAB_PERSIST_PREFIX + "probe")).toBe("mcp");
+    localStorage.removeItem(MTAB_PERSIST_PREFIX + "probe");
+  });
+
+  it("只认自己的 persistKey：别的窗广播不串页", () => {
+    render(<MultitabFrame pages={pages()} persistKey="probe" />);
+    act(() => requestMtabPage("another-win", "push"));
+    expect(screen.getByTestId("mtab-tab-catalog").getAttribute("aria-selected")).toBe("true");
+    localStorage.removeItem(MTAB_PERSIST_PREFIX + "another-win");
+  });
+
+  it("广播一个不存在的页 → 不动（不崩、不白屏）", () => {
+    render(<MultitabFrame pages={pages()} persistKey="probe" />);
+    act(() => requestMtabPage("probe", "ghost"));
+    expect(screen.getByTestId("mtab-tab-catalog").getAttribute("aria-selected")).toBe("true");
+    localStorage.removeItem(MTAB_PERSIST_PREFIX + "probe");
   });
 });

@@ -24,7 +24,7 @@
 }
 
 .home-tiles__hint {
-  color: var(--txt-faint);
+  color: var(--txt-dim);
   font-size: 11px;
 }
 
@@ -87,11 +87,57 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
+  box-shadow: var(--shadow-1);
   overflow: hidden;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+/* 顶部一道极淡的分色条：五块并排时一眼能区分，又不像彩色标签那么吵。
+   色相走 --accent，皮肤/主题切换会跟着变（不写死十六进制）。 */
+.home-tile__card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent 70%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* 右下角一个「点开 →」的暗示：让空块也有可操作的实感 */
+.home-tile__card:not(.has-entries)::after {
+  content: "点开 →";
+  position: absolute;
+  right: var(--sp-3);
+  bottom: var(--sp-2);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--txt-empty);
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  pointer-events: none;
+}
+
+.home-tiles:not(.is-editing) .home-tile__card:not(.has-entries):hover::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 浏览态：鼠标上来给一点「可以点」的实感（编辑态另有虚线边框，不混） */
+.home-tiles:not(.is-editing) .home-tile__card:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-2, var(--surface));
+  transform: translateY(-1px);
+}
+
+.home-tiles:not(.is-editing) .home-tile__card:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 .home-tiles.is-editing .home-tile__card {
@@ -125,15 +171,23 @@
 }
 
 .home-tile__name {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
 }
 
 .home-tile__kind {
-  color: var(--txt-faint);
+  display: inline-block;
+  margin-top: 1px;
+  padding: 0 6px;
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  color: var(--txt-dim);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
 }
 
 /* 底线②：24×24 的把手，不是整卡拖。touch-action:none 防触摸把拖动当成滚动。 */
@@ -235,4 +289,40 @@
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+/* ── 子入口（一块里点开就到的页 / 筛选） ────────────────────────
+   每条都对应真页签或真筛选（口径见 HomeTiles.tsx 的 TILE_ENTRIES 注释）——
+   不是装饰，点了就真切模块状态并开窗。小、密、低对比：主视觉仍是块名，
+   子入口是第二层信息，不跟块名抢注意力。 */
+.home-tile__entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.home-tile__entry {
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  color: var(--txt-dim);
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 15px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.home-tile__entry:hover {
+  border-color: var(--accent);
+  color: var(--txt);
+  background: var(--surface-3);
+}
+
+.home-tile__entry:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }

@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // 本仓库刻意不装 @types/node；node:fs 的形状声明在 src/apps/collab/node-fs.d.ts（全局环境声明）。
 import { readFileSync } from "node:fs";
 
+import { MTAB_PERSIST_PREFIX, MTAB_SELECT_EVENT } from "../../kernel/MultitabFrame";
 import type { ModuleReg } from "../../kernel/store";
 import { useDesktopStore } from "../../kernel/store";
+import { useCalendarUI } from "../calendar/state";
+import { useTodoUI } from "../todo/state";
 import type { ModuleManifest } from "../../kernel/types";
 import { HomeTiles, TILE_DESC, TILE_MAX, TILE_W, initialLayout, overlaps, resolveSlot } from "./HomeTiles";
 import type { TileLayout } from "./HomeTiles";
@@ -56,6 +59,7 @@ function tile(i: string, x: number, y: number, w = TILE_W, h = 2): TileLayout {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   useDesktopStore.setState({ modules: SIX, openWindow: vi.fn() });
 });
 
@@ -65,6 +69,9 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   useDesktopStore.setState({ modules: {}, openWindow: vi.fn() });
+  // 子入口会真切这两个模块的 UI store —— 不重置就是跨用例污染。
+  useTodoUI.setState({ view: "today", filterTag: null });
+  useCalendarUI.setState({ view: "week", selectedId: null });
 });
 
 // ── 纯逻辑：落位与初始排布（不依赖 DOM 量测） ───────────────────
@@ -252,5 +259,63 @@ describe("区块区 · 拖动", () => {
     fireEvent.click(screen.getByTestId("home-tiles-edit"));
     fireEvent.keyDown(screen.getByTestId("tile-open-calendar"), { key: "ArrowRight", altKey: true });
     expect(Number(screen.getByTestId("tile-calendar").getAttribute("data-x"))).toBe(1);
+  });
+});
+
+// ── 子入口：钉「点了传什么」，不是「渲染出什么」 ─────────────────
+// 每条都要真切模块状态（store）或真写深链接，再开窗；只开窗不切页 = 假入口。
+describe("区块区 · 子入口", () => {
+  it("只给有真页签 / 真筛选的块挂入口（habits / notes 不编）", () => {
+    render(<HomeTiles />);
+    for (const id of ["finance", "todo", "calendar"]) {
+      expect(screen.getByTestId(`tile-entries-${id}`), `${id} 缺子入口`).toBeTruthy();
+    }
+    // habits 的 prefs 只在挂载时读一次、notes 的筛选是组件内 useState —— 都没有真入口
+    expect(screen.queryByTestId("tile-entries-habits")).toBeNull();
+    expect(screen.queryByTestId("tile-entries-notes")).toBeNull();
+  });
+
+  it("todo「只看学业」：把 store 筛选切成学业，并开窗（不是只开窗）", () => {
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("tile-entry-todo-study"));
+    expect(useTodoUI.getState().filterTag).toBe("学业");
+    expect(useDesktopStore.getState().openWindow).toHaveBeenCalledWith("todo");
+  });
+
+  it("todo「全部」：筛选清回 null —— 同一块上两个都是真状态位", () => {
+    useTodoUI.setState({ filterTag: "学业" });
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("tile-entry-todo-all"));
+    expect(useTodoUI.getState().filterTag).toBeNull();
+    expect(useDesktopStore.getState().openWindow).toHaveBeenCalledWith("todo");
+  });
+
+  it("calendar「月」：视图切成 month（默认是 week，所以这一步必然是真切换）", () => {
+    render(<HomeTiles />);
+    expect(useCalendarUI.getState().view).toBe("week");
+    fireEvent.click(screen.getByTestId("tile-entry-calendar-month"));
+    expect(useCalendarUI.getState().view).toBe("month");
+    expect(useDesktopStore.getState().openWindow).toHaveBeenCalledWith("calendar");
+  });
+
+  it("finance「本地流水」：写持久化（窗没开也落该页）+ 广播（窗已开当场切页）", () => {
+    const heard: unknown[] = [];
+    const onSelect = (e: Event) => heard.push((e as CustomEvent).detail);
+    window.addEventListener(MTAB_SELECT_EVENT, onSelect);
+    render(<HomeTiles />);
+    fireEvent.click(screen.getByTestId("tile-entry-finance-local"));
+    window.removeEventListener(MTAB_SELECT_EVENT, onSelect);
+
+    expect(localStorage.getItem(MTAB_PERSIST_PREFIX + "finance")).toBe("local");
+    expect(heard).toEqual([{ persistKey: "finance", page: "local" }]);
+    expect(useDesktopStore.getState().openWindow).toHaveBeenCalledWith("finance");
+  });
+
+  it("子入口不嵌在「打开」按钮里（button 不能套 button，否则点它同时触发开窗）", () => {
+    render(<HomeTiles />);
+    const open = screen.getByTestId("tile-open-todo");
+    expect(open.querySelector(".home-tile__entry")).toBeNull();
+    const entry = screen.getByTestId("tile-entry-todo-study");
+    expect(entry.closest("button")).toBe(entry);
   });
 });

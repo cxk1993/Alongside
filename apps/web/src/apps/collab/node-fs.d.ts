@@ -7,4 +7,7 @@
  */
 declare module "node:fs" {
   export function readFileSync(path: string, encoding: string): string;
+  /** 槽位契约台账（kernel/slots/slotContract.test.ts）需要列目录。 */
+  export function readdirSync(path: string): string[];
+  export function existsSync(path: string): boolean;
 }

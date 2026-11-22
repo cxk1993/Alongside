@@ -273,10 +273,16 @@ export function HomeMyToday() {
                 <li key={`${a.kind ?? "x"}-${i}`}>{a.title ?? a.kind}</li>
               ))}
             </ul>
-          ) : (
-            <p className="home-empty">
-              {sight.status === "ready" ? "没有欠的" : "读取中…"}
+          ) : sight.status === "loading" ? (
+            <p className="home-empty">读取中…</p>
+          ) : sight.status === "missing" ? (
+            <p className="home-empty">暂未提供 —— 日程层还没接上</p>
+          ) : sight.status === "error" ? (
+            <p className="home-empty home-empty--warn">
+              没读到 —— 接口异常，不是「没有欠的」
             </p>
+          ) : (
+            <p className="home-empty">没有欠的</p>
           )}
         </section>
 
@@ -295,8 +301,16 @@ export function HomeMyToday() {
                 </li>
               ))}
             </ul>
+          ) : sight.status === "loading" ? (
+            <p className="home-empty">读取中…</p>
+          ) : sight.status === "missing" ? (
+            <p className="home-empty">暂未提供 —— 日程层还没接上</p>
+          ) : sight.status === "error" ? (
+            <p className="home-empty home-empty--warn">
+              没读到 —— 接口异常，不是「没有冲突」
+            </p>
           ) : (
-            <p className="home-empty">{sight.status === "ready" ? "没有冲突" : "读取中…"}</p>
+            <p className="home-empty">没有冲突</p>
           )}
         </section>
       </div>

@@ -108,3 +108,67 @@
 .login__submit:not(:disabled):hover {
   opacity: 0.9;
 }
+
+/* ── ★ P0-3：模态登录（401 后弹在桌面之上，不跳页、不丢窗口）────────── */
+
+.login--modal {
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(3px);
+  z-index: 99990; /* 高于窗口层（≤12），低于全局 toast（99999） */
+}
+
+.login__cancel {
+  margin-top: 2px;
+  height: 30px;
+  background: none;
+  border: none;
+  color: var(--txt-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.login__cancel:not(:disabled):hover {
+  color: var(--txt);
+  text-decoration: underline;
+}
+
+.login__cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 用户取消登录后的持久提示条：可点重登，不遮内容、不变成「永远读取中」 */
+.auth-expired {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, 92vw);
+  padding: 8px 14px;
+  border: 1px solid rgb(255 180 80 / 40%);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--txt);
+  font-size: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 35%);
+  z-index: 99980;
+}
+
+.auth-expired__btn {
+  flex: none;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.auth-expired__btn:hover {
+  background: var(--accent);
+  color: #fff;
+}

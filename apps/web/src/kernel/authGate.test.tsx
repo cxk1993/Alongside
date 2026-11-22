@@ -13,7 +13,15 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthGate } from "./AuthGate";
-import { api, hasToken, setToken, setUnauthorizedHandler } from "@/shared/api/client";
+import {
+  api,
+  ApiError,
+  hasToken,
+  setLoggedOutHandler,
+  setLoginPromptHandler,
+  setToken,
+  setUnauthorizedHandler,
+} from "@/shared/api/client";
 import { logout } from "@/shared/api/auth";
 
 // ───────────────────────── fetch mock 工具 ─────────────────────────
@@ -46,11 +54,14 @@ function stubFetchSequence(seq: Res[]): { calls: Array<{ url: string; method: st
 beforeEach(() => {
   localStorage.clear();
   setUnauthorizedHandler(() => {}); // 每个用例自己注册
+  setLoginPromptHandler(null);
+  setLoggedOutHandler(() => {});
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   setUnauthorizedHandler(() => {});
+  setLoginPromptHandler(null);
 });
 
 // ───────────────────────── 鉴权门 ─────────────────────────
@@ -169,7 +180,7 @@ describe("★ T30 401 拦截：refresh 单飞重放 / 失败回登录页", () =>
     expect(hasToken()).toBe(true); // 新 access 已落地
   });
 
-  it("refresh 失败 → token 清空 + 鉴权门切回登录页", async () => {
+  it("refresh 失败 → 弹模态登录框（★ P0-3：桌面保留、请求悬挂等登录）", async () => {
     stubFetchSequence([
       {
         status: 401,
@@ -191,13 +202,159 @@ describe("★ T30 401 拦截：refresh 单飞重放 / 失败回登录页", () =>
     );
     expect(screen.getByTestId("desktop")).toBeTruthy(); // 先在桌面
 
-    let rejected = false;
+    let settled = false;
     api.get("/api/v1/todo/items").catch(() => {
-      rejected = true; // 401 最终仍抛给调用方
+      settled = true;
     });
-    await waitFor(() => expect(rejected).toBe(true));
-    await waitFor(() => expect(screen.getByLabelText("登录 Alongside")).toBeTruthy());
+
+    // 弹模态，而不是整页跳登录页
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    expect(screen.getByTestId("desktop")).toBeTruthy(); // ★ 桌面没被卸载
     expect(hasToken()).toBe(false); // token 已清
+    expect(settled).toBe(false); // 请求在等登录结果，没有直接失败
+  });
+
+  it("模态里登录成功 → 自动重放刚才失败的请求（不跳页、不丢上下文）", async () => {
+    const { calls } = stubFetchSequence([
+      {
+        status: 401,
+        contentType: "application/problem+json",
+        body: { title: "Unauthorized", status: 401 },
+      },
+      {
+        status: 401,
+        contentType: "application/problem+json",
+        body: { title: "Unauthorized", status: 401 },
+      },
+      {
+        status: 200,
+        body: {
+          access_token: "jwt-after-login",
+          token_type: "Bearer",
+          expires_in: 900,
+          user: { sub: "admin" },
+        },
+      },
+      { status: 200, body: [{ id: "after-login" }] },
+    ]);
+
+    setToken("expired-token");
+    render(
+      <AuthGate>
+        <div data-testid="desktop">桌面</div>
+      </AuthGate>,
+    );
+
+    const pending = api.get<Array<{ id: string }>>("/api/v1/todo/items");
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText("密码"), { target: { value: "right-password" } });
+    fireEvent.click(screen.getByText("进入"));
+
+    // ★ 原请求被自动重放并成功——调用方拿到的就是这个结果
+    await expect(pending).resolves.toEqual([{ id: "after-login" }]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByTestId("desktop")).toBeTruthy();
+    expect(hasToken()).toBe(true);
+    expect(calls.map((c) => c.url)).toEqual([
+      "/api/v1/todo/items",
+      "/api/v1/auth/refresh",
+      "/api/v1/auth/login",
+      "/api/v1/todo/items",
+    ]);
+  });
+
+  it("取消登录 → 请求以 401 收尾 + 留「未登录」提示条（不许永远读取中）", async () => {
+    stubFetchSequence([
+      {
+        status: 401,
+        contentType: "application/problem+json",
+        body: { title: "Unauthorized", status: 401 },
+      },
+      {
+        status: 401,
+        contentType: "application/problem+json",
+        body: { title: "Unauthorized", status: 401 },
+      },
+    ]);
+
+    setToken("expired-token");
+    render(
+      <AuthGate>
+        <div data-testid="desktop">桌面</div>
+      </AuthGate>,
+    );
+
+    let err: unknown = null;
+    const pending = api.get("/api/v1/todo/items").catch((e) => {
+      err = e;
+    });
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+
+    fireEvent.click(screen.getByText("稍后再说"));
+    await pending;
+
+    expect((err as ApiError).status).toBe(401); // 明确失败，不是永远等待
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByTestId("auth-expired")).toBeTruthy(); // 可点重登
+    expect(screen.getByTestId("desktop")).toBeTruthy();
+    expect(hasToken()).toBe(false);
+  });
+
+  it("并发两个 401 → 只弹一个框、只 refresh 一次、只登录一次", async () => {
+    const { calls } = stubFetchSequence([
+      // 两条请求各得一个 401（顺序不定，用计数断言）
+      {
+        status: 401,
+        contentType: "application/problem+json",
+        body: { title: "Unauthorized", status: 401 },
+      },
+      {
+        status: 401,
+        contentType: "application/problem+json",
+        body: { title: "Unauthorized", status: 401 },
+      },
+      // 单飞 refresh：只应消耗一次
+      {
+        status: 401,
+        contentType: "application/problem+json",
+        body: { title: "Unauthorized", status: 401 },
+      },
+      // 登录一次
+      {
+        status: 200,
+        body: {
+          access_token: "jwt-2",
+          token_type: "Bearer",
+          expires_in: 900,
+          user: { sub: "admin" },
+        },
+      },
+      // 两条重放
+      { status: 200, body: { ok: 1 } },
+      { status: 200, body: { ok: 2 } },
+    ]);
+
+    setToken("expired-token");
+    render(
+      <AuthGate>
+        <div data-testid="desktop">桌面</div>
+      </AuthGate>,
+    );
+
+    const p1 = api.get("/api/v1/todo/items");
+    const p2 = api.get("/api/v1/sight/now");
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    // 只有一个 dialog（不叠弹窗）
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+
+    fireEvent.change(screen.getByLabelText("密码"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("进入"));
+
+    await Promise.all([p1, p2]);
+    const urls = calls.map((c) => c.url);
+    expect(urls.filter((u) => u === "/api/v1/auth/refresh")).toHaveLength(1);
+    expect(urls.filter((u) => u === "/api/v1/auth/login")).toHaveLength(1);
   });
 });
 

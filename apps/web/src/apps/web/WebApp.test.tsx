@@ -15,6 +15,7 @@ import WebApp from "./WebApp";
 import WebFrame, { FRAME_TIMEOUT_MS } from "./WebFrame";
 import WebEntriesPanel from "./WebEntriesPanel";
 import { makeWorkspace, useDesktopStore } from "@/kernel/store";
+import { ApiError } from "@/shared/api/client";
 import { WindowInstanceContext } from "@/kernel/windowInstance";
 import type { CapabilityEntry, WebEntry } from "./api";
 
@@ -221,6 +222,29 @@ describe("WebFrame", () => {
     await act(async () => {});
     expect(screen.getByText("凭据没能解析")).toBeTruthy();
     expect(screen.getByText(/PI_WEB_TOKEN 未设置/)).toBeTruthy();
+  });
+
+  it("★ P0-3：凭据被站点拒绝（401）→ 说清是「值失效」而不是「没配」，并给出管理入口", async () => {
+    const frameMock = frameUrlMock;
+    frameMock.mockClear();
+    frameMock.mockRejectedValue(
+      new ApiError({ type: "about:blank", title: "Unauthorized", status: 401 }),
+    );
+    render(
+      <WebFrame
+        entry={entry({
+          slug: "expired",
+          url: "https://expired.invalid/",
+          auth_ref: "token:env:PI_WEB_TOKEN",
+        })}
+      />,
+    );
+    await act(async () => {});
+    expect(screen.getByText(/凭据被站点拒绝（HTTP 401）/)).toBeTruthy();
+    expect(screen.getByText(/token 过期或权限不足/)).toBeTruthy();
+    expect(screen.getByText("打开条目管理")).toBeTruthy();
+    // 不能再说「没能解析」——两种病不能长一个样
+    expect(screen.queryByText("凭据没能解析")).toBeNull();
   });
 });
 

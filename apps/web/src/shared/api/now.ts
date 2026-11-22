@@ -116,6 +116,17 @@ async function load(force: boolean): Promise<void> {
   return inflight;
 }
 
+/**
+ * ★ P0-3：登录态一恢复（模态登录成功 / 用户点「重新登录」）就强制重拉一次。
+ * 否则 error 态要干等下个 TTL（30s）才自愈 —— 用户会以为「登录了还是坏的」。
+ */
+if (typeof window !== "undefined") {
+  // 与 client.ts 的 AUTH_RESTORED 同值（字面量重复是刻意的：本文件被 vi.mock 过 client 时不炸）
+  window.addEventListener("alongside:auth-restored", () => {
+    if (listeners.size > 0) void load(true);
+  });
+}
+
 function subscribe(fn: () => void): () => void {
   listeners.add(fn);
   if (!timer) {

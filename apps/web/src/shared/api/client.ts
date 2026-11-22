@@ -88,6 +88,70 @@ export function notifyUnauthorized(): void {
   unauthorizedHandler();
 }
 
+/**
+ * ★ P0-3：401 且 refresh 也失败时的「显式登录」出口。
+ *
+ * 为什么不是直接 notifyUnauthorized() 整页跳登录页：
+ *   那会把用户正在看的窗口、正在填的表单全丢掉。P0-3 要求**模态、不跳页、
+ *   登录完回到原位**——所以要给调用方一个「能等登录结果」的 Promise。
+ *
+ * AuthGate 注册本处理器：显示模态登录框 → 登录成功 resolve(true)，用户取消 resolve(false)。
+ * request() 拿到 true 就**自动重放刚才那条失败请求**。
+ */
+type LoginPromptHandler = () => Promise<boolean>;
+let loginPromptHandler: LoginPromptHandler | null = null;
+
+export function setLoginPromptHandler(fn: LoginPromptHandler | null): void {
+  loginPromptHandler = fn;
+}
+
+/** ★ 并发去重：同一时刻只弹一个登录框，所有 401 等待者共享同一个 Promise。 */
+let loginInFlight: Promise<boolean> | null = null;
+
+function promptLogin(): Promise<boolean> {
+  if (!loginInFlight) {
+    loginInFlight = (async () => {
+      try {
+        if (!loginPromptHandler) return false;
+        return await loginPromptHandler();
+      } catch {
+        return false;
+      } finally {
+        loginInFlight = null;
+      }
+    })();
+  }
+  return loginInFlight;
+}
+
+/**
+ * ★ 显式登出：与「401 取消」不是一回事。
+ *   登出是用户主动的，必须回整页登录页（并清掉窗口上下文）；
+ *   401 取消只是「这次没读成」，桌面要留着。
+ *   P0-3 之前两者共用 unauthorizedHandler，导致登出后只挂一条提示条 —— 那是错的。
+ */
+type LoggedOutHandler = () => void;
+let loggedOutHandler: LoggedOutHandler = () => {};
+
+export function setLoggedOutHandler(fn: LoggedOutHandler): void {
+  loggedOutHandler = fn;
+}
+
+export function notifyLoggedOut(): void {
+  loggedOutHandler();
+}
+
+/** ★ 登录态恢复广播（token 重新落地）：数据层听到就强制重拉，别等 TTL。 */
+export const AUTH_RESTORED = "alongside:auth-restored";
+
+export function notifyAuthRestored(): void {
+  try {
+    window.dispatchEvent(new Event(AUTH_RESTORED));
+  } catch {
+    /* 非浏览器环境（测试 SSR 壳）：忽略 */
+  }
+}
+
 /** auth 自己的端点不走「401 → refresh → 重放」循环（登录失败就是失败）。 */
 function isAuthPath(path: string): boolean {
   return path.startsWith("/api/v1/auth/");
@@ -166,10 +230,14 @@ async function request<T>(
     // ★ T30：业务请求遇 401（token 过期）→ refresh 单飞 → 成功则重放一次。
     //   auth 端点本身不参与（登录失败不应触发刷新循环）；每条请求只重放一次。
     if (res.status === 401 && !isAuthPath(path) && !retried) {
+      // ① 先静默：refresh（Cookie 里的 refresh token 还有效就无感换新）
       const refreshed = await refreshOnce();
       if (refreshed) return request<T>(method, path, body, true);
-      // refresh 失败：token 作废，通知门切回登录页
+      // ② 静默失败 → 显式登录框（P0-3）：模态、不跳页，登录完自动重放本条请求
       setToken(null);
+      const loggedIn = await promptLogin();
+      if (loggedIn) return request<T>(method, path, body, true);
+      // ③ 用户取消：不整页跳走，保留桌面与窗口；由鉴权门显示「未登录」提示
       notifyUnauthorized();
     }
     if (ct.includes(PROBLEM_TYPE) && data && typeof data === "object") {

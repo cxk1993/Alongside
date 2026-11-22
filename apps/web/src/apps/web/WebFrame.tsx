@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/shared/components/Button";
+import { ApiError } from "@/shared/api/client";
 import { useDesktopStore } from "@/kernel/store";
 import { useWindowInstance } from "@/kernel/windowInstance";
 import { webApi, type WebEntry } from "./api";
@@ -34,7 +35,12 @@ export default function WebFrame({ entry }: Props) {
   const timerRef = useRef<number | null>(null);
   // ★ 真正塞进 iframe 的地址：默认 = entry.url；条目带 auth_ref 时由后端注入凭据后替换。
   const [srcUrl, setSrcUrl] = useState(entry.url);
-  const [credError, setCredError] = useState<string | null>(null);
+  /**
+   * ★ P0-3 第二层（插件凭据）：401/403 与「解析失败」必须分开说。
+   *   前者 = 变量配了但值被站点拒（过期/权限不足）；后者 = 变量根本没配好。
+   *   两种情况下用户要做的事不一样，所以状态码要留着，不能压成一句 message。
+   */
+  const [credError, setCredError] = useState<{ status?: number; message: string } | null>(null);
   // 记得本次渲染用的是哪份 URL（下拉选另一个条目时用它比对，避免闪烁）
   const [resolvedFor, setResolvedFor] = useState(`${entry.id}:${nonce}`);
 
@@ -50,6 +56,7 @@ export default function WebFrame({ entry }: Props) {
   );
   const setPinned = useDesktopStore((s) => s.setPinned);
   const setFixedGeometry = useDesktopStore((s) => s.setFixedGeometry);
+  const openWindow = useDesktopStore((s) => s.openWindow);
 
   // ★ 解析内嵌地址：没配 auth_ref 的条目一步到位（与旧行为完全一致，零额外请求）。
   //   配了 auth_ref 的（如 token:env:PI_WEB_TOKEN）才去后端换带凭据的 URL ——
@@ -75,9 +82,10 @@ export default function WebFrame({ entry }: Props) {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        // 解析失败（多半是 .env 里缺该变量）→ 明确提示，不静默空白
+        // 失败分两种：变量没配好（解析失败） / 配好了但被站点拒绝（401|403）
+        const status = e instanceof ApiError ? e.status : undefined;
         const msg = e instanceof Error ? e.message : "凭据解析失败";
-        setCredError(msg);
+        setCredError({ status, message: msg });
         setResolvedFor(key);
       });
 
@@ -210,15 +218,29 @@ export default function WebFrame({ entry }: Props) {
         {credError && (
           <div className="web-frame__overlay web-frame__overlay--solid">
             <div className="web-frame__overlay-text">
-              <strong>凭据没能解析</strong>
-              <p>{credError}</p>
-              <p className="web-frame__overlay-hint">
-                该条目声明了 <code>auth_ref = {entry.auth_ref}</code>，
-                请在后端 <code>.env</code> 里配好对应变量后重试。
-              </p>
+              {credError.status === 401 || credError.status === 403 ? (
+                <>
+                  <strong>凭据被站点拒绝（HTTP {credError.status}）</strong>
+                  <p>变量是配了的，但这个值不被接受 —— 多半是 token 过期或权限不足。</p>
+                  <p className="web-frame__overlay-hint">
+                    该条目声明了 <code>auth_ref = {entry.auth_ref}</code>，
+                    请换一个有效的值：Web 模块 → 管理 → 该条目。
+                  </p>
+                </>
+              ) : (
+                <>
+                  <strong>凭据没能解析</strong>
+                  <p>{credError.message}</p>
+                  <p className="web-frame__overlay-hint">
+                    该条目声明了 <code>auth_ref = {entry.auth_ref}</code>，
+                    请在后端 <code>.env</code> 里配好对应变量后重试。
+                  </p>
+                </>
+              )}
             </div>
             <div className="web-frame__overlay-actions">
               <Button onClick={() => setNonce((n) => n + 1)}>重试</Button>
+              <Button onClick={() => openWindow("web")}>打开条目管理</Button>
             </div>
           </div>
         )}

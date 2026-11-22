@@ -10,7 +10,7 @@
  * token 只进 localStorage（key: alongside.token，与 client.ts / 过渡页 login.html 一致），
  * 不进 URL、不进 git。
  */
-import { api, setToken, notifyUnauthorized, ApiError } from "./client";
+import { api, setToken, notifyLoggedOut, notifyAuthRestored, ApiError } from "./client";
 
 export interface LoginResult {
   access_token: string;
@@ -39,6 +39,8 @@ export async function login(password: string, totp = ""): Promise<LoginResult> {
   if (totp.trim()) body.totp = totp.trim();
   const res = await api.post<LoginResult>("/api/v1/auth/login", body);
   setToken(res.access_token);
+  // ★ P0-3：登录成功 → 广播「登录态已恢复」，让数据层立刻重拉（不等 TTL）
+  notifyAuthRestored();
   return res;
 }
 
@@ -53,5 +55,6 @@ export async function logout(): Promise<void> {
     /* 后端不可达也继续本地登出 */
   }
   setToken(null);
-  notifyUnauthorized();
+  // ★ P0-3：显式登出 ≠ 401 取消 —— 登出回整页登录页（401 取消只挂提示条）
+  notifyLoggedOut();
 }

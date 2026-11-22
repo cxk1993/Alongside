@@ -45,7 +45,9 @@ export interface CommandDeps {
   openPluginManager?: () => void;
   toggleTopbar: () => void;
   toggleBottombar: () => void;
+  /** ★ 浮窗模型 API（随浮窗模型退役）：窗口归位。P0 之后只剩命令面板这一个入口。 */
   tidyDesktop: () => void;
+  /** ★ 浮窗模型 API（随浮窗模型退役）：最小化所有未固定窗口。 */
   minimizeAllUnpinned: () => void;
   createWorkspace: () => void;
   switchWorkspace: (workspaceId: string) => void;
@@ -92,6 +94,13 @@ export function buildCommands(d: CommandDeps): Command[] {
       keywords: ["topbar", "顶栏", "菜单栏"],
       run: d.toggleTopbar,
     },
+    // ── ★ 桌面隐喻余党（2026-11-22 P0 去桌面化之后只剩此处入口）──────────
+    // 顶栏那两个 icon-btn（`▁ 最小化全部窗口` / `⊞ 整理桌面`）已撤，这两条现在**只活在
+    // 命令面板里**。它们的语义是浮窗层叠/平铺管理，与「网页即领土」的区块模型不相容：
+    //   ⇒ **随浮窗模型退役**。RGL 区块模型落地时，这两条连同 store 动作与上面两个
+    //      CommandDeps 字段一并删除（`WindowState.geo` 换成 layout key 的同一次改动）。
+    // 为什么现在不删：删动作要动 store 与持久化迁移（成本远大于收益），且入口已收敛
+    //  到一处、可见度低；反过来「无声消失」会被读成回归。退役日期钉在 RGL 切换那一刻。
     {
       id: "act:tidy",
       title: "整理桌面（窗口归位）",
@@ -99,6 +108,7 @@ export function buildCommands(d: CommandDeps): Command[] {
       keywords: ["tidy", "排列", "归位", "整齐"],
       run: d.tidyDesktop,
     },
+    // 同上：浮窗模型余党，随 RGL 区块模型退役（不是「暂时没空删」，是等切换点一起删）。
     {
       id: "act:minimize-unpinned",
       title: "最小化所有未固定窗口",

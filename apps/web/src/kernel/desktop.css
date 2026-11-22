@@ -69,7 +69,9 @@
    主人需求：圆形罗盘，选择性收起上/下/左/右，中心一键全收；
    已收扇区语义 = 展开（双向 toggle）；全收后只留罗盘按钮（右上角，带文字）。 */
 /* 罗盘按钮 + 弹层 z-index：★ 必须高于顶栏（90000）与置顶窗层（91000）——
-   主人反馈「顶栏未收起时罗盘无法使用」的根因：原 41/42 被顶栏 90000 盖住点不到。 */
+   主人反馈「顶栏未收起时罗盘无法使用」的根因：原 41/42 被顶栏 90000 盖住点不到。
+   ★ 位置契约（2026-11-22）：默认落点是顶栏右端「留位区」（见 .topbar 的 padding-right），
+   与主题/登出**并排**；不能叠在它们上面（曾整块盖住，见 .topbar 注释）。 */
 .desktop__compass-btn {
   position: fixed;
   top: 10px;
@@ -187,7 +189,18 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: 0 var(--sp-4);
+  /* ★ 罗盘让位（2026-11-22 凝析 · P0-bug）：右上角常驻「◉ 罗盘」是 position:fixed 且
+     z-index 95000 > 顶栏 90000，实测 1366×720 下罗盘矩形 x∈[1285,1354] 整块压住
+     `.topbar__actions`（x∈[1278,1350]）—— elementFromPoint(主题/登出中心) 命中
+     BUTTON.desktop__compass-btn，两个按钮「看得见、点不到」。
+     修法：在顶栏右侧给罗盘留出实位（罗盘宽 69px + 右距 sp-3 + 余量），actions 左移
+     与罗盘**并排**而不是叠压。为什么不把罗盘挪到顶栏下方（top≈56px）：那就把它从
+     顶栏带（y∈[10,42]）挪进了**窗口可拖达区**（窗口最小 y = TOPBAR = 48），用户把窗口
+     拖到右上角、或顶栏收起后 --topbar-h 归零导致位置跳变 —— 实测窗口 y 起点随主区
+     padding 变化（打开日程表在 173、最大化在 96），罗盘下移后是否压住控制按钮取决于
+     窗口当前几何，不是稳定安全位。留在顶栏带内则与窗口层**垂直方向天然不重叠**。
+     回归钉子：kernel/compassPlace.test.ts（读本文件断言留位 ≥ 罗盘宽、罗盘 z > 顶栏 z）。 */
+  padding: 0 calc(var(--sp-4) + 84px) 0 var(--sp-4);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   z-index: 90000;

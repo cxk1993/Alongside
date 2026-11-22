@@ -1,0 +1,29 @@
+{
+  "id": "study-hub",
+  "name": "学习软件",
+  "version": "0.1.0",
+  "kind": "builtin",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "book",
+  "description": "学习软件聚合：中国大学MOOC / U校园 / WE Learn / 雨课堂 / 知到 / 山大通知 / Pi 智能体，一处启用、打开或同步。",
+  "entry": "@/apps/study-hub",
+  "api": {
+    "base": "/api/v1/study-hub",
+    "openapi": "/api/v1/study-hub/openapi.json",
+    "health": "/api/v1/study-hub/health"
+  },
+  "window": {
+    "w": 980,
+    "h": 680,
+    "minW": 720,
+    "minH": 480,
+    "singleton": true
+  },
+  "provides": [],
+  "requires": [],
+  "slots": [],
+  "emits": [],
+  "consumes": [],
+  "permissions": []
+}

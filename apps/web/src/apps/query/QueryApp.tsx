@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/shared/api/client";
 import { queryApi, type QueryResult } from "./api";
 import { loadPrefs, savePrefs } from "./prefs";
+import { AppErrorState } from "@/shared/ui/app-shell/AppShell";
 import "./query.css";
 
 function errText(e: unknown): string {
@@ -18,7 +19,7 @@ export default function QueryApp() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const { data: presets, isLoading } = useQuery({
+  const { data: presets, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["query", "presets"],
     queryFn: () => queryApi.presets(),
   });
@@ -46,7 +47,10 @@ export default function QueryApp() {
     <div className="query-root">
       <div className="query-list">
         {isLoading ? (
-          <div className="empty__text">加载中…</div>
+          <div className="empty__text">读取中…</div>
+        ) : isError ? (
+          /* ★ 2026-11-22（汐瑶 · 三态收口）：原来 error 落到「暂无预置查询」。 */
+          <AppErrorState error={error} onRetry={() => void refetch()} title="预置查询读取失败" />
         ) : items.length === 0 ? (
           <div className="empty__text">暂无预置查询</div>
         ) : (

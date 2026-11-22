@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePluginEvent } from "@/shared/api/events";
 import { financeApi, formatCents, type Direction } from "./api";
 import BeeCountSyncPanel from "./BeeCountSyncPanel";
+import { AppErrorState } from "@/shared/ui/app-shell/AppShell";
 import "./finance.css";
 
 /** 理财主界面：BeeCount 同步面板 + summary 卡 + 快速记一笔 + 流水列表。 */
@@ -36,7 +37,7 @@ export default function FinanceApp() {
     [filterDirection, filterCategory],
   );
 
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["finance", "list", listParams],
     queryFn: () => financeApi.list(listParams),
   });
@@ -190,8 +191,11 @@ export default function FinanceApp() {
       <div className="finance-list">
         {isLoading ? (
           <div className="empty">
-            <div className="empty__text">加载中…</div>
+            <div className="empty__text">读取中…</div>
           </div>
+        ) : isError ? (
+          /* ★ 2026-11-22（汐瑶 · 三态收口）：原来 error 落到「还没有流水」= 把坏说成空。 */
+          <AppErrorState error={error} onRetry={() => void refetch()} title="流水读取失败" />
         ) : items.length === 0 ? (
           <div className="empty">
             <div className="empty__icon" aria-hidden>

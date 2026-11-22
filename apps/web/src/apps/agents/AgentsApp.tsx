@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePluginEvent } from "@/shared/api/events";
 import { agentsApi } from "./api";
 import AgentRow from "./AgentRow";
+import { AppErrorState } from "@/shared/ui/app-shell/AppShell";
 import "./agents.css";
 
 /** AI 编排主界面：agent 列表 + 创建 + 启用停用 + 删除。 */
@@ -16,7 +17,7 @@ export default function AgentsApp() {
   usePluginEvent("agents.agent.updated", invalidate);
   usePluginEvent("agents.agent.deleted", invalidate);
 
-  const { data: agents, isLoading } = useQuery({
+  const { data: agents, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["agents", "list"],
     queryFn: () => agentsApi.list(),
   });
@@ -76,8 +77,11 @@ export default function AgentsApp() {
       <div className="agents-list">
         {isLoading ? (
           <div className="empty">
-            <div className="empty__text">加载中…</div>
+            <div className="empty__text">读取中…</div>
           </div>
+        ) : isError ? (
+          /* ★ 2026-11-22（汐瑶 · 三态收口）：原来 error 落到「还没有智能体」。 */
+          <AppErrorState error={error} onRetry={() => void refetch()} title="智能体列表读取失败" />
         ) : list.length === 0 ? (
           <div className="empty">
             <div className="empty__icon" aria-hidden>

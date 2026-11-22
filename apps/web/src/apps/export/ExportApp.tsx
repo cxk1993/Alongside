@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@/shared/api/client";
 import { exportApi, type PreviewOut } from "./api";
+import { AppErrorState } from "@/shared/ui/app-shell/AppShell";
 import { loadPrefs, savePrefs } from "./prefs";
 import "./export.css";
 
@@ -17,7 +18,7 @@ export default function ExportApp() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const { data: profiles, isLoading } = useQuery({
+  const { data: profiles, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["export", "profiles"],
     queryFn: () => exportApi.profiles(),
   });
@@ -46,7 +47,12 @@ export default function ExportApp() {
       </div>
       <div className="export-list">
         {isLoading ? (
-          <div className="empty__text">加载中…</div>
+          <div className="empty__text">读取中…</div>
+        ) : isError ? (
+          /* ★ 2026-11-22（汐瑶 · 三态收口）：原来 error 后列表整块空（连一句话都没有）。 */
+          <AppErrorState error={error} onRetry={() => void refetch()} title="导出清单读取失败" />
+        ) : items.length === 0 ? (
+          <div className="empty__text">没有可导出的配置</div>
         ) : (
           items.map((p) => (
             <button

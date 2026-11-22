@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { healthApi, type HealthKind, type HealthRecord } from "./api";
+import { AppErrorState } from "@/shared/ui/app-shell/AppShell";
 import "./health.css";
 
 const KIND_LABEL: Record<HealthKind, string> = {
@@ -30,7 +31,7 @@ export default function HealthApp() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["health"] });
 
-  const { data: records, isLoading } = useQuery({
+  const { data: records, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["health", "list"],
     queryFn: () => healthApi.list(),
   });
@@ -164,8 +165,11 @@ export default function HealthApp() {
       <div className="health-list">
         {isLoading ? (
           <div className="empty">
-            <div className="empty__text">加载中…</div>
+            <div className="empty__text">读取中…</div>
           </div>
+        ) : isError ? (
+          /* ★ 2026-11-22（汐瑶 · 三态收口）：原来 error 落到「还没有健康记录」。 */
+          <AppErrorState error={error} onRetry={() => void refetch()} title="健康记录读取失败" />
         ) : list.length === 0 ? (
           <div className="empty">
             <div className="empty__icon" aria-hidden>

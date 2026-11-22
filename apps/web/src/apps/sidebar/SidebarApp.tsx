@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/shared/api/client";
 import { loadPrefs, savePrefs, type SidebarPrefs } from "./prefs";
+import { AppErrorState } from "@/shared/ui/app-shell/AppShell";
 
 interface Item {
   id: string;
@@ -47,7 +48,7 @@ export default function SidebarApp() {
     savePrefs(next);
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["sidebar", "items"],
     queryFn: () => api.get<{ items: Item[]; count: number }>("/api/v1/sidebar/items"),
   });
@@ -212,7 +213,10 @@ export default function SidebarApp() {
 
       <div className="sidebar-list">
         {isLoading ? (
-          <div>加载中…</div>
+          <div>读取中…</div>
+        ) : isError ? (
+          /* ★ 2026-11-22（汐瑶 · 三态收口）：原来 error 落到「还没有自定义条目」。 */
+          <AppErrorState error={error} onRetry={() => void refetch()} title="条目读取失败" />
         ) : items.length === 0 ? (
           <div className="sidebar-empty">
             还没有自定义条目——加一个书签 / 友链 / 便签吧

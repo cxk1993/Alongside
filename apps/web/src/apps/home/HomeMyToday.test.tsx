@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/shared/api/now", () => ({ useSightNow: vi.fn() }));
@@ -77,6 +77,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // 先卸载再重置 store：HomeTiles（区块区）也订阅了 modules，顺序反了会在 act 外重渲。
+  cleanup();
   vi.clearAllMocks();
   useDesktopStore.setState({ modules: {} });
 });

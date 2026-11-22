@@ -1,0 +1,222 @@
+/* 区块区（P1 原型）—— 主墙内部的独立容器，不替换「今天/欠的/该注意的」三块卡。
+   为什么单独一个文件：`home.css` 正在被视觉基线线改（汐瑶），这里不碰它。
+   颜色只用设计令牌（G18：十六进制只许在 tokens.css）。 */
+.home-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.home-tiles__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.home-tiles__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt-dim);
+  letter-spacing: 0.06em;
+}
+
+.home-tiles__hint {
+  color: var(--txt-faint);
+  font-size: 11px;
+}
+
+.home-tiles__edit {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--txt-dim);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.home-tiles__edit:hover,
+.home-tiles__edit[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--txt);
+}
+
+.home-tiles__edit[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.home-tiles__edit:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ── 画布：格线只在编辑态出现（浏览态必须干净） ──────────────── */
+.home-tiles__canvas {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.home-tiles.is-editing .home-tiles__canvas {
+  background-image:
+    linear-gradient(to right, var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--bg-grid) 1px, transparent 1px);
+  background-size: calc(100% / 12) var(--home-tile-row, 76px);
+  outline: 1px dashed var(--line-strong);
+  outline-offset: 2px;
+}
+
+/* ── 块 ──────────────────────────────────────────────────────── */
+.home-tile {
+  position: absolute;
+  box-sizing: border-box;
+  padding: var(--sp-1);
+}
+
+.home-tile__card {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.home-tiles.is-editing .home-tile__card {
+  border-style: dashed;
+}
+
+.home-tile__open {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--txt);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-tile__open:hover .home-tile__name {
+  color: var(--accent);
+}
+
+.home-tile__open:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-xs);
+}
+
+.home-tile__name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.home-tile__kind {
+  color: var(--txt-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* 底线②：24×24 的把手，不是整卡拖。touch-action:none 防触摸把拖动当成滚动。 */
+.home-tile__grip {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--txt-faint);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.home-tile__grip:hover {
+  color: var(--txt);
+  border-color: var(--accent);
+}
+
+.home-tile__grip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.home-tile.is-dragging {
+  z-index: 60;
+}
+
+.home-tile.is-dragging .home-tile__card {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-2);
+  opacity: 0.92;
+}
+
+.home-tiles.is-dragging .home-tile__grip {
+  cursor: grabbing;
+}
+
+/* 底线①：inset:0 遮罩。拖动时任何子内容（iframe / canvas / 内嵌站）都收不到指针。 */
+.home-tiles__veil {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: transparent;
+}
+
+/* 第二道保险：将来块里放 iframe 时，拖动中直接关掉它的 pointer-events。 */
+.home-tiles.is-dragging .home-tile iframe,
+.home-tiles.is-dragging .home-tile canvas {
+  pointer-events: none;
+}
+
+.home-tiles__empty {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--txt-empty);
+  font-size: 12px;
+}
+
+/* 读屏播报（拖动开始/结束），视觉隐藏 */
+.home-tiles__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

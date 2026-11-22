@@ -4,6 +4,7 @@ import { useSightNow } from "@/shared/api/now";
 
 import { useDesktopStore } from "../../kernel/store";
 import { addFav, loadFavs, moveFav, moveFavTo, removeFav, saveFavs, FAVS_MAX } from "./homeFavs";
+import { HomeTiles } from "./HomeTiles";
 import "./home.css";
 
 /**
@@ -314,6 +315,10 @@ export function HomeMyToday() {
           )}
         </section>
       </div>
+
+      {/* ── ⑤ 区块区（P1 原型）：主墙内部独立容器，**不替换**上面三块卡；
+             编辑态才可拖，布局只在内存里（持久化等形态定下来再做） ──────────── */}
+      <HomeTiles />
 
       <footer className="home__foot">
         {/* 降级源如实收进一行折叠：不假装这些源已经接上 */}

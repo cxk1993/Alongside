@@ -1,0 +1,357 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+
+import { GRID_COLS, type TileState } from "../../kernel/tile";
+import { useDesktopStore } from "../../kernel/store";
+import { loadFavs } from "./homeFavs";
+import "./homeTiles.css";
+
+/**
+ * 区块区（P1 原型）—— 主墙内部的**独立容器**。
+ *
+ * 边界（团队裁定 2026-11-22 20:40）：
+ *   · **不替换**「今天 / 欠的 / 该注意的」三块卡——它们是现在唯一能用的内容；
+ *   · 布局先走**内存态**（不做持久化），形态定下来再接 store；
+ *   · 自写 pointer 拖拽（不上 RGL：2.3.0 根导出缺 WidthProvider + 行为面变动 + rowHeight 反算）。
+ *
+ * 三条底线（spike 实测，缺一条就是「拖不动但看不出为什么」）：
+ *   ① 拖动时整块 canvas 盖 `inset:0` 遮罩——否则指针一进 iframe/子内容，父文档再也收不到
+ *      pointermove（实测三次 move 只跟到第 1 次，移出才恢复）；
+ *   ② **拖把手**（24×24）而不是整卡拖——整卡拖时 press 落在 iframe/canvas 上就进不了父文档；
+ *   ③ **编辑态才可拖**——浏览态把手根本不在 DOM 里，没有误触的可能。
+ */
+
+/** 网格列数复用 `kernel/tile.ts` 的单一真源（区块模型基石，5fdc8d7）。 */
+export const TILE_COLS = GRID_COLS;
+/** 一行高度（px）。canvas 高 = 行数 × 它；格↔像素只在这一个常量上换算。 */
+export const TILE_ROW_H = 76;
+/** canvas 固定 4 行（初始 3 块占 2 行）。 */
+export const TILE_ROWS = 4;
+/** 一块默认占 4 列 × 2 行（12 列 → 一排 3 块）。 */
+export const TILE_W = 4;
+export const TILE_H = 2;
+/** 最多几块。刻意留空位（4 行 × 3 列能放 6 块，这里只放 5）——没有空位的网格「怎么拖都弹回」，
+ *  用户会读成「拖拽坏了」。 */
+export const TILE_MAX = 5;
+
+/** 区块 = `TileState`（网格坐标，单一真源）+ 展示用的名字。
+ *  不另造一套坐标形状：P2 接 store 时 `windowToTile()` 的输出能直接喂进来。 */
+export interface TileLayout extends TileState {
+  name: string;
+}
+
+export interface Slot {
+  x: number;
+  y: number;
+}
+
+export function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
+}
+
+export function overlaps(a: TileLayout, b: TileLayout): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/**
+ * 落位：`at` 与 `others` 重叠时返回曼哈顿距离最近的空位；无冲突返回 `null`（原地不动）。
+ * 纯函数——jsdom 能测，不依赖任何 DOM 量测。
+ */
+export function resolveSlot(
+  at: Slot,
+  size: { w: number; h: number },
+  others: TileLayout[],
+  rows = TILE_ROWS,
+): Slot | null {
+  const probe = (x: number, y: number): TileLayout => ({
+    i: "__probe__",
+    moduleId: "",
+    name: "",
+    x,
+    y,
+    w: size.w,
+    h: size.h,
+  });
+  if (!others.some((o) => overlaps(probe(at.x, at.y), o))) return null;
+  let best: Slot | null = null;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (let y = 0; y <= rows - size.h; y++) {
+    for (let x = 0; x <= TILE_COLS - size.w; x++) {
+      const cand = probe(x, y);
+      if (others.some((o) => overlaps(cand, o))) continue;
+      const d = Math.abs(x - at.x) + Math.abs(y - at.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { x, y };
+      }
+    }
+  }
+  return best;
+}
+
+/** 初始排布：一排 3 块，满了换行。 */
+export function initialLayout(mods: { id: string; name: string }[]): TileLayout[] {
+  return mods.slice(0, TILE_MAX).map((m, idx) => ({
+    i: m.id,
+    moduleId: m.id,
+    name: m.name,
+    x: (idx % 3) * TILE_W,
+    y: Math.floor(idx / 3) * TILE_H,
+    w: TILE_W,
+    h: TILE_H,
+  }));
+}
+
+interface DragState {
+  i: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  origX: number;
+  origY: number;
+  w: number;
+  h: number;
+  cellW: number;
+}
+
+export function HomeTiles() {
+  const modules = useDesktopStore((s) => s.modules);
+  const openWindow = useDesktopStore((s) => s.openWindow);
+
+  /** 已启用模块，顺序 = 注册顺序（与「我的常用」同口径）。 */
+  const all = useMemo(() => {
+    const out: { id: string; name: string }[] = [];
+    for (const reg of Object.values(modules)) {
+      if (!reg?.enabled) continue;
+      const m = reg.manifest;
+      if (!m?.id) continue;
+      out.push({ id: m.id, name: m.name || m.id });
+    }
+    return out;
+  }, [modules]);
+
+  /**
+   * 铺哪几个模块：**「我的常用」优先**，其余按注册顺序补。
+   * 不这么做的话，铺出来的是注册顺序最前的那几个内核类模块（`agents` / `assets` / `auth`），
+   * 主墙上摆一排「账户与鉴权」没人想用。
+   */
+  const candidates = useMemo(() => {
+    const favs = loadFavs();
+    const byId = new Map(all.map((m) => [m.id, m]));
+    const out: { id: string; name: string }[] = [];
+    for (const id of favs) {
+      const m = byId.get(id);
+      if (!m) continue;
+      out.push(m);
+      byId.delete(id);
+    }
+    for (const m of byId.values()) out.push(m);
+    return out;
+  }, [all]);
+
+  const [tiles, setTiles] = useState<TileLayout[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const seeded = useRef(false);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+
+  // 模块是异步来的：第一次非空时铺一次，之后不再重置（同一份教训：挂载即跑会被空列表洗掉）。
+  useEffect(() => {
+    if (seeded.current || candidates.length === 0) return;
+    seeded.current = true;
+    setTiles(initialLayout(candidates));
+  }, [candidates]);
+
+  const onGripDown = (e: ReactPointerEvent<HTMLButtonElement>, t: TileLayout) => {
+    if (!editing || e.button > 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const canvas = canvasRef.current;
+    // jsdom 里 clientWidth = 0：给个兜底值，让纯逻辑可测（真浏览器永远走第一条）。
+    const cellW = canvas && canvas.clientWidth > 0 ? canvas.clientWidth / TILE_COLS : 100;
+    dragRef.current = {
+      i: t.i,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: t.x,
+      origY: t.y,
+      w: t.w,
+      h: t.h,
+      cellW,
+    };
+    setDragId(t.i);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* jsdom 未实现 —— 鼠标路径由 window 监听兜底 */
+    }
+  };
+
+  // 拖动：监听挂 window（capture 只是保险），落位在 pointerup 时一次性解冲突。
+  useEffect(() => {
+    if (!dragId) return;
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d || e.pointerId !== d.pointerId) return;
+      const nx = clamp(d.origX + Math.round((e.clientX - d.startX) / d.cellW), 0, TILE_COLS - d.w);
+      const ny = clamp(
+        d.origY + Math.round((e.clientY - d.startY) / TILE_ROW_H),
+        0,
+        TILE_ROWS - d.h,
+      );
+      setTiles((list) => list.map((t) => (t.i === d.i ? { ...t, x: nx, y: ny } : t)));
+    };
+    const onUp = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d || e.pointerId !== d.pointerId) return;
+      dragRef.current = null;
+      setDragId(null);
+      setTiles((list) => {
+        const me = list.find((t) => t.i === d.i);
+        if (!me) return list;
+        const others = list.filter((t) => t.i !== d.i);
+        // 先判「真冲突」：resolveSlot 的 null 有两种含义（无冲突 / 找不到空位），必须分开。
+        const collide = others.some((o) => overlaps(me, o));
+        if (!collide) return list;
+        const slot = resolveSlot({ x: me.x, y: me.y }, { w: me.w, h: me.h }, others);
+        const target = slot ?? { x: d.origX, y: d.origY }; // 整张网格都没有空位 → 回原位
+        return list.map((t) => (t.i === d.i ? { ...t, x: target.x, y: target.y } : t));
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [dragId]);
+
+  /** 键盘等价物：编辑态下 Alt+←/→/↑/↓ 挪一格（不能只有鼠标能排）。 */
+  const nudge = (t: TileLayout, dx: number, dy: number) => {
+    setTiles((list) =>
+      list.map((o) =>
+        o.i === t.i
+          ? {
+              ...o,
+              x: clamp(o.x + dx, 0, TILE_COLS - o.w),
+              y: clamp(o.y + dy, 0, TILE_ROWS - o.h),
+            }
+          : o,
+      ),
+    );
+  };
+
+  const dragName = dragId ? tiles.find((t) => t.i === dragId)?.name : undefined;
+  const hint = editing
+    ? "拖右上角把手移动；Alt+方向键也能挪一格"
+    : tiles.length
+      ? `${tiles.length} 块 · 点开即用`
+      : "";
+
+  return (
+    <section
+      className={`home-tiles${editing ? " is-editing" : ""}${dragId ? " is-dragging" : ""}`}
+      aria-label="区块区"
+      data-testid="home-tiles"
+    >
+      <header className="home-tiles__head">
+        <h2 className="home-tiles__title">区块</h2>
+        <span className="home-tiles__hint" data-testid="home-tiles-hint">
+          {hint}
+        </span>
+        <button
+          type="button"
+          className="home-tiles__edit"
+          aria-pressed={editing}
+          onClick={() => setEditing((v) => !v)}
+          data-testid="home-tiles-edit"
+        >
+          {editing ? "完成" : "编辑"}
+        </button>
+      </header>
+
+      <div
+        className="home-tiles__canvas"
+        ref={canvasRef}
+        data-testid="home-tiles-canvas"
+        style={
+          {
+            height: TILE_ROWS * TILE_ROW_H,
+            "--home-tile-row": `${TILE_ROW_H}px`,
+          } as CSSProperties
+        }
+      >
+        {tiles.map((t) => {
+          const isDrag = t.i === dragId;
+          return (
+            <article
+              key={t.i}
+              className={`home-tile${isDrag ? " is-dragging" : ""}`}
+              style={{
+                left: `${(t.x / TILE_COLS) * 100}%`,
+                width: `${(t.w / TILE_COLS) * 100}%`,
+                top: t.y * TILE_ROW_H,
+                height: t.h * TILE_ROW_H,
+              }}
+              data-testid={`tile-${t.moduleId}`}
+              data-x={t.x}
+              data-y={t.y}
+            >
+              <div className="home-tile__card">
+                <button
+                  type="button"
+                  className="home-tile__open"
+                  onClick={() => openWindow(t.moduleId)}
+                  onKeyDown={(e) => {
+                    if (!editing || !e.altKey) return;
+                    const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+                    const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+                    if (!dx && !dy) return;
+                    e.preventDefault();
+                    nudge(t, dx, dy);
+                  }}
+                  title={`打开${t.name}`}
+                  data-testid={`tile-open-${t.moduleId}`}
+                >
+                  <span className="home-tile__name">{t.name}</span>
+                  <span className="home-tile__kind">{t.moduleId}</span>
+                </button>
+                {/* 底线②：只有这个 24×24 的把手能起拖；底线③：编辑态才渲染 */}
+                {editing ? (
+                  <button
+                    type="button"
+                    className="home-tile__grip"
+                    aria-label={`拖动${t.name}`}
+                    title="拖动（Alt+方向键也可以）"
+                    onPointerDown={(e) => onGripDown(e, t)}
+                    data-testid={`tile-grip-${t.moduleId}`}
+                  >
+                    ⠿
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+
+        {/* 底线①：拖动时盖住整个 canvas。pointer capture 在把手上，遮罩不会抢事件，
+            但它挡住了下面所有内容（含将来会有的 iframe）——mousemove 才不会丢。 */}
+        {dragId ? <div className="home-tiles__veil" aria-hidden data-testid="home-tiles-veil" /> : null}
+
+        {tiles.length === 0 ? (
+          <p className="home-tiles__empty" data-testid="home-tiles-empty">
+            还没有可放的模块（模块加载中或尚未启用）
+          </p>
+        ) : null}
+      </div>
+
+      <span className="home-tiles__sr" aria-live="polite" data-testid="home-tiles-live">
+        {dragName ? `正在拖动 ${dragName}` : ""}
+      </span>
+    </section>
+  );
+}

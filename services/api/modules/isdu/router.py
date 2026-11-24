@@ -110,6 +110,11 @@ def health(db: Annotated[Session, Depends(get_db)]) -> dict[str, Any]:
 
 @router.get("/status", response_model=StatusOut)
 def status(db: Annotated[Session, Depends(get_db)]) -> StatusOut:
+    """适配器自述：支持哪些能力、缺哪些、上次同步到什么时候。
+
+    这是给「AI 判断这个数据源能不能用」看的 —— `missing` 非空表示
+    某些上游接口还没摸通，别指望它返回数据。
+    """
     count = len(db.exec(select(IsduNotice.id)).all())
     return StatusOut(
         adapter="partial",
@@ -123,7 +128,7 @@ def status(db: Annotated[Session, Depends(get_db)]) -> StatusOut:
 @router.get("/notices", response_model=list[NoticeOut])
 def notices(
     db: Annotated[Session, Depends(get_db)],
-    limit: int = Query(30, ge=1, le=200),
+    limit: int = Query(30, ge=1, le=200, description="最多返回几条（1~200，默认 30）"),
 ) -> list[NoticeOut]:
     """本地已缓存的公告（不触发网络）。要刷新走 POST /sync。"""
     return [
@@ -192,6 +197,11 @@ def login_castgc(
 
 @router.get("/session")
 def session_info(_user: Annotated[User, Depends(get_current_user)]) -> dict[str, Any]:
+    """当前 iSDU 会话状态（是否已登录、学号、上次登录时间）。
+
+    登录态只存在内存里，进程重启即失效 —— 这不是 bug，是刻意的
+    （不把校园账号凭据落盘）。
+    """
     return session_state()
 
 
@@ -221,6 +231,11 @@ def timetable(_user: Annotated[User, Depends(get_current_user)]) -> Any:
 
 @router.get("/courses")
 def courses(_user: Annotated[User, Depends(get_current_user)]) -> Any:
+    """上游课表原始 JSON（未映射）。
+
+    要「能直接画」的形状用 `/timetable`；这个接口是给排查用的，
+    上游加字段时先在这里看到，再去改 `map_courses`。
+    """
     return authed_get("/v2/api/edu/course_schedule")
 
 
@@ -248,11 +263,20 @@ def import_courses_endpoint(
 
 @router.get("/exams")
 def exams(_user: Annotated[User, Depends(get_current_user)]) -> Any:
+    """考试安排（上游原始 JSON：科目、时间、地点、座位号）。
+
+    未登录时抛 401 并提示先走 `/login/castgc`。
+    """
     return authed_get("/v2/api/edu/exam_schedule")
 
 
 @router.get("/grades")
 def grades(_user: Annotated[User, Depends(get_current_user)]) -> Any:
+    """成绩单（上游原始 JSON：课程、学分、绩点、成绩）。
+
+    注意：这是**上游口径**的绩点，与本平台 `course` 模块自算的可能不同，
+    展示时要说清用的是哪一个。
+    """
     return authed_get("/v2/api/edu/grades")
 
 
@@ -458,4 +482,9 @@ def classroom_occupancy(
 
 @router.get("/card")
 def card() -> None:
+    """一卡通账单 —— **v1 未实现，恒定抛错**。
+
+    保留这个端点是刻意的：让调用方拿到一个明确的「这个能力还没做」，
+    而不是 404 让它以为路径写错了。要真做需先过学校的一卡通授权。
+    """
     require_login_error()

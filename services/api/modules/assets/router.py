@@ -52,6 +52,7 @@ def _out(row: object) -> AssetOut:
 
 @router.get("/health")
 def assets_health() -> dict[str, bool]:
+    """健康检查：资产模块是否已激活（不碰数据库）。"""
     return {"ok": True}
 
 
@@ -73,8 +74,13 @@ def list_assets(
     type: str | None = Query(default=None, description="note/skill/checklist/decision/procedure"),
     tier: str | None = Query(default=None, description="public/work/private/sealed"),
     q: str | None = Query(default=None, description="标题/摘要模糊匹配"),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=500, description="最多返回几条（1~500，默认 100）"),
 ) -> list[AssetOut]:
+    """按条件筛资产列表（全部条件可选，不传就是全量前 N 条）。
+
+    典型用法：`?type=decision&tier=work&q=提案` = 「工作层里跟提案有关的决策卡」。
+    排序：新建的在前。`limit` 上限 500，防止一次拉爆。
+    """
     return [
         _out(r)
         for r in AssetsService(db).list(status=status, type=type, tier=tier, q=q, limit=limit)
@@ -83,16 +89,20 @@ def list_assets(
 
 @router.get("/{asset_id}", response_model=AssetOut)
 def read_asset(
-    asset_id: Annotated[str, FPath(max_length=40)],
+    asset_id: Annotated[str, FPath(max_length=40, description="资产 id（as_ 开头）")],
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
 ) -> AssetOut:
+    """读一条资产的完整内容（含被它取代 / 取代它的双向连线）。
+
+    不存在时返回 404，不返回空对象 —— 「没有」和「有一条空的」是两回事。
+    """
     return _out(AssetsService(db).get(asset_id))
 
 
 @router.delete("/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_asset(
-    asset_id: Annotated[str, FPath(max_length=40)],
+    asset_id: Annotated[str, FPath(max_length=40, description="资产 id（as_ 开头）")],
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
 ) -> None:

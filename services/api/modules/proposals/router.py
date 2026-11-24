@@ -55,6 +55,7 @@ def _out(row: object) -> ProposalOut:
 
 @router.get("/health")
 def health() -> dict[str, bool]:
+    """健康检查：提案模块是否已激活（不碰数据库）。"""
     return {"ok": True}
 
 
@@ -80,8 +81,8 @@ ProposalStatusFilter = Literal["pending", "approved", "rejected", "undone", "all
 def list_proposals(
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
-    status_filter: Annotated[ProposalStatusFilter | None, Query(alias="status")] = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    status_filter: Annotated[ProposalStatusFilter | None, Query(alias="status", description="pending 待签 / approved 已签 / rejected 已作废 / undone 已撤销 / all 不过滤")] = None,
+    limit: Annotated[int, Query(ge=1, le=500, description="最多返回几条（1~500，默认 100）")] = 100,
 ) -> list[ProposalOut]:
     """提案列表（签字中心数据源）。
 
@@ -98,6 +99,11 @@ def get_proposal(
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
 ) -> ProposalOut:
+    """读一条提案的完整状态（含执行结果、产物 id、签字人）。
+
+    状态机：`pending`（待签）→ `approved`（已签已执行）/ `rejected`（已作废）；
+    已执行的还能 `undone`（撤销）。
+    """
     return _out(ProposalsService(db).get(proposal_id))
 
 
@@ -118,6 +124,10 @@ def reject_proposal(
     db: DbDep = Depends(get_db),
     _user: UserDep = Depends(get_current_user),
 ) -> ProposalOpOut:
+    """作废一条待签提案 —— **不执行任何业务动作**，只是把它标记为 rejected。
+
+    与 `undo` 的区别：reject 用于「还没执行的」，undo 用于「已经执行过的」。
+    """
     row = ProposalsService(db).reject(proposal_id)
     return ProposalOpOut(id=row.id, status=row.status, detail="已作废")
 

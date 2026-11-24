@@ -37,9 +37,17 @@ class StatusOut(BaseModel):
 class CastgcIn(BaseModel):
     """浏览器 CAS 登录后的 CASTGC（TGT-...）。只用于换 token，不落库。"""
 
-    castgc: str = Field(min_length=8, max_length=400)
+    castgc: str = Field(
+        min_length=8,
+        max_length=400,
+        description="浏览器 CAS 登录后拿到的 CASTGC 票据（形如 TGT-...）；只用于换 token，不落库",
+    )
     #: CAS「信任此设备」写下的设备指纹 cookie；部分部署把 TGT 绑在设备上，兑换要带上它
-    device: str | None = Field(default=None, max_length=400)
+    device: str | None = Field(
+        default=None,
+        max_length=400,
+        description="CAS「信任此设备」的设备指纹 cookie（可选）；学校把 TGT 绑设备时必须带上，否则兑换失败",
+    )
 
 
 class LoginOut(BaseModel):

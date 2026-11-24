@@ -20,9 +20,19 @@ with _MANIFEST_PATH.open(encoding="utf-8") as _f:
 
 @router.get("/health")
 def health() -> dict[str, bool]:
+    """健康检查：本模块是否已激活。
+
+    只回 `{"ok": true}`，不查数据库、不连外部服务 —— 它回答的是
+    「这个模块的代码加载起来了吗」，不是「它依赖的东西都好吗」。
+    """
     return {"ok": True}
 
 
 @router.get("/manifest")
 def manifest() -> dict:
+    """返回本模块的 manifest 原文（前端据此渲染入口、内核据此做契约校验）。
+
+    与 `services/api/modules/collab/manifest.json` 逐字一致；
+    改 manifest 不需要重启，但前端要刷新才看到新值。
+    """
     return _MANIFEST

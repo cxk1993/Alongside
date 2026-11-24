@@ -41,7 +41,14 @@ LEFTOVER_PROBE_MODULES = ("t03probe", "i006probe", "actprobe")
 
 # 测试专用的第三方插件目录前缀（T14 的插件测试会往 plugins/ 下造真插件，正常由
 # uninstall 删掉；但进程被强杀时 teardown 不执行，就会像下面这样留下来）
-LEFTOVER_PLUGIN_GLOBS = ("demo3p-*", "drillplug")
+LEFTOVER_PLUGIN_GLOBS = (
+    "demo3p-*",
+    "drillplug",
+    # ★ 2026-11-24（比丢体检 1.2）：test_plugin_reversibility 会造 zzmigfail；
+    #   teardown 被强杀时它不在清单里 → 残留污染下一次全量（实测出现过不同失败集）。
+    "zzmigfail",
+    "zzmigfail-*",
+)
 
 # 已切换引擎的测试模块（避免每条测试都 reset）
 _isolated_modules: set[str] = set()

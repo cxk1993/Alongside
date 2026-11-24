@@ -78,6 +78,53 @@ def _get(url: str) -> dict | None:
         return None
 
 
+def _count_module(spec: dict) -> tuple[int, int, int, int, list[str]]:
+    """数一个模块的 openapi：端点数 / 无解释 / 参数数 / 参数无解释 + 缺失明细。
+
+    ★ 2026-11-24（汐瑶）：从 scan() 里抽出来的 —— 为的是让 selfcheck 能喂**假数据**
+      验证「无描述真会被逮到」。门禁最危险的失效是一直绿。
+    """
+    schemas = (spec.get("components") or {}).get("schemas") or {}
+
+    def deref(node):
+        if isinstance(node, dict) and isinstance(node.get("$ref"), str):
+            return schemas.get(node["$ref"].split("/")[-1], {})
+        return node if isinstance(node, dict) else {}
+
+    m_ops = m_nodoc = m_prm = m_nodesc = 0
+    missing: list[str] = []
+    for path, ops in (spec.get("paths") or {}).items():
+        if not isinstance(ops, dict):
+            continue
+        for method, op in ops.items():
+            if not isinstance(op, dict):
+                continue
+            m_ops += 1
+            # 只认 docstring 派生：`description`，或**含中文**的 summary
+            #（FastAPI 无 docstring 时会用函数名生成英文标题，那不是解释）
+            _doc = (op.get("description") or "").strip()
+            if not _doc:
+                _s = (op.get("summary") or "").strip()
+                _doc = _s if any("\u4e00" <= c <= "\u9fff" for c in _s) else ""
+            if not _doc:
+                m_nodoc += 1
+                missing.append(f"{method.upper()} {path}（无端点解释）")
+            for prm in op.get("parameters") or []:
+                m_prm += 1
+                if not deref(prm).get("description"):
+                    m_nodesc += 1
+                    missing.append(f"{method.upper()} {path} · 参数 {deref(prm).get('name')}")
+            body = ((op.get("requestBody") or {}).get("content") or {}).get("application/json")
+            if isinstance(body, dict):
+                sch = deref(body.get("schema") or {})
+                for k, v in (sch.get("properties") or {}).items():
+                    m_prm += 1
+                    if not deref(v).get("description"):
+                        m_nodesc += 1
+                        missing.append(f"{method.upper()} {path} · 字段 {k}")
+    return m_ops, m_nodoc, m_prm, m_nodesc, missing
+
+
 def scan(base: str) -> dict:
     total_ops = ops_nodoc = 0
     total_prm = prm_nodesc = 0
@@ -108,44 +155,7 @@ def scan(base: str) -> dict:
         if not spec:
             unreachable.append(mod)          # ★ 不跳过：记下来当失败报
             continue
-        schemas = (spec.get("components") or {}).get("schemas") or {}
-
-        def deref(node):
-            if isinstance(node, dict) and isinstance(node.get("$ref"), str):
-                return schemas.get(node["$ref"].split("/")[-1], {})
-            return node if isinstance(node, dict) else {}
-
-        m_ops = m_nodoc = m_prm = m_nodesc = 0
-        missing: list[str] = []
-        for path, ops in (spec.get("paths") or {}).items():
-            if not isinstance(ops, dict):
-                continue
-            for method, op in ops.items():
-                if not isinstance(op, dict):
-                    continue
-                m_ops += 1
-                # 只认 docstring 派生：`description`，或**含中文**的 summary
-                #（FastAPI 无 docstring 时会用函数名生成英文标题，那不是解释）
-                _doc = (op.get("description") or "").strip()
-                if not _doc:
-                    _s = (op.get("summary") or "").strip()
-                    _doc = _s if any("\u4e00" <= c <= "\u9fff" for c in _s) else ""
-                if not _doc:
-                    m_nodoc += 1
-                    missing.append(f"{method.upper()} {path}（无端点解释）")
-                for prm in op.get("parameters") or []:
-                    m_prm += 1
-                    if not deref(prm).get("description"):
-                        m_nodesc += 1
-                        missing.append(f"{method.upper()} {path} · 参数 {deref(prm).get('name')}")
-                body = ((op.get("requestBody") or {}).get("content") or {}).get("application/json")
-                if isinstance(body, dict):
-                    sch = deref(body.get("schema") or {})
-                    for k, v in (sch.get("properties") or {}).items():
-                        m_prm += 1
-                        if not deref(v).get("description"):
-                            m_nodesc += 1
-                            missing.append(f"{method.upper()} {path} · 字段 {k}")
+        m_ops, m_nodoc, m_prm, m_nodesc, missing = _count_module(spec)
         total_ops += m_ops
         ops_nodoc += m_nodoc
         total_prm += m_prm
@@ -159,6 +169,77 @@ def scan(base: str) -> dict:
     }
 
 
+def selfcheck() -> int:
+    """反向自证 —— 门禁最危险的失效是「一直绿」。
+
+    ★ 2026-11-24 的真实教训：模块清单曾是**硬编码 26 项**（写于 countdown 还是
+      内置模块的年代），冤枉 1 个已转第三方的插件、漏掉 12 个真实上线模块，
+      于是分母永远是 26 —— **覆盖率虚报 100%，两个多月没人发现**。
+
+    所以这里钉四条，各自注入一次失效，都必须报红：
+      ① readyz 取不到模块清单 ⇒ 必须 fatal（**不许退回硬编码**）
+      ② 只有声明了 api 的模块才该有 openapi（纯前端模块不该被算失败）
+      ③ 清单来源必须真能读到「有 api 字段」的模块
+      ④ 计数逻辑必须逮到「无描述」的端点 / 参数 / body 字段
+
+    ★ 全程不碰网络、不碰真实文件（②读真 manifest，验的是「这函数自己没坏」）。
+    """
+    checks: list[tuple[str, bool]] = []
+
+    # ① readyz 取不到 ⇒ fatal（不许静默降级到硬编码 —— 那正是旧病的来源）
+    real = globals().get("_discover_modules")
+    try:
+        globals()["_discover_modules"] = lambda _base: None
+        r = scan("http://selfcheck.invalid")
+        checks.append(("readyz 取不到模块清单时必须 fatal", bool(r.get("fatal"))))
+    finally:
+        if real is not None:
+            globals()["_discover_modules"] = real
+
+    # ③ 清单来源：读真 manifest
+    with_api = _modules_with_api()
+    checks.append(("_modules_with_api 必须读到非空集合", len(with_api) > 0))
+    checks.append(("必须含已知带 api 的模块（todo / docs）", {"todo", "docs"} <= with_api))
+
+    # ② 纯前端模块（只有 manifest + entry、无 api 字段）不该被算成「读不到」
+    checks.append(
+        (
+            "纯前端模块不得混入带 api 集合（growth / schedule / system）",
+            not ({"growth", "schedule", "system"} & with_api),
+        )
+    )
+
+    # ④ 计数逻辑：喂假 spec，三处缺失都必须被数出来
+    fake = {
+        "paths": {
+            "/a": {"get": {"parameters": [{"name": "q"}], "description": "有解释"}},  # 参数缺
+            "/b": {"post": {}},  # 端点缺
+            "/c": {
+                "put": {
+                    "description": "有",
+                    "requestBody": {
+                        "content": {"application/json": {"schema": {"properties": {"x": {}}}}}
+                    },
+                }
+            },  # body 字段缺
+        }
+    }
+    o, nd, p, npx, miss = _count_module(fake)
+    checks.append(("假 spec：端点数应为 3", o == 3))
+    checks.append(("假 spec：必须数出 1 个无解释端点", nd == 1))
+    checks.append(("假 spec：必须数出 2 处无描述参数/字段", npx == 2))
+    checks.append(("假 spec：缺失明细至少 3 条", len(miss) >= 3))
+
+    print("api-docs 门禁自检（反向验证）")
+    ok = True
+    for name, passed in checks:
+        print(f"  {'✓' if passed else '✗'} {name}")
+        ok = ok and passed
+    print()
+    print("结论：" + ("✓ 自检通过 —— 四条判据各自都能报红" if ok else "✗ 自检失败 —— 门禁本身坏了"))
+    return 0 if ok else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="https://life.example.com:8443", help="alongside 基址")
@@ -166,7 +247,12 @@ def main() -> int:
     ap.add_argument("--show-missing", action="store_true", help="逐条列出缺解释的参数")
     ap.add_argument("--allow-unreachable", action="store_true",
                     help="允许有读不到的模块（默认：有则退出码 3）")
+    ap.add_argument("--selfcheck", action="store_true",
+                    help="反向自证：四条判据各注入一次失效，都必须报红（不碰网络）")
     args = ap.parse_args()
+
+    if args.selfcheck:
+        return selfcheck()
 
     r = scan(args.base)
     if not r["total_ops"]:

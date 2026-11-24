@@ -30,6 +30,7 @@ from typing import Any
 REPO = Path(__file__).resolve().parents[3]
 CROSSCHECK = REPO / "tools" / "crosscheck_validator.py"
 ALIGNMENT = REPO / "tools" / "check_research_alignment.py"
+API_DOCS = REPO / "tools" / "check_api_docs.py"
 SCHEMA = REPO / "contracts" / "plugin.schema.json"
 VALIDATE = REPO / "services/api/core/plugins/validate.py"
 
@@ -286,3 +287,48 @@ def test_all_patterns_are_compilable() -> None:
     assert patterns, "Schema 里一个 pattern 都没有？"
     for p in patterns:
         re.compile(p)  # 编译失败会直接抛异常
+
+
+# ══════════════════════════════════════════════════════════════
+# ④ api-docs 门禁：清单来源与计数逻辑必须能报红
+# ══════════════════════════════════════════════════════════════
+#
+# ★ 2026-11-24（汐瑶）：这道门禁曾因**硬编码 26 个模块**而虚报 100% 两个多月。
+#   它漏掉 12 个真实上线模块、冤枉 1 个已转第三方的插件，分母永远 26 ——
+#   「覆盖率 100%」看着漂亮但不可信，而没人发现，因为它是绿的。
+#
+#   所以这里守的不是覆盖率数字，而是**门禁自己会不会坏**：
+#   清单来源不可信时必须 fatal，不许静默退回硬编码。
+
+
+def test_api_docs_selfcheck_passes() -> None:
+    """api-docs 门禁自检必须全绿（四条判据各自都能报红）。"""
+    proc = subprocess.run(
+        [sys.executable, str(API_DOCS), "--selfcheck"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO),
+        timeout=120,
+    )
+    assert proc.returncode == 0, f"api-docs 自检未通过：\n{proc.stdout}\n{proc.stderr}"
+    assert "四条判据各自都能报红" in proc.stdout, proc.stdout
+
+
+def test_api_docs_has_no_hardcoded_module_list() -> None:
+    """清单必须来自运行时（/readyz），**不许再出现硬编码的模块名清单**。
+
+    这是本卡的根本判据：只要有人把 `MODULES = ["agents", "ai-chat", ...]`
+    写回来，这里就红 —— 那次虚报 100% 的病根正是它。
+    """
+    src = API_DOCS.read_text(encoding="utf-8")
+    # 找形如 MODULES = [...] 的硬编码清单（注释里提到 MODULES 不算）
+    for line in src.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        assert not stripped.startswith("MODULES = ["), (
+            "出现硬编码模块清单 —— 这正是 2026-11-24 覆盖率虚报 100% 的病根。"
+            "清单必须从 /readyz 动态取（见 _discover_modules）。"
+        )

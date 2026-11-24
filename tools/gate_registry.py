@@ -93,9 +93,10 @@ GATES: tuple[Gate, ...] = (
     Gate(
         id="api-docs",
         path="tools/check_api_docs.py",
-        description="API / MCP 注释覆盖率；低于 --fail-under 时退出码非 0。",
+        description="API / MCP 注释覆盖率；低于 --fail-under 时退出码非 0。清单从 /readyz 动态取（不许硬编码）。",
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
     Gate(
         id="research-alignment",

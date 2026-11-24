@@ -1,0 +1,28 @@
+{
+  "id": "study",
+  "name": "学业",
+  "version": "0.1.0",
+  "kind": "builtin",
+  "minKernel": "0.1.0",
+  "kernelApi": "^1",
+  "icon": "book-open",
+  "description": "学业页：作业清单按 deadline 排序，复用待办的「学业」层级标签；也是日程容器第 3 页的独立入口。",
+  "entry": "@/apps/study",
+  "api": {
+    "base": "/api/v1/study",
+    "openapi": "/api/v1/study/openapi.json",
+    "health": "/api/v1/study/health"
+  },
+  "window": {
+    "w": 900,
+    "h": 640,
+    "minW": 640,
+    "minH": 420
+  },
+  "provides": [],
+  "requires": [],
+  "slots": [],
+  "emits": [],
+  "consumes": [],
+  "permissions": []
+}

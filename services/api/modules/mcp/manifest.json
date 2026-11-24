@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "api",
   "description": "MCP 桥（ADR-0003）：把各插件 manifest.provides 机械映射成 MCP tools 暴露给 AI 客户端。本插件自己不声明任何业务能力（provides 恒为空），工具完全由其他插件的 manifest 动态决定。",
   "author": "yunxi",
   "window": {

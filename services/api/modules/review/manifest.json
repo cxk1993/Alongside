@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "review",
   "description": "Work-Review 只读接入：日报落库、趋势对比、批注与原文回看",
   "author": "yunxi",
   "window": {

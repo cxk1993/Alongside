@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "note",
   "description": "本机 Obsidian 笔记索引与搜索（全文经本机桥按需拉取，不进服务器库）",
   "author": "yunxi",
   "window": {

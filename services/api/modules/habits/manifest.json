@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "repeat",
   "description": "习惯打卡与连续天数追踪，支持休息日不破连击",
   "author": "yunxi",
   "window": {

@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "docs",
   "description": "文档树内核：通用文档树（树节点 + 正文 + 元数据 JSON + 版本历史 + FTS5 检索），供人格体系/日记等外壳零改动复用。",
   "author": "yunxi",
   "window": {

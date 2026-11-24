@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "persona",
   "description": "人格体系：文档树内核（T15）的薄壳入口——文件管理器形态，随时可加减任何东西，不写死任何人格概念。",
   "author": "yunxi",
   "window": {

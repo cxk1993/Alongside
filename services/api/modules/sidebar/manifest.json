@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "sidebar",
   "description": "TX-SIDEBAR-02 高度自定义侧栏：link/note/announcement/friend-link，href 白名单",
   "author": "yunxi",
   "window": {

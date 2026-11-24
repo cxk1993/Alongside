@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "check-square",
   "description": "待办与周期清单：散落在 Obsidian 的清单搬进系统，双向同步；支持周期任务、语法糖快速添加、概览统计。",
   "author": "yunxi",
   "window": {

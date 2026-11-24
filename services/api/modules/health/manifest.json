@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "health",
   "description": "症状/用药/复诊/体检记录，需跟进时经事件总线联动待办",
   "author": "yunxi",
   "window": {

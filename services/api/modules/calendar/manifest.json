@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "calendar-days",
   "description": "横轴天、纵轴小时的可嵌套日程表",
   "author": "yunxi",
   "window": {

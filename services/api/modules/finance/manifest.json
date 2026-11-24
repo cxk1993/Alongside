@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "wallet",
   "description": "个人账本 + BeeCount MCP 只读快照同步（金额整数分，date 幂等 upsert）。",
   "author": "yunxi",
   "window": {

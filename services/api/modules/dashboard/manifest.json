@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "box",
+  "icon": "dashboard",
   "description": "打开系统看到的第一屏：聚合今日/钱/复盘/模块健康（T11 最小闭环）",
   "author": "yunxi",
   "window": {

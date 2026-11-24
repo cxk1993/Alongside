@@ -65,7 +65,14 @@ PROBE_MANIFEST = {
     "permissions": ["db:own"],
     "migrations": None,
     "settingsSchema": None,
-    "lifecycle": {"onInstall": None, "onEnable": None, "onDisable": None, "onUninstall": None},
+    # ★ 2026-11-24 比丢：这里原来写的是**旧形态对象**
+    #   {"onInstall": None, "onEnable": None, ...}，而 core/manifest.py:105 的契约是
+    #   `lifecycle: str | None = None`（字符串或 null）
+    #   ⇒ 探针一旦落盘，create_app() 的 discover_modules() 直接抛
+    #     `ManifestError: 模块「mcp-probe」manifest 校验失败：lifecycle: Input should be a valid string`
+    #   ⇒ T18 门禁自己造自己崩，永远红。
+    #   不声明 = None 是合法且最省事的（35 个内置模块也都不声明）。
+    #   这正是「门禁自身失效」的第四例（主人 14:22 的 c80eb6f 修了前三道）。
 }
 
 PROBE_ROUTER = '''"""T18 判据探针路由：仅 health（工具暴露与 router 内容无关）。"""

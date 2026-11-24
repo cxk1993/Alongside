@@ -4,7 +4,8 @@
 
 - **提出者**：Qoder CN（L2 真机验收线）
 - **影响谁**：T14（`services/api/core/plugins/**` 领地，workbuddy，交付 `3bb5d6c`）＋ Zcode（编排/部署）；**所有带表的 builtin 插件**（docs/todo/finance/notes/calendar/habits/review/agents/web…）
-- **状态**：open
+- **状态**：**done（2026-11-24 汐瑶实测复核）** —— 内核已改为「按 manifest 声明解析 + 启动对账」，
+  比本卡原提的两个方案更彻底（不再靠猜路径）。复核证据见文末「复核记录」。
 - **优先级**：blocker
 - **日期**：2026-09-19
 
@@ -49,3 +50,47 @@ def _migration_dir(info): return info.directory / "api" / "migrations"
 1. 删掉本地 dev 库 → 起后端（不手工干预）→ 浏览器登录 → 文档模块新建/保存/搜索全绿，无 500；
 2. `SELECT name FROM sqlite_master WHERE name IN ('docs_node','docs_revision','docs_fts')` 三行齐；
 3. 重启一次后端，确认迁移对账幂等（不重复执行、不报错）。
+
+
+---
+
+## 复核记录（2026-11-24 · 汐瑶）
+
+**结论：已修复，且修法比本卡提的两个方案更彻底。**
+
+### 修法（现状代码）
+
+`core/plugins/migrations.py` 不再猜路径，而是**按 manifest 声明解析**：
+
+- `_declared_migration_dir(info)`：读 `manifest.migrations` 字段（协议 §4.1「manifest 是唯一契约」）
+- `_migration_dir(info)`：声明了 → 按声明解析；**声明的目录不存在则报错**，不静默退回约定位
+  （静默退回 = 「manifest 说的不算数」又活过来了）
+- 未声明（null）→ 退回约定探测：`api/migrations/` 优先、`migrations/` 兜底
+- `reconcile_migrations(engine, modules)`：启动时按 `_migration_history` 对账补跑
+- 触发点：`core/app.py:193` 的 `lifespan=make_startup_lifespan(...)` → uvicorn lifespan 阶段
+  （对外服务之前，正是「表必须先于请求存在」的时机）
+
+### 实测（全新空库，2026-11-24 14:4x）
+
+```
+对账完成：18 个模块补跑了迁移
+  agents: ['0001_init']      assets: ['0001_init']
+  calendar: ['0001_init', '0002_reminder_log']
+  docs: ['0001_init', '0002_fts']      finance: ['0001_init', '0002_snapshot']
+  ...
+建表数: 35
+docs 相关: docs_content, docs_fts, docs_fts_config, docs_fts_content,
+           docs_fts_data, docs_fts_docsize, docs_fts_idx, docs_node, docs_revision
+web 相关: web_entry
+```
+
+本卡原报的三个症状全部消失：
+1. `docs_node` 表自动建出（原「no such table」500）
+2. `docs_fts` 虚拟表在（0002_fts 增量跑了，不是靠 `create_all` 绕过）
+3. `web_entry` 表在（原第二个实证的 500）
+
+### 遗留
+
+本卡建议的「deploy 首启流程加断言：跑完后 `_migration_history` 覆盖当前版本清单」——
+`reconcile_migrations` 已返回 `executed` 供断言使用，但**部署脚本里尚未接入**。
+不阻塞（对账本身已幂等），建议在 `tools/deploy_backend_increment.py` 里补一条。

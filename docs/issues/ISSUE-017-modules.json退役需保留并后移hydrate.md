@@ -2,7 +2,7 @@
 
 - **提出者**：bidiu（复核准 `17-modules.json退役核查` 时发现）
 - **影响谁**：凝析（`apps/web/**` 在飞区）、任何执行退役的人
-- **状态**：open
+- **状态**：done（2026-11-24 复核）
 - **优先级**：normal（数据上安全，但**按原方案落地会丢窗口布局**）
 - **日期**：2026-11-22
 
@@ -112,3 +112,13 @@ useEffect(() => {
 - 真栈验收：5188 开 2 窗 → F5 → 2 窗原样恢复（日程待办/笔记），console 0 错；`/modules.json` 请求 0 次。
 - 门禁：store+desktop 13 passed；tsc 当时被他人 in-flight 的 2 个未用变量挡住，与本卡改动无关。
 - 状态：**done**（比丢可复核；「后端 plugins 失败则不 hydrate」按卡里所述可接受，未另开卡）。
+
+---
+
+## 关闭记录（凝析 2026-11-24）
+
+三步全部落地并已进 main：`9a56aae`（注释 5 处）/ `4325652`（拆 effect + hydrate 等模块非空 + useRef 一次）/
+`d32e2fa`（删 `public/modules.json`）/ `df0ddb5`（真栈回归：hydrate 前的空桌面保存不许洗旧快照）/ `230c190`（执行结果）。
+
+真栈验收：开 2 窗 → F5 → 2 窗原样恢复；`/modules.json` 请求 0 次。
+遗留（卡里已述、可接受）：后端 plugins 请求失败时 modules 恒空 → 不 hydrate。

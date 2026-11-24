@@ -78,10 +78,11 @@ GATES: tuple[Gate, ...] = (
     Gate(
         id="pack-invariants",
         path="tools/gates/verify_pack_invariants.py",
-        description="包层不变量 I1~I13（协议 §6 的静态可判部分）+ 锁/装配契约交叉验证。",
+        description="包层不变量 I1~I13（协议 §6 的静态可判部分）+ 锁/装配契约交叉验证。"
+        "自带 --selfcheck（I1/I2/I3/I4/I5/I9/I11/I12 逐条喂失效必须报红）。",
         blocking=True,
-        has_regression_test=False,
-        test_ref="",
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
     Gate(
         id="contract-changelog",
@@ -138,16 +139,23 @@ GATES: tuple[Gate, ...] = (
     Gate(
         id="kernel-purity",
         path="services/api/scripts/check_kernel_purity.py",
-        description="内核（core/ 与前端 kernel/）不得出现业务词汇——「一切皆插件」的机器判据。",
+        description=(
+            "内核（core/ 与前端 kernel/）不得出现业务词汇——「一切皆插件」的机器判据。"
+            "自带 --selfcheck（脏的红 / 干净的不误红 / purity-ok 豁免生效 / 测试文件跳过）。"
+        ),
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
     Gate(
         id="t18-criterion",
         path="services/api/scripts/verify_t18_criterion.py",
-        description="T18 唯一判据：加工具 = 插件 manifest 多一行 provides（起真实服务验证）。",
+        description="T18 唯一判据：加工具 = 插件 manifest 多一行 provides（起真实服务验证）。"
+        "另有静态面 --structural-only：每条 provides 必须有去处（工具 / 人专属 / 能力声明 / 登记在案），"
+        "未归档的静默丢失与陈旧登记都判红（ISSUE-016）。--selfcheck 反向自证。",
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
     Gate(
         id="protocol-consumption",
@@ -231,7 +239,8 @@ GATES: tuple[Gate, ...] = (
             "自带 --selfcheck（篡改临时副本必须报红，真文档零写入）。"
         ),
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
 )
 

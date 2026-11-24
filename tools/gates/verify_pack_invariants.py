@@ -30,6 +30,7 @@ import 失败 ⇒ 退出码 1，不假装通过。
     python tools/gates/verify_pack_invariants.py
     python tools/gates/verify_pack_invariants.py --json
     python tools/gates/verify_pack_invariants.py --verbose
+    python tools/gates/verify_pack_invariants.py --selfcheck   # 反向自证：喂失效必须报红
 
 退出码：0 = 无违规（含「仓库里没有包」）；1 = 有违规 / 契约校验失败 / 实现加载失败。
 """
@@ -230,7 +231,8 @@ def check_i3(pack: str, raw: Any) -> list[Finding]:
                 "I3",
                 pack,
                 FAIL,
-                f"id 以 official. 开头，但 kind={kind!r}。official.* 只允许官方包使用。",
+                f"id={pack_id!r} 以 official. 开头，但 kind={kind!r}。"
+                "official.* 只允许官方包使用。",
             )
         ]
     return [Finding("I3", pack, PASS, f"保留名前缀与 kind={kind!r} 一致。")]
@@ -1009,6 +1011,221 @@ def run(extra_pack_dirs: list[Path] | None = None) -> tuple[list[Finding], dict[
     return findings, {"scan": scan, "artifacts": artifacts}
 
 
+# ───────────────────── 反向自证（--selfcheck） ─────────────────────
+#
+# ★ 为什么要有它
+# --------------
+# 门禁坏的形态是**绿着**：判据写错、扫描根算错、异常被吞掉——它依然退出码 0。
+# 所以每一条静态不变量都要被喂一次失效，并且必须真的报红。
+# 团队统一的四条纪律（`item-team/alongside/28-门禁回归测试·分工-20261124.md` §三）：
+#   ① 不碰真实文件   ② 不许绿着扫空目录   ③ 不许退回硬编码   ④ 断言到具体条数 / 文案
+#
+# 本自检全部在 `tempfile.TemporaryDirectory` 里造包——仓库一个字节都不写。
+
+#: 自检用的最小合法包。每个用例只改它一处，这样「红」能归因到那处改动。
+_SELFCHECK_BASE: dict[str, Any] = {
+    "packFormat": 1,
+    "id": "demo.selfcheck",
+    "name": "自检包",
+    "version": "1.0.0",
+    "kind": "community",
+    "kernelApi": "^1.0",
+}
+
+
+def _selfcheck_write(
+    root: Path,
+    dirname: str,
+    manifest: dict[str, Any],
+    files: dict[str, str] | None = None,
+) -> Path:
+    """在 `root/dirname` 摆一个包；`files` 是「相对包目录的路径 → 文本」。"""
+    pack_dir = root / dirname
+    pack_dir.mkdir(parents=True)
+    (pack_dir / MANIFEST_NAME).write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    for name, content in (files or {}).items():
+        target = pack_dir / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    return pack_dir
+
+
+def _selfcheck_findings(
+    dirname: str, manifest: dict[str, Any], files: dict[str, str] | None = None
+) -> list[Finding]:
+    """造一个包、跑一遍真门禁，只返回**这个包**的判定。
+
+    ★ 用 `run()` 而不是逐个调 `check_iN`：要验的是「门禁整体能发现它」，
+      单独调函数会把 `run()` 里的接线错误放过去（比如某个 check 根本没被调用）。
+    """
+    with tempfile.TemporaryDirectory(prefix="pack-invariants-selfcheck-") as tmp:
+        pack_dir = _selfcheck_write(Path(tmp), dirname, manifest, files)
+        findings, _meta = run([pack_dir])
+    return [f for f in findings if dirname in f.pack]
+
+
+def selfcheck() -> int:
+    """喂一次失效 → 必须报红。通过返回 0，任何一条没红就返回 1。"""
+    failures: list[str] = []
+    passed: list[str] = []
+
+    def expect_clean(label: str, dirname: str, manifest: dict[str, Any]) -> None:
+        """正向对照：好包必须零 FAIL——否则「什么都报红」也是失效。"""
+        findings = _selfcheck_findings(dirname, manifest)
+        red = [(f.invariant, f.detail) for f in findings if f.level == FAIL]
+        if red:
+            failures.append(f"{label}：干净样本被误判红 {red[:2]}")
+        else:
+            passed.append(label)
+
+    def expect_red(
+        label: str,
+        invariant: str,
+        needles: tuple[str, ...],
+        dirname: str,
+        manifest: dict[str, Any],
+        files: dict[str, str] | None = None,
+    ) -> None:
+        """注入一个失效 → 指定不变量报红，且文案含 needle（可定位）。"""
+        findings = _selfcheck_findings(dirname, manifest, files)
+        hits = [f for f in findings if f.invariant == invariant and f.level == FAIL]
+        if not hits:
+            got = sorted({(f.invariant, f.level) for f in findings})
+            failures.append(f"{label}：{invariant} 没有报红（该包判定 = {got}）——规则失效了")
+            return
+        missing = [n for n in needles if not any(n in f.detail for f in hits)]
+        if missing:
+            failures.append(f"{label}：{invariant} 报红了，但文案缺 {missing}：{hits[0].detail}")
+            return
+        passed.append(label)
+
+    # ── 正向对照 ──
+    expect_clean("基线包必须全绿", "demo.selfcheck", dict(_SELFCHECK_BASE))
+
+    # ── I1 · 未知顶层字段 ──
+    expect_red(
+        "I1 拼错顶层字段",
+        "I1",
+        ("foo",),
+        "demo.i1",
+        {**_SELFCHECK_BASE, "id": "demo.i1", "foo": 1},
+    )
+
+    # ── I2 · id 与目录名不一致 ──
+    expect_red(
+        "I2 id 与目录名不符",
+        "I2",
+        ("demo.other", "demo.i2"),
+        "demo.i2",
+        {**_SELFCHECK_BASE, "id": "demo.other"},
+    )
+
+    # ── I3 · 保留名被非官方包占用 ──
+    expect_red(
+        "I3 official.* 被 community 占用",
+        "I3",
+        ("official.fake", "community"),
+        "official.fake",
+        {**_SELFCHECK_BASE, "id": "official.fake", "kind": "community"},
+    )
+
+    # ── I5 · 预算放大到内核级 ──
+    expect_red(
+        "I5 预算声明 L3（内核级）",
+        "I5",
+        ("L3",),
+        "demo.i5",
+        {
+            **_SELFCHECK_BASE,
+            "id": "demo.i5",
+            "permissionBudget": {"objectLevel": "L3", "capabilities": []},
+        },
+    )
+
+    # ── I9 · 清单改了但锁没重钉 ──
+    stale_lock = json.dumps(
+        {
+            "packId": "demo.i9",
+            "packVersion": "0.9.0",
+            "generatedAt": "2026-01-01T00:00:00+00:00",
+        },
+        ensure_ascii=False,
+    )
+    expect_red(
+        "I9 锁比清单旧",
+        "I9",
+        ("packVersion", "0.9.0", "1.0.0"),
+        "demo.i9",
+        {**_SELFCHECK_BASE, "id": "demo.i9"},
+        {LOCK_NAME: stale_lock},
+    )
+
+    # ── I11 · 包声明能力（同时必然触发 I1：provides 不在顶层白名单）──
+    expect_red(
+        "I11 包清单里写 provides",
+        "I11",
+        ("provides",),
+        "demo.i11",
+        {**_SELFCHECK_BASE, "id": "demo.i11", "provides": []},
+    )
+    expect_red(
+        "I11 的 provides 同时被 I1 判未知字段",
+        "I1",
+        ("provides",),
+        "demo.i11",
+        {**_SELFCHECK_BASE, "id": "demo.i11", "provides": []},
+    )
+
+    # ── I4 · 路径逃逸（软链）──
+    # ★ 平台不支持建软链时必须**如实说没验**，不能算过。
+    try:
+        with tempfile.TemporaryDirectory(prefix="pack-invariants-i4-") as tmp:
+            root = Path(tmp)
+            outside = root / "outside.txt"
+            outside.write_text("逃逸目标", encoding="utf-8")
+            pack_dir = _selfcheck_write(
+                root, "demo.i4", {**_SELFCHECK_BASE, "id": "demo.i4"}
+            )
+            (pack_dir / "link.txt").symlink_to(outside)
+            findings, _meta = run([pack_dir])
+        hits = [
+            f
+            for f in findings
+            if f.invariant == "I4" and f.level == FAIL and "demo.i4" in f.pack
+        ]
+        if hits:
+            passed.append("I4 软链逃逸")
+        else:
+            failures.append("I4 软链逃逸：没有报红——路径逃逸判据失效了")
+    except (OSError, NotImplementedError) as exc:
+        passed.append(f"I4 软链逃逸（跳过：本机不支持创建符号链接，{type(exc).__name__}）")
+
+    # ── I12 · 校验器自证（run() 每次都跑，这里断言它真的红了/绿了）──
+    # ★ I12 的 pack 字段是「（校验器）」，不挂某个包名下 —— 必须从整轮 run() 里取。
+    findings, meta = run([])
+    i12 = [f for f in findings if f.invariant == "I12"]
+    if not i12 or any(f.level != PASS for f in i12):
+        failures.append(f"I12 校验器自证没有 PASS：{[(f.level, f.detail) for f in i12]}")
+    else:
+        passed.append("I12 校验器自证")
+
+    # ── 反空转：扫到零个包必须有明确标记（不能安静地绿）──
+    if meta["scan"]["pack_count"] == 0 and not any(
+        "无包" in f.detail or "没有样本" in f.detail for f in findings
+    ):
+        failures.append("反空转：扫到 0 个包时，报告里没有「无包 / 没有样本」的标记")
+
+    print(f"── 包层不变量门禁 · 反向自证（{len(passed) + len(failures)} 条用例）──")
+    for line in passed:
+        print(f"  ✓ {line}")
+    for line in failures:
+        print(f"  ✗ {line}")
+    print(f"结论：{'✗ 自检未通过' if failures else '✓ 自检通过'}")
+    return 1 if failures else 0
+
+
 def summarize(findings: list[Finding]) -> dict[str, dict[str, int]]:
     """按不变量汇总 pass / fail / skip 计数。"""
     out: dict[str, dict[str, int]] = {
@@ -1108,6 +1325,11 @@ def main(argv: list[str] | None = None) -> int:
         "--verbose", action="store_true", help="打印每条通过项的明细（未判定项默认就打印）"
     )
     parser.add_argument(
+        "--selfcheck",
+        action="store_true",
+        help="反向自证：临时目录里逐条注入失效，断言对应不变量必须报红。不写仓库、不扫真包结论。",
+    )
+    parser.add_argument(
         "--pack-dir",
         action="append",
         default=[],
@@ -1115,6 +1337,11 @@ def main(argv: list[str] | None = None) -> int:
         help="额外扫描的包目录（可重复）。作者在自己的包上跑门禁时用，不必先放进仓库。",
     )
     args = parser.parse_args(argv)
+
+    # ★ 自检先于一切：它验的是「门禁自己还认不认得坏东西」。
+    #   跑通它的退出码才是「这道门禁可信」，不是它绿。
+    if args.selfcheck:
+        return selfcheck()
 
     findings, meta = run([Path(p) for p in args.pack_dir])
     failures = [f for f in findings if f.level == FAIL]

@@ -31,6 +31,8 @@ REPO = Path(__file__).resolve().parents[3]
 CROSSCHECK = REPO / "tools" / "crosscheck_validator.py"
 ALIGNMENT = REPO / "tools" / "check_research_alignment.py"
 API_DOCS = REPO / "tools" / "check_api_docs.py"
+PACK_INVARIANTS = REPO / "tools" / "gates" / "verify_pack_invariants.py"
+T18_CRITERION = REPO / "services" / "api" / "scripts" / "verify_t18_criterion.py"
 SCHEMA = REPO / "contracts" / "plugin.schema.json"
 VALIDATE = REPO / "services/api/core/plugins/validate.py"
 
@@ -39,7 +41,15 @@ def _load(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # ★ 必须先注册进 sys.modules 再 exec：模块里有 @dataclass 时，
+    #   dataclasses 会通过 sys.modules[cls.__module__] 解析注解；
+    #   未注册则 AttributeError（'NoneType' object has no attribute '__dict__'）。
+    sys.modules[name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop(name, None)  # 加载失败不留半个模块
+        raise
     return mod
 
 
@@ -332,3 +342,231 @@ def test_api_docs_has_no_hardcoded_module_list() -> None:
             "出现硬编码模块清单 —— 这正是 2026-11-24 覆盖率虚报 100% 的病根。"
             "清单必须从 /readyz 动态取（见 _discover_modules）。"
         )
+
+
+# ══════════════════════════════════════════════════════════════
+# ④ 包层不变量门禁（pack-invariants）：逐条不变量反向自证
+# ══════════════════════════════════════════════════════════════
+# ★ 2026-11-24（比丢 · 工单 28）：这道门禁此前只有「写侧自测」——
+#   它证明「代码写出的锁契约认」，但**没有任何东西证明门禁还认不认得坏包**。
+#   团队纪律：反向自证 = 喂一次失效必须报红；断言到具体文案，不只看退出码。
+
+
+def test_pack_invariants_selfcheck_passes() -> None:
+    """pack-invariants 必须能逐条抓住注入的坏包（I1/I2/I3/I4/I5/I9/I11）。"""
+    proc = subprocess.run(
+        [sys.executable, str(PACK_INVARIANTS), "--selfcheck"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO),
+        timeout=180,
+    )
+    assert proc.returncode == 0, f"pack-invariants 自检未通过：\n{proc.stdout}\n{proc.stderr}"
+    # 判据 4：断言到具体用例文案，不是只断言 returncode。
+    for label in (
+        "基线包必须全绿",
+        "I1 拼错顶层字段",
+        "I2 id 与目录名不符",
+        "I3 official.* 被 community 占用",
+        "I5 预算声明 L3（内核级）",
+        "I9 锁比清单旧",
+        "I11 包清单里写 provides",
+        "I12 校验器自证",
+    ):
+        assert label in proc.stdout, f"自检少验了「{label}」：\n{proc.stdout}"
+    assert "✓ 自检通过" in proc.stdout, proc.stdout
+
+
+def test_pack_invariants_selfcheck_notices_a_blinded_gate(monkeypatch: Any) -> None:
+    """自检必须对「门禁不再报红」敏感 —— 否则它自己也是「绿着但什么都没验」。
+
+    ★ 这是「自检的自检」：把 `run()` 换成看不见 I11 的版本，
+      `selfcheck()` 必须返回 1。它证明自检的绿 ≠ 自检被架空。
+    """
+    mod = _load(PACK_INVARIANTS, "_packinv")
+    real_run = mod.run
+
+    def blinded_run(extra: Any = None) -> Any:
+        findings, meta = real_run(extra)
+        # 模拟「I11 判据被改坏」：坏包不再被这条不变量抓住。
+        return [f for f in findings if not (f.invariant == "I11" and f.level == "fail")], meta
+
+    monkeypatch.setattr(mod, "run", blinded_run)
+    assert mod.selfcheck() == 1, "门禁漏报 I11 时，自检仍然通过 —— 自检无效"
+
+
+# ══════════════════════════════════════════════════════════════
+# ⑤ T18 判据的静态面：provides 声明了，工具面上必须有去处
+# ══════════════════════════════════════════════════════════════
+# ★ 2026-11-24（比丢 · 工单 28）：T18 原来只有「起真服务 → 断言工具出现」那一段。
+#   它的反面（provides 声明了但工具面上没有）从来没有判据 ——
+#   `derive_tool` 遇到未知动词 / 缺 api.base / 两段形态会**静默丢弃**，
+#   于是一条 provides 到底给不给 AI，取决于映射表恰好有没有。
+#   这是 ISSUE-016（关系隐式化）+ 判据 41（安全不能靠巧合）。
+#   静态面用 `--structural-only`，不需要端口与临时库。
+
+
+def test_t18_structural_selfcheck_passes() -> None:
+    """T18 静态判据必须能逐类抓住静默丢失，且干净样本不被误红。"""
+    proc = subprocess.run(
+        [sys.executable, str(T18_CRITERION), "--selfcheck"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(T18_CRITERION.parent.parent),
+        timeout=180,
+    )
+    assert proc.returncode == 0, f"T18 静态自检未通过：\n{proc.stdout}\n{proc.stderr}"
+    for label in (
+        "扫到 7 条 provides（反空转）",
+        "干净样本摊成工具",
+        "三类静默丢失各报红且文案含具体原因",
+        "陈旧登记报红",
+        "空扫描根判红",
+    ):
+        assert label in proc.stdout, f"自检少验了「{label}」：\n{proc.stdout}"
+    assert "✓ 自检通过" in proc.stdout, proc.stdout
+
+
+def test_t18_real_repo_every_provides_has_a_home() -> None:
+    """真仓库里每条 provides 都必须有去处（工具 / 人专属 / 能力声明 / 登记在案）。
+
+    ★ 这条会随仓库演化而红：新加一条摊不出工具的 provides 且没登记 → 红。
+      这正是要的 —— 「它去哪了」必须有人决定。
+    """
+    proc = subprocess.run(
+        [sys.executable, str(T18_CRITERION), "--structural-only"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(T18_CRITERION.parent.parent),
+        timeout=180,
+    )
+    assert proc.returncode == 0, f"T18 静态判据未通过：\n{proc.stdout}\n{proc.stderr}"
+    assert "条 provides" in proc.stdout, proc.stdout
+    assert "✓ 每条 provides 都有去处" in proc.stdout, proc.stdout
+    # 待补缺口必须保持可见（不许因为「归档了」就当已解决）
+    assert "待补缺口" in proc.stdout, proc.stdout
+
+
+def test_t18_structural_flags_an_unregistered_capability(tmp_path: Path) -> None:
+    """自检之外再验一次真路径：临时 manifest 里一条未知动词必须被判红。
+
+    ★ 用脚本自己的 `scan_provides_tool_surface` 而不是复刻判定 ——
+      复刻就是第二个真相源；这里验的是「接线对、函数能报」。
+    """
+    mod = _load(T18_CRITERION, "_t18c")
+    pack = tmp_path / "demo-unregistered"
+    pack.mkdir()
+    (pack / "manifest.json").write_text(
+        json.dumps(
+            {
+                "id": "demo-unregistered",
+                "provides": ["demo.item.frobnicate"],
+                "api": {"base": "/api/v1/demo"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    report = mod.scan_provides_tool_surface([("tmp", tmp_path)], {})
+    assert report.manifests == 1, report
+    assert report.provides == 1, report
+    assert not report.ok, "未登记的静默 provides 没有被判红"
+    assert [g.capability for g in report.gaps] == ["demo.item.frobnicate"], report.gaps
+    assert "frobnicate" in report.gaps[0].problem, report.gaps[0].problem
+
+
+# ══════════════════════════════════════════════════════════════
+# ⑤ protocol-doc 门禁：契约文档过期必须被抓到
+# ══════════════════════════════════════════════════════════════
+#
+# ★ 2026-11-24（汐瑶）：这道门禁在今天的体检里真红过 ——
+#   契约文档写死「288 行」，实际文件 288 行时是对的，但任何人给测试文件加了内容
+#   它就不再一致。它自己的 --selfcheck 已存在（篡改临时副本必须报红），
+#   这里补的是「它真的能跑」+「文档过期时它真会红」。
+
+PROTOCOL_DOC = REPO / "tools" / "check_protocol_doc.py"
+
+
+def test_protocol_doc_selfcheck_passes() -> None:
+    """protocol-doc 自检必须全绿（篡改临时副本必须报红，真文档零写入）。"""
+    proc = subprocess.run(
+        [sys.executable, str(PROTOCOL_DOC), "--selfcheck"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO),
+        timeout=300,
+    )
+    assert proc.returncode == 0, f"自检未通过：\n{proc.stdout}\n{proc.stderr}"
+    assert "自证通过" in proc.stdout, proc.stdout
+
+
+def test_protocol_doc_is_current() -> None:
+    """真文档必须与 schema 当前生成结果逐字一致。
+
+    ★ 这条红不代表代码坏了，只代表**文档过期** —— 修复只需
+      `python tools/gen_protocol_doc.py --out docs/specs/plugin-protocol-contract.md`。
+      之所以落成测试：文档过期是静默的，没人跑门禁就永远不知道。
+    """
+    proc = subprocess.run(
+        [sys.executable, str(PROTOCOL_DOC)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO),
+        timeout=300,
+    )
+    assert proc.returncode == 0, (
+        f"契约文档与 schema 不一致（重新生成即可）：\n{proc.stdout}\n{proc.stderr}"
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+# ⑥ kernel-purity 门禁：脏的会红、干净的不会误红
+# ══════════════════════════════════════════════════════════════
+#
+# ★ 2026-11-24（汐瑶）：门禁失效有两种，第二种更坏 ——
+#   ① 瞎了：脏的也不报；② 误红：干净的也报 ⇒ 人开始绕过它。
+#   自检两条都钉。
+
+KERNEL_PURITY = REPO / "services" / "api" / "scripts" / "check_kernel_purity.py"
+
+
+def test_kernel_purity_selfcheck_passes() -> None:
+    """kernel-purity 自检必须全绿（脏的红、干净的不误红、豁免生效、测试文件跳过）。"""
+    proc = subprocess.run(
+        [sys.executable, str(KERNEL_PURITY), "--selfcheck"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO),
+        timeout=300,
+    )
+    assert proc.returncode == 0, f"自检未通过：\n{proc.stdout}\n{proc.stderr}"
+    assert "脏的会红、干净的不会误红" in proc.stdout, proc.stdout
+
+
+def test_kernel_purity_backend_scope_is_clean() -> None:
+    """后端内核 scope 必须干净（这是阻塞项：地基不许认识业务）。"""
+    proc = subprocess.run(
+        [sys.executable, str(KERNEL_PURITY), "--scope", "backend"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO),
+        timeout=300,
+    )
+    assert proc.returncode == 0, (
+        f"后端内核出现业务词汇 —— 按总纲，为一件具体的事去动 framework 是框架的 bug：\n"
+        f"{proc.stdout}\n{proc.stderr}"
+    )

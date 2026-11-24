@@ -172,25 +172,23 @@ def _iter_files(root: Path, excluded: tuple[str, ...]) -> Iterator[Path]:
         yield path
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = sys.argv[1:] if argv is None else argv
-    verbose = "-v" in args or "--verbose" in args
-    warn_only = "--warn-only" in args
-    include_tests = "--include-tests" in args
-    scope = "all"
-    for i, a in enumerate(args):
-        if a == "--scope" and i + 1 < len(args):
-            scope = args[i + 1]
-    if scope not in SCOPES:
-        print(f"[purity] 未知 scope：{scope!r}（可选 {'/'.join(SCOPES)}）")
-        return 2
+def _scan(
+    pairs: tuple[tuple[str, tuple[str, ...]], ...],
+    *,
+    include_tests: bool = False,
+    root_override: Path | None = None,
+) -> tuple[list[tuple[Path, int, str, str]], int]:
+    """扫描给定 (root_rel, excluded) 组合，返回 (violations, 扫描文件数)。
 
+    ★ 2026-11-24（汐瑶）：从 main() 抽出来的 —— 为的是让 selfcheck 能对**临时目录**跑。
+      门禁最危险的失效是「一直绿」，所以要能喂它干净与脏两种输入。
+      `root_override` 让自检不碰真实仓库。
+    """
+    base = root_override or PROJECT_ROOT
     violations: list[tuple[Path, int, str, str]] = []
     scanned = 0
-    for rel_root, excluded in SCOPES[scope]:
-        root = PROJECT_ROOT / rel_root
-        if verbose:
-            print(f"[purity] 扫描 {rel_root}（排除 {'/'.join(excluded)}）")
+    for rel_root, excluded in pairs:
+        root = base / rel_root
         for path in _iter_files(root, excluded):
             if not include_tests and path.name.endswith(TEST_FILE_SUFFIXES):
                 continue
@@ -213,6 +211,118 @@ def main(argv: list[str] | None = None) -> int:
                             break
                         violations.append((path, idx, word, raw_lines[idx - 1].strip()))
                         break
+    return violations, scanned
+
+
+
+def selfcheck() -> int:
+    """反向自证：**脏的必须红，干净的绝不能误红**。
+
+    ★ 2026-11-24（汐瑶）：加这条的直接原因 —— 今天发现另一道门禁
+      （`check_api_docs`）硬编码清单后虚报 100% 两个多月，**因为它一直是绿的**。
+      门禁的失效有两种，第二种更坏：
+
+      ① 瞎了：脏的也不报 ⇒ 守卫形同虚设；
+      ② 误红：干净的也报 ⇒ 人开始绕过它（「反正这条总红」）⇒ 守卫被主动关掉。
+
+    所以这里两条都钉。全部在临时目录里跑，**不碰真实仓库**。
+    """
+    import tempfile
+
+    checks: list[tuple[str, bool]] = []
+    pairs = (("core", ()),)
+
+    with tempfile.TemporaryDirectory() as td:
+        core = Path(td) / "core"
+        core.mkdir(parents=True, exist_ok=True)
+
+        # ── 基线：完全干净的文件，不许报 ────────────────────────
+        (core / "clean.py").write_text(
+            '"""内核只做框架。"""\n\n\ndef dispatch(name: str) -> str:\n    return name\n',
+            encoding="utf-8",
+        )
+        v, n = _scan(pairs, root_override=Path(td))
+        checks.append(("基线：干净文件不报（scanned=1）", len(v) == 0 and n == 1))
+
+        # ── ① 瞎了？：代码里出现业务词，必须报 ─────────────────
+        (core / "dirty.py").write_text(
+            '"""模块文档，这里提到 calendar 是散文，不该报。"""\n\n'
+            "def load():\n    return calendar_query()\n",
+            encoding="utf-8",
+        )
+        v, _ = _scan(pairs, root_override=Path(td))
+        hits = [x for x in v if x[0].name == "dirty.py"]
+        checks.append(("① 代码里的业务词必须报红", len(hits) >= 1))
+        checks.append(("① 命中词必须是 calendar", any(x[2] == "calendar" for x in hits)))
+
+        # ── ② 误红？：只在 docstring / 注释里出现，不许报 ──────
+        (core / "doconly.py").write_text(
+            '"""这个文件的 docstring 提到 todo 和 notes，都是散文。"""\n\n'
+            "# 下面这行注释也提到 finance，仍然是散文\n"
+            "def handler():\n    return 1\n",
+            encoding="utf-8",
+        )
+        v, _ = _scan(pairs, root_override=Path(td))
+        checks.append(
+            ("② 只在 docstring / 注释里的业务词不许报（误红会逼人绕过门禁）",
+             not any(x[0].name == "doconly.py" for x in v))
+        )
+
+        # ── ③ 豁免：带 purity-ok 的行不许报 ───────────────────
+        (core / "escaped.py").write_text(
+            "# purity-ok: 脱敏必需的字段名，删掉它是安全回退\n"
+            'beecount_pass = "x"\n',
+            encoding="utf-8",
+        )
+        v, _ = _scan(pairs, root_override=Path(td))
+        checks.append(
+            ("③ 写 purity-ok 的行不许报（豁免机制必须真生效）",
+             not any(x[0].name == "escaped.py" for x in v))
+        )
+
+        # ── ④ 测试文件默认跳过（实测 42 处误报全来自 testid） ──
+        (core / "x.test.ts").write_text(
+            'const id = "today-sum-calendar-auth";\n', encoding="utf-8"
+        )
+        v, n = _scan(pairs, root_override=Path(td))
+        checks.append(
+            ("④ 测试文件默认跳过（testid 里的业务词不算违规）",
+             not any(x[0].name == "x.test.ts" for x in v))
+        )
+        v2, _ = _scan(pairs, root_override=Path(td), include_tests=True)
+        checks.append(
+            ("④ --include-tests 时测试文件要真被扫到",
+             any(x[0].name == "x.test.ts" for x in v2))
+        )
+
+    print("kernel-purity 门禁自检（反向验证）")
+    ok = True
+    for name, passed in checks:
+        print(f"  {'✓' if passed else '✗'} {name}")
+        ok = ok and passed
+    print()
+    print("结论：" + ("✓ 自检通过 —— 脏的会红、干净的不会误红" if ok else "✗ 自检失败 —— 门禁本身坏了"))
+    return 0 if ok else 1
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if "--selfcheck" in args:
+        return selfcheck()
+    verbose = "-v" in args or "--verbose" in args
+    warn_only = "--warn-only" in args
+    include_tests = "--include-tests" in args
+    scope = "all"
+    for i, a in enumerate(args):
+        if a == "--scope" and i + 1 < len(args):
+            scope = args[i + 1]
+    if scope not in SCOPES:
+        print(f"[purity] 未知 scope：{scope!r}（可选 {'/'.join(SCOPES)}）")
+        return 2
+
+    if verbose:
+        for rel_root, excluded in SCOPES[scope]:
+            print(f"[purity] 扫描 {rel_root}（排除 {'/'.join(excluded)}）")
+    violations, scanned = _scan(SCOPES[scope], include_tests=include_tests)
 
     if verbose:
         print(f"[purity] 共扫描 {scanned} 个代码文件")

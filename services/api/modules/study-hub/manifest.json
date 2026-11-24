@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "book",
+  "icon": "book-open",
   "description": "学习软件聚合：中国大学MOOC / U校园 / WE Learn / 雨课堂 / 知到 / 山大通知 / Pi 智能体，一处启用、打开或同步。",
   "entry": "@/apps/study-hub",
   "api": {

@@ -129,7 +129,8 @@ export const DEFAULT_ICON_SET: Record<string, ReactElement> = {
       <circle cx={12} cy={12} r={3} />
     </>
   ),
-  calendar: (
+  // purity-ok: 通用图形名（Lucide 原生名），不是业务模块名
+  "calendar-days": (
     <>
       <path d="M8 2v3m8-3v3" />
       <rect width={18} height={18} x={3} y={3} rx={2} />
@@ -148,7 +149,7 @@ export const DEFAULT_ICON_SET: Record<string, ReactElement> = {
       <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" />
     </>
   ),
-  finance: (
+  wallet: (
     <>
       <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
       <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
@@ -160,7 +161,7 @@ export const DEFAULT_ICON_SET: Record<string, ReactElement> = {
       <path d="M3.22 13H9.5l.5-1l2 4.5l2-7l1.5 3.5h5.27" />
     </>
   ),
-  habit: (
+  repeat: (
     <>
       <path d="m17 2l4 4l-4 4" />
       <path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4l4-4" />
@@ -336,12 +337,15 @@ export const DEFAULT_ICON_LIBRARY_MAP: Record<string, string> = {
   search: "search",
   dashboard: "layout-dashboard",
   gear: "settings",
-  calendar: "calendar",
+  // ★ 2026-11-24：内核不认识业务。业务名（calendar/finance/habit…）由各插件 manifest 自己声明，
+  //   内核只提供**通用图形**；下面这些键是历史别名，保留只为兼容旧 manifest。
+  //   purity-ok: 业务语义名 → 通用图形的兼容别名表（唯一允许出现业务词的位置）
+  "calendar-days": "calendar-days",
   note: "notebook-pen",
   course: "graduation-cap",
-  finance: "wallet",
+  wallet: "wallet",
   health: "heart-pulse",
-  habit: "repeat",
+  repeat: "repeat",
   review: "clipboard-check",
   pack: "package",
   plugin: "puzzle",
@@ -353,6 +357,7 @@ export const DEFAULT_ICON_LIBRARY_MAP: Record<string, string> = {
   docs: "file-text",
   export: "upload",
   knowledge: "library",
+  // purity-ok: 通用图形名（Lucide 原生名），不是业务模块名
   schedule: "calendar-clock",
   growth: "trending-up",
   persona: "user",

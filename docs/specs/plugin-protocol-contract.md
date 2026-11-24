@@ -633,7 +633,7 @@ permissions
 | 6 | `services/api/tests_protocol/test_protocol_gates.py`（358 行） | ⑥ 门禁测试网 |
 | 7 | `tools/crosscheck_validator.py`（473 行） | ⑦ 校验器的外部裁判 |
 | 8 | `tools/check_research_alignment.py`（373 行） | ⑧ 调研对齐核查器 |
-| 9 | `services/api/tests_protocol/test_protocol_quality_gates.py`（286 行） | ⑨ 质量门禁的自检测试 |
+| 9 | `services/api/tests_protocol/test_protocol_quality_gates.py`（288 行） | ⑨ 质量门禁的自检测试 |
 | 10 | `services/api/core/events.py`（568 行） | ⑩ 事件契约执行点（声明即订阅 / 声明即许可） |
 | 11 | `services/api/core/plugins/lifecycle.py`（179 行） | ⑪ 生命周期宣告契约（固定名钩子 + 声明校验） |
 
@@ -4245,7 +4245,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-### 5.9 ⑨ 质量门禁的自检测试：`services/api/tests_protocol/test_protocol_quality_gates.py`（286 行）
+### 5.9 ⑨ 质量门禁的自检测试：`services/api/tests_protocol/test_protocol_quality_gates.py`（288 行）
 
 ```python
 # ── 门禁自身的存活证明 ──
@@ -4375,6 +4375,8 @@ def test_crosscheck_selfcheck_passes() -> None:
         [sys.executable, str(CROSSCHECK), "--selfcheck"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=str(REPO),
         timeout=300,
     )

@@ -24,12 +24,48 @@ import argparse
 import json
 import sys
 import urllib.request
+from pathlib import Path
 
-MODULES = [
-    "agents", "ai-chat", "auth", "calendar", "catalog", "course", "dashboard", "diary",
-    "docs", "export", "finance", "habits", "health", "mcp", "notes", "persona", "plugins",
-    "push", "query", "review", "sidebar", "summary", "todo", "web", "countdown", "pi-agent",
-]
+# ★ 2026-11-24（汐瑶）：模块清单不再硬编码 —— 从 /readyz 动态取。
+#
+#   原来的 `MODULES` 是手写的 26 项，写于 countdown 还是内置模块的年代。
+#   后来 countdown 变成第三方插件（plugins/countdown，未装进 modules/），
+#   而真正上线的 12 个模块（appearance / assets / collab / growth / isdu /
+#   knowledge / packs / proposals / schedule / sight / study-hub / system）
+#   一个都不在清单里 —— 于是这道门禁既冤枉了插件，又漏报了大半壁江山，
+#   覆盖率分母永远只有 26 个模块，数字看着漂亮但不可信。
+#
+#   「模块有哪些」的唯一真相是运行时（/readyz 的 activated），不是硬编码。
+def _discover_modules(base: str) -> list[str] | None:
+    """从 /readyz 取当前激活的模块清单。取不到返回 None（调用方判红）。"""
+    d = _get(f"{base.rstrip('/')}/readyz")
+    if not d:
+        return None
+    mods = d.get("activated") or d.get("modules")
+    return sorted(mods) if isinstance(mods, list) else None
+
+
+def _modules_with_api() -> set[str]:
+    """哪些模块**声明了后端 API**（manifest 里有 `api` 字段）。
+
+    ★ 2026-11-24（汐瑶）：不是每个模块都有后端。
+      growth / knowledge / schedule / system 是纯前端模块（只有 manifest + entry，
+      没有 `api` 字段，后端 0 行代码）—— 它们本来就不该有 openapi.json，
+      把「读不到 openapi」算成失败是**误报**，而且会逼着人给空模块造假路由。
+
+      判据直接读 `services/api/modules/*/manifest.json` 的 `api` 字段
+      （走文件而不是走 /api/plugins —— 后者要鉴权，门禁不该依赖 token）。
+    """
+    root = Path(__file__).resolve().parent.parent / "services" / "api" / "modules"
+    out: set[str] = set()
+    for mf in root.glob("*/manifest.json"):
+        try:
+            d = json.loads(mf.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if d.get("api"):
+            out.add(d.get("id") or mf.parent.name)
+    return out
 
 
 def _get(url: str) -> dict | None:
@@ -50,8 +86,24 @@ def scan(base: str) -> dict:
     #   **读不到 openapi 的模块绝不能静默跳过** —— 否则"死掉的模块从分母里消失"，
     #   覆盖率反而更好看（pi-agent 全路由 404 时，本脚本曾报它 100% ✗）。
     #   读不到 = **失败**，单独列出并让退出码非 0。
+    #
+    # ★ 2026-11-24（汐瑶）：清单改从 /readyz 动态取。
+    #   取不到清单 = 连服务都没起来，直接判红（不能退回硬编码，那正是本门禁失效的原因）。
     unreachable: list[str] = []
-    for mod in MODULES:
+    modules = _discover_modules(base)
+    with_api = _modules_with_api()
+    if not modules:
+        return {
+            "unreachable": ["<readyz 取不到模块清单>"],
+            "fatal": "无法从 /readyz 发现模块清单 —— 服务未起或 /readyz 被壳吞掉（见 ISSUE-010）",
+            "total_ops": 0, "ops_nodoc": 0, "total_prm": 0, "prm_nodesc": 0,
+            "per_module": [],
+        }
+    for mod in modules:
+        # ★ 2026-11-24（汐瑶）：只有声明了 API 的模块才该有 openapi.json。
+        #   纯前端模块（growth / knowledge / schedule / system）读不到是**正常**，不是失败。
+        if mod not in with_api:
+            continue
         spec = _get(f"{base.rstrip('/')}/api/{mod}/openapi.json")
         if not spec:
             unreachable.append(mod)          # ★ 不跳过：记下来当失败报

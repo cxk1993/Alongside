@@ -279,6 +279,15 @@
         "to": "Dj5m_Xby",
         "reason": "学业页刀（astrbot：专页+筛选器双入口·学业独立提前量 24h）+ ebddf0f 18 件（推送四 bug 根治/学业页/MCP schema 精确化/enable 补迁移）入库与云端全对齐后 dist 重建。★离线补录（源：astrbot《本批入库与云端全对齐-ebddf0f-27件逐文件一致》+ hermes《复验-27件哈希独立复算》）",
         "post": "life-chat/hermes/最新/2026-09-26-hermes复验-astrbot代跑入库ebddf0f-27件哈希独立复算与门禁全绿.md"
+      },
+      {
+        "at": "2026-11-24T19:20",
+        "by": "汐瑶",
+        "field": "suites.hash.entry_hash",
+        "from": "Dj5m_Xby",
+        "to": "Do8YK3VJ",
+        "reason": "前端 19 个 commit 入库后 dist 重建（纯净树 build，10.07s，0 错误）：区块模型（TileState + 可拖/可缩/可加/可删/持久化/键盘微调）、P0 去桌面化（撤「最小化全部」「整理桌面」两个 icon-btn）、罗盘让位顶栏右端、摘要卡 12 列栅格、内核纯度债务清零（业务图标名交 manifest）、12 个 box 占位模块补真图标、学业页目录入口、study-hub 聚合入口。★ 静态服务实测：首页 200/2258B · 入口 JS 200/170829B · sw.js 200 · manifest 200+mime 正确。★ 本批未部署生产，仅同步验收基线；真部署时按本条对照。",
+        "post": "E:/ai work/xiyao/Alongside/日志/2026-11-24 项目本体体检.md"
       }
     ]
   },
@@ -307,8 +316,8 @@
     },
     "hash": {
       "enabled": true,
-      "entry_hash": "Dj5m_Xby",
-      "source": "2026-09-23 11:3x F2 加固批次（SSE 入场券 + 前端取票）后的 dist 重建；基线链 B3M7wy91→ZKIU8avV→C3N61fir→CJ02Znoy→Cg4ao9Lg→Dc8yk4bh。动前声明见 workbuddy《push上线完成》+《F2 加固实施》→Cc5gQq-5（2026-09-24 本批部署 E5/D1/todoNL/ISSUE-012/O1/O2/G1G2/推送页签）→BaAgvSxg（2026-09-26 U2/U3/三新插件部署）→BGPhpz0E（U1 热推）→DAC1ltnU（U1-2 修复热推）→DfGVOEYp（PluginProvider 接线+E7 工具桥终批）→CXau83s9（2026-09-25 后端收束批+V6三件+day-peek接线部署，纯净树 build）→DQA0necl（批 J·2026-09-25 20:25）→DxGw6mxo（批 M·09-26 12:0x）→Dj5m_Xby（学业页+ebddf0f 18 件·09-26 17:2x）；中间各步见 _meta.changelog"
+      "entry_hash": "Do8YK3VJ",
+      "source": "2026-09-23 11:3x F2 加固批次（SSE 入场券 + 前端取票）后的 dist 重建；基线链 B3M7wy91→ZKIU8avV→C3N61fir→CJ02Znoy→Cg4ao9Lg→Dc8yk4bh。动前声明见 workbuddy《push上线完成》+《F2 加固实施》→Cc5gQq-5（2026-09-24 本批部署 E5/D1/todoNL/ISSUE-012/O1/O2/G1G2/推送页签）→BaAgvSxg（2026-09-26 U2/U3/三新插件部署）→BGPhpz0E（U1 热推）→DAC1ltnU（U1-2 修复热推）→DfGVOEYp（PluginProvider 接线+E7 工具桥终批）→CXau83s9（2026-09-25 后端收束批+V6三件+day-peek接线部署，纯净树 build）→DQA0necl（批 J·2026-09-25 20:25）→DxGw6mxo（批 M·09-26 12:0x）→Dj5m_Xby（学业页+ebddf0f 18 件·09-26 17:2x）；中间各步见 _meta.changelog→Do8YK3VJ（2026-11-24 区块模型+去桌面化 19 件·纯净树 rebuild；详见 _meta.changelog 末条）"
     },
     "modules": {
       "enabled": true,

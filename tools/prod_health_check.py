@@ -28,6 +28,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 DEFAULT_BASE = "https://life.example.com:8443"
 LEGACY_IP = "http://192.0.2.10:18080"
@@ -52,7 +53,97 @@ def fetch(url: str, *, method: str = "GET", body: bytes | None = None,
         return 0, str(e).encode(), {}
 
 
+
+def selfcheck() -> int:
+    """反向自证：起本地假生产，验「坏的一定红」——特别是**状态码对、内容不对**。
+
+    ★ 2026-11-24（汐瑶）：这道门禁全是网络检查，没法喂纯数据，所以直接起
+      一个 `http.server` 假生产，用 subprocess 调自己。钉两条：
+
+      ① 全 500 ⇒ 必须 exit 1（瞎了的最直白形态）
+      ② **全 200 但内容是垃圾 ⇒ 也必须 exit 1**
+         —— 这条更重要：今天已经吃过「状态码当结论」的亏
+            （`/sight/now` 数据源失败也回 200，只是把失败写进 degraded）。
+            门禁如果只看 `st == 200`，就会在生产已经坏掉时欢快地报绿。
+
+    局限（如实写明）：**不验「真绿场景」**——那需要完整模拟
+    PWA / push / SSE / 包内容，成本高于收益。真绿靠真生产跑一次。
+    """
+    import http.server
+    import subprocess
+    import threading
+
+    def run_against(handler_cls: type) -> subprocess.CompletedProcess:
+        srv = http.server.HTTPServer(("127.0.0.1", 0), handler_cls)
+        port = srv.server_address[1]
+        th = threading.Thread(target=srv.serve_forever, daemon=True)
+        th.start()
+        try:
+            return subprocess.run(
+                [sys.executable, str(Path(__file__).resolve()), "--base-url", f"http://127.0.0.1:{port}"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=180,
+            )
+        finally:
+            srv.shutdown()
+
+    # ── ① 全 500 ────────────────────────────────────────────
+    class All500(http.server.BaseHTTPRequestHandler):
+        def _bad(self) -> None:
+            self.send_error(500)
+
+        do_GET = do_POST = _bad  # type: ignore[assignment]
+
+        def log_message(self, *a: object) -> None:  # noqa: D102
+            pass
+
+    r = run_against(All500)
+    checks = [
+        ("① 全 500 ⇒ 必须 exit 1", r.returncode == 1),
+        ("① 输出里必须出现 FAIL", "FAIL" in r.stdout),
+    ]
+
+    # ── ② 全 200 但内容是垃圾（状态码对、内容不对）─────────
+    class All200Garbage(http.server.BaseHTTPRequestHandler):
+        def _fake(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"<html>totally fine, trust me</html>")
+
+        do_GET = do_POST = _fake  # type: ignore[assignment]
+
+        def log_message(self, *a: object) -> None:  # noqa: D102
+            pass
+
+    r2 = run_against(All200Garbage)
+    checks.append(
+        ("② 全 200 但内容不对 ⇒ 也必须 exit 1（不许只看状态码）", r2.returncode == 1)
+    )
+    checks.append(
+        (
+                    '② healthz 的判据必须真的是「含 "ok":true」而不是「HTTP 200」',
+                    "healthz 200" in r2.stdout and "FAIL" in r2.stdout,
+                )
+    )
+
+    print("prod-health 门禁自检（反向验证）")
+    ok = True
+    for name, passed in checks:
+        print(f"  {'✓' if passed else '✗'} {name}")
+        ok = ok and passed
+    print()
+    print("结论：" + ("✓ 自检通过 —— 坏的一定红（含「200 但内容是垃圾」）" if ok else "✗ 自检失败 —— 门禁本身坏了"))
+    print("局限：真绿场景需真生产，本自检不覆盖。")
+    return 0 if ok else 1
+
+
 def main() -> int:
+    if "--selfcheck" in sys.argv[1:]:
+        return selfcheck()
     ap = argparse.ArgumentParser(description="生产健康自检（新增判据集）")
     ap.add_argument("--base-url", default=DEFAULT_BASE)
     ap.add_argument("--json", default="")

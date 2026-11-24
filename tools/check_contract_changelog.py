@@ -67,29 +67,17 @@ def _git(git: str, *args: str) -> str:
     return r.stdout
 
 
-def main() -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-    checks: list[tuple[str, str, str]] = []  # (level, name, detail)
+def evaluate(data: dict, *, modified: bool) -> list[tuple[str, str, str]]:
+    """纯判定：给定 expected.json 内容 + 是否有未提交改动，返回检查项。
 
-    raw = CONTRACT.read_text(encoding="utf-8")
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"⛔ BLOCKING expected.json 不是合法 JSON：{e}")
-        return 1
+    ★ 2026-11-24（汐瑶）：从 main() 抽出来 —— 为的是让 selfcheck 能喂构造数据，
+      不碰仓库、不依赖 git。门禁最危险的失效是「一直绿」。
 
+    返回 [(level, name, detail)]，level ∈ {PASS, WARNING, BLOCKING}。
+    """
+    checks: list[tuple[str, str, str]] = []
     meta = data.get("_meta") or {}
     changelog = meta.get("changelog")
-
-    # git 状态：expected.json 是否有未提交改动
-    git = _git_exe()
-    modified = False
-    if git:
-        out = _git(git, "status", "--porcelain", "--", str(CONTRACT.relative_to(REPO_ROOT)))
-        modified = bool(out.strip())
-    else:
-        checks.append(("WARNING", "git 不可用", "无法判断 expected.json 是否有未提交改动"))
 
     # 结构检查（无条件）
     if changelog is None:
@@ -109,7 +97,11 @@ def main() -> int:
     if modified:
         if not changelog:
             checks.append(
-                ("BLOCKING", "契约已改但无变更记录", "改 expected.json 必须在 _meta.changelog 追加一条（先回帖再改的机读化）")
+                (
+                    "BLOCKING",
+                    "契约已改但无变更记录",
+                    "改 expected.json 必须在 _meta.changelog 追加一条（先回帖再改的机读化）",
+                )
             )
         else:
             last = changelog[-1]
@@ -142,6 +134,116 @@ def main() -> int:
                 checks.append(
                     ("WARNING", "changelog 条目字段不全", f"缺 {missing_keys}（by/field/reason 至少要齐）")
                 )
+    return checks
+
+
+def selfcheck() -> int:
+    """反向自证：五种组合，该红的必须红、不该红的不能误红。
+
+    ★ 2026-11-24（汐瑶）：门禁失效有两种，第二种更坏 ——
+      ① 瞎了：改了契约不写 changelog 也放行；
+      ② 误红：没改契约也要求新条目 ⇒ 人开始无视这条门禁。
+    两条都钉。
+    """
+    today = datetime.now(timezone.utc).date().isoformat()
+    old = (datetime.now(timezone.utc).date() - timedelta(days=30)).isoformat()
+
+    def lvl(checks: list[tuple[str, str, str]]) -> set[str]:
+        return {c[0] for c in checks}
+
+    cases: list[tuple[str, dict, bool, bool]] = [
+        # (说明, data, modified, 是否应出现 BLOCKING)
+        (
+            "基线：没改契约 + 有 changelog ⇒ 不许红",
+            {"_meta": {"changelog": [{"at": old, "by": "x", "field": "f", "reason": "r"}]}},
+            False,
+            False,
+        ),
+        (
+            "① 改了契约但完全没有 changelog ⇒ 必须红",
+            {"suites": {}},
+            True,
+            True,
+        ),
+        (
+            "① 改了契约但 changelog 是空数组 ⇒ 必须红",
+            {"_meta": {"changelog": []}},
+            True,
+            True,
+        ),
+        (
+            "② 改了契约但最后一条是 30 天前 ⇒ 必须红",
+            {"_meta": {"changelog": [{"at": old, "by": "x", "field": "f", "reason": "r"}]}},
+            True,
+            True,
+        ),
+        (
+            "② 改了契约且最后一条是今天 ⇒ 不许红",
+            {"_meta": {"changelog": [{"at": today, "by": "x", "field": "f", "reason": "r"}]}},
+            True,
+            False,
+        ),
+        (
+            "③ changelog 不是数组 ⇒ 必须红",
+            {"_meta": {"changelog": "oops"}},
+            False,
+            True,
+        ),
+        (
+            "④ 没改契约 + 无 changelog ⇒ 只许 WARNING，不许红（误红会逼人无视）",
+            {"suites": {}},
+            False,
+            False,
+        ),
+    ]
+
+    checks: list[tuple[str, bool]] = []
+    for desc, data, modified, expect_block in cases:
+        got = lvl(evaluate(data, modified=modified))
+        has_block = "BLOCKING" in got
+        checks.append((desc, has_block == expect_block))
+
+    # ⑤ 无 changelog 但没改契约时，必须是 WARNING 而不是静默
+    got = evaluate({"suites": {}}, modified=False)
+    checks.append(
+        ("⑤ 无 changelog 且没改契约时要有 WARNING 提示", "WARNING" in lvl(got))
+    )
+
+    print("contract-changelog 门禁自检（反向验证）")
+    ok = True
+    for name, passed in checks:
+        print(f"  {'✓' if passed else '✗'} {name}")
+        ok = ok and passed
+    print()
+    print("结论：" + ("✓ 自检通过 —— 该红的红、不该红的不误红" if ok else "✗ 自检失败 —— 门禁本身坏了"))
+    return 0 if ok else 1
+
+
+def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if "--selfcheck" in sys.argv[1:]:
+        return selfcheck()
+    checks: list[tuple[str, str, str]] = []  # (level, name, detail)
+
+    raw = CONTRACT.read_text(encoding="utf-8")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"⛔ BLOCKING expected.json 不是合法 JSON：{e}")
+        return 1
+
+    # git 状态：expected.json 是否有未提交改动
+    git = _git_exe()
+    modified = False
+    if git:
+        out = _git(git, "status", "--porcelain", "--", str(CONTRACT.relative_to(REPO_ROOT)))
+        modified = bool(out.strip())
+    else:
+        checks.append(("WARNING", "git 不可用", "无法判断 expected.json 是否有未提交改动"))
+
+    # 判定全部走纯函数（selfcheck 用的是同一个函数 —— 两条路径不许有第二套真相）
+    checks.extend(evaluate(data, modified=modified))
 
     icon = {"PASS": "✅", "WARNING": "⚠️ ", "BLOCKING": "⛔"}
     width = max(len(c[1]) for c in checks) + 2

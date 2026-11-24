@@ -633,7 +633,7 @@ permissions
 | 6 | `services/api/tests_protocol/test_protocol_gates.py`（358 行） | ⑥ 门禁测试网 |
 | 7 | `tools/crosscheck_validator.py`（473 行） | ⑦ 校验器的外部裁判 |
 | 8 | `tools/check_research_alignment.py`（373 行） | ⑧ 调研对齐核查器 |
-| 9 | `services/api/tests_protocol/test_protocol_quality_gates.py`（572 行） | ⑨ 质量门禁的自检测试 |
+| 9 | `services/api/tests_protocol/test_protocol_quality_gates.py`（630 行） | ⑨ 质量门禁的自检测试 |
 | 10 | `services/api/core/events.py`（568 行） | ⑩ 事件契约执行点（声明即订阅 / 声明即许可） |
 | 11 | `services/api/core/plugins/lifecycle.py`（179 行） | ⑪ 生命周期宣告契约（固定名钩子 + 声明校验） |
 
@@ -4245,7 +4245,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-### 5.9 ⑨ 质量门禁的自检测试：`services/api/tests_protocol/test_protocol_quality_gates.py`（572 行）
+### 5.9 ⑨ 质量门禁的自检测试：`services/api/tests_protocol/test_protocol_quality_gates.py`（630 行）
 
 ```python
 # ── 门禁自身的存活证明 ──
@@ -4820,6 +4820,64 @@ def test_kernel_purity_backend_scope_is_clean() -> None:
         f"后端内核出现业务词汇 —— 按总纲，为一件具体的事去动 framework 是框架的 bug：\n"
         f"{proc.stdout}\n{proc.stderr}"
     )
+
+
+# ══════════════════════════════════════════════════════════════
+# ⑦ 部署与生产三件：契约变更 / 部署前守门 / 包预检 / 生产健康
+# ══════════════════════════════════════════════════════════════
+#
+# ★ 2026-11-24（汐瑶）：这四道门禁原来都「没有测试守着」。
+#   它们守着的是**上线那一步**——坏了最贵的不是漏一个 bug，是把旧包/半成品发上生产。
+#   而它们自己坏了是静默的（绿着，但可能什么都没查）。
+
+CONTRACT_CHANGELOG = REPO / "tools" / "check_contract_changelog.py"
+PREDEPLOY = REPO / "tools" / "predeploy_guard.py"
+PREFLIGHT = REPO / "tools" / "deploy_package_preflight.py"
+PROD_HEALTH = REPO / "tools" / "prod_health_check.py"
+
+
+def _run(script: Path, *args: str, timeout: int = 300) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(script), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(REPO),
+        timeout=timeout,
+    )
+
+
+def test_contract_changelog_selfcheck_passes() -> None:
+    """契约变更门禁自检必须全绿（改了契约不写 changelog 必红、没改不许误红）。"""
+    proc = _run(CONTRACT_CHANGELOG, "--selfcheck")
+    assert proc.returncode == 0, f"自检未通过：\n{proc.stdout}\n{proc.stderr}"
+    assert "该红的红、不该红的不误红" in proc.stdout, proc.stdout
+
+
+def test_predeploy_guard_selfcheck_passes() -> None:
+    """部署前守门自检必须全绿（dist 旧必 BLOCK、scope 外改动必 BLOCK、干净不许误红）。"""
+    proc = _run(PREDEPLOY, "--selfcheck")
+    assert proc.returncode == 0, f"自检未通过：\n{proc.stdout}\n{proc.stderr}"
+    assert "该红的红、不该红的不误红" in proc.stdout, proc.stdout
+
+
+def test_deploy_preflight_self_test_passes() -> None:
+    """部署包预检自测必须全绿（全绿 / 缺失 / MD5 不符 三种 case）。"""
+    proc = _run(PREFLIGHT, "--self-test")
+    assert proc.returncode == 0, f"自测未通过：\n{proc.stdout}\n{proc.stderr}"
+    assert "SELF_TEST PASS" in proc.stdout, proc.stdout
+
+
+def test_prod_health_selfcheck_passes() -> None:
+    """生产健康自检必须全绿（全 500 必红、**200 但内容是垃圾也必须红**）。
+
+    ★ 第二条是重点：只看状态码的门禁会在生产已经坏掉时报绿 ——
+      今天已经吃过一次这个亏（`/sight/now` 数据源失败也回 200）。
+    """
+    proc = _run(PROD_HEALTH, "--selfcheck", timeout=300)
+    assert proc.returncode == 0, f"自检未通过：\n{proc.stdout}\n{proc.stderr}"
+    assert "坏的一定红" in proc.stdout, proc.stdout
 ```
 
 ### 5.10 ⑩ 事件契约执行点（声明即订阅 / 声明即许可）：`services/api/core/events.py`（568 行）

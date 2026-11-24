@@ -108,23 +108,40 @@ def check_worktree(git: str | None, scopes: list[str]) -> tuple[str, str, str]:
     )
 
 
-def check_dist_freshness() -> tuple[str, str, str]:
-    """dist 构建时间 vs 源码最新提交时间（前端改了没重建 = 上线的是旧包）。"""
-    dist_index = REPO_ROOT / "apps" / "web" / "dist" / "index.html"
+def check_dist_freshness(
+    dist_dir: Path | None = None, src_dirs: tuple[Path, ...] | None = None
+) -> tuple[str, str, str]:
+    """dist 构建时间 vs 源码最新提交时间（前端改了没重建 = 上线的是旧包）。
+
+    ★ 2026-11-24（汐瑶）：加 `dist_dir` / `src_dirs` —— 为让 selfcheck 能在
+      临时目录里构造「旧 / 新 / 缺失」三种现场，不碰真实 dist。
+    """
+    dist_index = (dist_dir or (REPO_ROOT / "apps" / "web" / "dist")) / "index.html"
     if not dist_index.is_file():
-        return ("WARNING", "dist 不存在", f"未找到 {dist_index.relative_to(REPO_ROOT)}（跳过）")
+        try:
+            shown = str(dist_index.relative_to(REPO_ROOT))
+        except ValueError:
+            shown = str(dist_index)
+        return ("WARNING", "dist 不存在", f"未找到 {shown}（跳过）")
     dist_mtime = dist_index.stat().st_mtime
     newest_src = 0.0
     newest_file = ""
-    for sub in ("apps/web/src", "apps/web/public"):
-        d = REPO_ROOT / sub
+    dirs = src_dirs if src_dirs is not None else (
+        REPO_ROOT / "apps" / "web" / "src",
+        REPO_ROOT / "apps" / "web" / "public",
+    )
+    for d in dirs:
         if not d.is_dir():
             continue
         for f in d.rglob("*"):
             if f.is_file() and f.suffix in {".ts", ".tsx", ".css", ".json", ".js", ".html"}:
                 m = f.stat().st_mtime
                 if m > newest_src:
-                    newest_src, newest_file = m, str(f.relative_to(REPO_ROOT))
+                    newest_src = m
+                    try:
+                        newest_file = str(f.relative_to(REPO_ROOT))
+                    except ValueError:
+                        newest_file = str(f)
     if newest_src > dist_mtime:
         return (
             "BLOCKING",
@@ -167,7 +184,101 @@ def check_contract() -> tuple[str, str, str]:
     return ("PASS", "契约 hash 一致", f"{want or local}")
 
 
+
+def selfcheck() -> int:
+    """反向自证：六种现场，该红的必须红、不该红的不能误红。
+
+    ★ 2026-11-24（汐瑶）：这道门禁守着「别把他人在制改动一起发上生产」，
+      它自己坏了就等于没有。两种失效都钉：
+      ① 瞎了 —— scope 外有改动也放行；② 误红 —— 干净工作区报 BLOCKING，
+      会逼人加 `--scope .` 绕过（那就是门禁被关掉）。
+
+    全部在临时目录 / monkeypatch 上跑，不碰真实仓库、不跑真 git。
+    """
+    import tempfile
+    import time
+
+    checks: list[tuple[str, bool]] = []
+
+    # ── A. dist 新鲜度 ────────────────────────────────────
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        dist = root / "dist"
+        dist.mkdir()
+        src = root / "src"
+        src.mkdir()
+        (src / "a.tsx").write_text("x", encoding="utf-8")
+        (dist / "index.html").write_text(
+            '<script src="assets/index-ABC123.js"></script>', encoding="utf-8"
+        )
+        now = time.time()
+        os.utime(src / "a.tsx", (now - 100, now - 100))
+        os.utime(dist / "index.html", (now, now))
+        checks.append(
+            ("A0 基线：dist 比源码新 ⇒ PASS", check_dist_freshness(dist, (src,))[0] == "PASS")
+        )
+
+        os.utime(src / "a.tsx", (now + 100, now + 100))
+        level = check_dist_freshness(dist, (src,))[0]
+        checks.append(("A1 dist 比源码旧 ⇒ 必须 BLOCKING", level == "BLOCKING"))
+
+        level = check_dist_freshness(root / "nope", (src,))[0]
+        checks.append(
+            ("A2 dist 不存在 ⇒ WARNING（不是 BLOCKING —— 可能还没 build）", level == "WARNING")
+        )
+
+    # ── B. 工作区范围 ─────────────────────────────────────
+    real = globals().get("changed_paths")
+    try:
+        globals()["changed_paths"] = lambda _git: []
+        checks.append(
+            ("B0 工作区纯净 ⇒ PASS", check_worktree("git", ["apps/web"])[0] == "PASS")
+        )
+
+        globals()["changed_paths"] = lambda _git: [("M", "apps/web/src/a.tsx")]
+        checks.append(
+            ("B1 变更全在 scope 内 ⇒ PASS", check_worktree("git", ["apps/web"])[0] == "PASS")
+        )
+
+        globals()["changed_paths"] = lambda _git: [("M", "services/api/x.py")]
+        checks.append(
+            (
+                "B2 scope 外有改动 ⇒ 必须 BLOCKING（与 2026-09-23 dist 事故同型）",
+                check_worktree("git", ["apps/web"])[0] == "BLOCKING",
+            )
+        )
+
+        globals()["changed_paths"] = lambda _git: [
+            ("M", "apps/web/src/a.tsx"),
+            ("M", "services/api/x.py"),
+        ]
+        checks.append(
+            (
+                "B3 混着一个 scope 外的也必须 BLOCKING（不许被「大部分在 scope 内」稀释）",
+                check_worktree("git", ["apps/web"])[0] == "BLOCKING",
+            )
+        )
+    finally:
+        if real is not None:
+            globals()["changed_paths"] = real
+
+    checks.append(
+        ("B4 git 不可用 ⇒ WARNING（不是静默通过）", check_worktree(None, ["apps/web"])[0] == "WARNING")
+    )
+
+    print("predeploy-guard 门禁自检（反向验证）")
+    ok = True
+    for name, passed in checks:
+        print(f"  {'✓' if passed else '✗'} {name}")
+        ok = ok and passed
+    print()
+    print("结论：" + ("✓ 自检通过 —— 该红的红、不该红的不误红" if ok else "✗ 自检失败 —— 门禁本身坏了"))
+    return 0 if ok else 1
+
+
 def main() -> int:
+    if "--selfcheck" in sys.argv[1:]:
+        return selfcheck()
     ap = argparse.ArgumentParser(description="部署前守门（BLOCKING / WARNING 两档）")
     ap.add_argument("--scope", nargs="*", default=[], help="本单允许变更的路径前缀（默认：任意）")
     ap.add_argument("--plugin-collect", metavar="PLUGIN_ID", default="",

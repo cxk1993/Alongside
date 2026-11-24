@@ -87,9 +87,13 @@ GATES: tuple[Gate, ...] = (
     Gate(
         id="contract-changelog",
         path="tools/check_contract_changelog.py",
-        description="改了契约（expected.json）却没写 changelog ⇒ BLOCKING。",
+        description=(
+            "改了契约（expected.json）却没写 changelog ⇒ BLOCKING。"
+            "自带 --selfcheck（改契约不写必红 / 没改不许误红 / 条目过期必红）。"
+        ),
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
     Gate(
         id="api-docs",
@@ -118,23 +122,35 @@ GATES: tuple[Gate, ...] = (
     Gate(
         id="predeploy-guard",
         path="tools/predeploy_guard.py",
-        description="部署前核对工作区：他人在制改动 / 构建新鲜度 / 契约一致性 ⇒ BLOCKING。",
+        description=(
+            "部署前核对工作区：他人在制改动 / 构建新鲜度 / 契约一致性 ⇒ BLOCKING。"
+            "自带 --selfcheck（dist 旧必 BLOCK / scope 外改动必 BLOCK / 干净不许误红）。"
+        ),
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
     Gate(
         id="deploy-preflight",
         path="tools/deploy_package_preflight.py",
-        description="部署包完整性预检：变更文件清单 vs path→MD5 表，缺口即非 0。",
+        description=(
+            "部署包完整性预检：变更文件清单 vs path→MD5 表，缺口即非 0。"
+            "自带 --self-test（全绿 / 缺失 / MD5 不符 三种 case 各验一次）。"
+        ),
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
     Gate(
         id="prod-health",
         path="tools/prod_health_check.py",
-        description="生产健康自检（Push / SSE 入场券 / PWA / 包内容 / 首屏体积）。",
+        description=(
+            "生产健康自检（Push / SSE 入场券 / PWA / 包内容 / 首屏体积）。"
+            "自带 --selfcheck（全 500 必红 / **200 但内容是垃圾也必须红** —— 不许只看状态码）。"
+        ),
         blocking=True,
-        has_regression_test=False,
+        has_regression_test=True,
+        test_ref="services/api/tests_protocol/test_protocol_quality_gates.py",
     ),
     Gate(
         id="kernel-purity",

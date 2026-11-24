@@ -10,10 +10,9 @@
  *   · tab.entry 指向的模块**存在且有 entry 且有 App 文件** → 懒加载其 App
  *     （与 WindowFrame 同一条加载路径）。★ 按 `entry` 加载，不按 `key` ——
  *     页名与模块名不一致本身是协议允许的形态（页签 key 只是页标识）。
- *     ⚠️ **但 `schedule` 的 `{ key: "study", entry: "todo" }` 是待修数据，不是设计**：
- *     真实学业页是 `apps/study/StudyApp.tsx`（不是模块，也没有 `index.tsx`），
- *     按 entry 加载会渲染成第二个待办页。协议目前缺「容器内联页」态，
- *     在该态补上之前 **`schedule` 不得迁到 `useContainerPages`**（仍由 ScheduleApp 手写页）。
+ *     ★ 2026-11-24 已修：`schedule` 的 `{ key: "study", entry: "todo" }` 是待修数据，
+ *     已改回 `entry: "study"`，并补了 `apps/study/index.tsx`（目录约定可解析）。
+ *     `schedule` 仍走自己的手写页（四页内容各自需要 props 包装），迁移与否是另一件事。
  *   · 同理 `pi-agent`：manifest 已用 `absorbs` 声明了 agents/ai-chat 归口，但它
  *     零页签（PiAgentApp 自渲染「对话/编排」两页）—— 迁容器页会落到「未声明页签」
  *     空壳，迁之前必须先补 tabs。

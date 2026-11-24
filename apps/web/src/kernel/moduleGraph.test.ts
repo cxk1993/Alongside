@@ -54,7 +54,16 @@ const GROWTH_TABS = [
 const SCHEDULE_TABS = [
   { key: "calendar", label: "日程表", entry: "calendar" },
   { key: "todo", label: "待办", entry: "todo" },
-  { key: "study", label: "学业", entry: "todo" }, // 同一模块的第二页（去重判据）
+  { key: "study", label: "学业", entry: "todo" }, // 同一模块的第二页（去重判据的历史样本）
+  // ★ 2026-11-24：真实 manifest 已改成 entry:"study"（见 SCHEDULE_TABS_FIXED）
+  { key: "course", label: "课程表", entry: "course" },
+];
+
+/** ★ 2026-11-24：修好后的真实 schedule 页签（study 指向自己）。 */
+const SCHEDULE_TABS_FIXED = [
+  { key: "calendar", label: "日程表", entry: "calendar" },
+  { key: "todo", label: "待办", entry: "todo" },
+  { key: "study", label: "学业", entry: "study" },
   { key: "course", label: "课程表", entry: "course" },
 ];
 
@@ -408,15 +417,18 @@ describe("resolveTabPage · 三类畸形数据", () => {
   });
 
   it("模块声明了 entry 但文件不存在 ⇒ canResolveLoader 预检为 missing-app", () => {
+    // ★ 2026-11-24：原先拿 `@/apps/study` 当「文件不存在」的样本，后来补了
+    //   `apps/study/index.tsx`（目录约定可解析），样本失效 —— 换一个真正不存在的目录。
     const p = resolveTabPage(
-      { key: "study", label: "学业", entry: "study" },
-      [{ id: "study", kind: "builtin", entry: "@/apps/study" }],
+      { key: "ghost", label: "幽灵页", entry: "ghost" },
+      [{ id: "ghost", kind: "builtin", entry: "@/apps/ghost" }],
     );
     expect(p.mode).toBe("app");
-    expect(p.appEntry).toBe("@/apps/study");
-    // apps/study 目录只有 StudyApp.tsx，没有 index.tsx ⇒ 不能按目录约定加载
-    expect(canResolveLoader("@/apps/study")).toBe(false);
+    expect(p.appEntry).toBe("@/apps/ghost");
+    expect(canResolveLoader("@/apps/ghost")).toBe(false);
     expect(canResolveLoader("@/apps/todo")).toBe(true);
+    // 补入口之后，学业页已可按目录约定解析（这条同时钉住「别再退回缺 index.tsx」）
+    expect(canResolveLoader("@/apps/study")).toBe(true);
   });
 });
 
@@ -449,21 +461,21 @@ describe("normalizeTabs · 归一化", () => {
 /* ─────────────── ⑧ 迁移前置条件（审计 2026-11-10 14:20 实测结论，锁成判据） ─────────────── */
 
 describe("★ 容器迁 useContainerPages 的前置条件（不满足就是静默丢功能）", () => {
-  it("schedule.study 的真实数据会解析成 TodoApp —— 数据待修，不是设计", () => {
+  it("schedule.study 已修：解析到真实学业页，不再是第二个待办页", () => {
+    // ★ 2026-11-24：数据已修（entry: todo → study）并补了 apps/study/index.tsx。
+    //   这条从「锁住待修现状」翻成「锁住已修结果」——谁把它改回 todo 立刻变红。
     const mods: GraphModuleLike[] = [
-      { id: "schedule", kind: "container", tabs: SCHEDULE_TABS },
+      { id: "schedule", kind: "container", tabs: SCHEDULE_TABS_FIXED },
       { id: "todo", kind: "builtin", entry: "@/apps/todo" },
+      { id: "study", kind: "builtin", entry: "@/apps/study" },
     ];
-    const study = SCHEDULE_TABS.find((t) => t.key === "study");
+    const study = SCHEDULE_TABS_FIXED.find((t) => t.key === "study");
     expect(study).toBeTruthy();
 
     const p = resolveTabPage(study!, mods);
-    expect(p.moduleId).toBe("todo"); // ← 真实数据的解析落点：第二个待办页
-    expect(p.appEntry).toBe("@/apps/todo");
-
-    // 真实学业页不是模块：清单里没有 study，apps/study 也没有 index.tsx ⇒ 写成 entry:"study" 同样加载不了
-    expect(mods.some((m) => m.id === "study")).toBe(false);
-    expect(canResolveLoader("@/apps/study")).toBe(false);
+    expect(p.moduleId).toBe("study");
+    expect(p.appEntry).toBe("@/apps/study");
+    expect(canResolveLoader("@/apps/study")).toBe(true);
   });
 
   it("pi-agent 吸收 agents/ai-chat 且页签归口（r8 修复：agents 走 tabs 有页归口、ai-chat 走 absorbs 无页归口）", () => {

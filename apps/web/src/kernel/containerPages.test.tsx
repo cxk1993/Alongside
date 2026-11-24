@@ -163,16 +163,16 @@ describe("containerPages · 畸形页签兜底", () => {
   });
 
   it("★ entry 指向的 App 文件缺失 ⇒ 薄壳「入口缺失」（不是含糊的「加载失败」）", () => {
+    // ★ 2026-11-24：样本从 `@/apps/study`（已补 index.tsx）换成真正不存在的目录。
     setModules([
       {
         ...CONTAINER_SCHEDULE,
-        tabs: [{ key: "study", label: "学业", entry: "study" }],
+        tabs: [{ key: "ghost", label: "幽灵页", entry: "ghost" }],
       },
-      // apps/study 只有 StudyApp.tsx，没有 index.tsx ⇒ 目录约定解析不到
-      { id: "study", name: "学业", version: "0.1.0", kind: "builtin", entry: "@/apps/study" },
+      { id: "ghost", name: "幽灵页", version: "0.1.0", kind: "builtin", entry: "@/apps/ghost" },
     ]);
     render(<Host containerId="schedule" />);
-    const shell = screen.getByTestId("system-backend-page-study");
+    const shell = screen.getByTestId("system-backend-page-ghost");
     expect(shell.getAttribute("data-page-reason")).toBe("missing-app");
     expect(shell.textContent).toContain("入口文件缺失");
   });

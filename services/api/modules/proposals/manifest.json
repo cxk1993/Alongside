@@ -5,7 +5,7 @@
   "kind": "builtin",
   "minKernel": "0.1.0",
   "kernelApi": "^1",
-  "icon": "clipboard-check",
+  "icon": "review",
   "description": "签字中心 · AI 的高风险写操作先出提案卡（before/after + 发起人 + 工具名），主人签字才执行，签完可一键撤销。MCP_PROPOSAL_MODE=on 时 MCP 写工具自动走这里拦截。",
   "author": "bidiu",
   "window": {
